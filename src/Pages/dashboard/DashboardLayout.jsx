@@ -15,20 +15,20 @@ export default function DashboardLayout() {
   };
 
   const menuItemClass = ({ isActive }) =>
-    `w-full text-left px-4 py-2 text-sm rounded-r-full flex items-center gap-2
-     ${isActive ? "bg-slate-800 text-white" : "hover:bg-slate-800"}`;
+    `w-full text-left px-4 py-2 text-sm rounded-r-full flex items-center gap-2 transition-all
+     ${isActive ? "bg-gradient-to-r from-[#e6c200] to-[#c9a900] text-[#5c0017] font-semibold shadow-md" : "hover:bg-[#7a1c2f]/80"}`;
 
   return (
-    <div className="min-h-screen flex bg-slate-100">
+    <div className="min-h-screen flex bg-gradient-to-br from-blue-50 via-yellow-50 to-blue-100">
       {/* Sidebar - Fixed */}
       <aside
         className={`${
           isSidebarOpen ? "w-64" : "w-16"
-        } bg-slate-900 text-slate-100 transition-all duration-300 overflow-hidden flex flex-col fixed left-0 top-0 h-screen z-50`}
+        } bg-gradient-to-b from-[#6b1a27] via-[#7a1c2f] to-[#4a0d18] text-white transition-all duration-300 overflow-hidden flex flex-col fixed left-0 top-0 h-screen z-50 shadow-xl border-r-2 border-[#e6c200]/10`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-4 border-b border-slate-800">
-          <span className="text-xl font-bold tracking-tight">
+        <div className="h-16 flex items-center px-4 border-b border-[#e6c200]/20 bg-gradient-to-r from-transparent to-[#e6c200]/5">
+          <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-[#e6c200] bg-clip-text text-transparent">
             {isSidebarOpen ? "MyDashboard" : "MD"}
           </span>
         </div>
@@ -62,10 +62,10 @@ export default function DashboardLayout() {
         </nav>
 
         {/* Logout di bawah */}
-        <div className="border-t border-slate-800 p-4">
+        <div className="border-t border-[#e6c200]/20 p-4 bg-gradient-to-t from-[#e6c200]/5 to-transparent">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 text-sm text-slate-300 hover:text-red-400"
+            className="w-full flex items-center justify-center gap-2 text-sm text-white hover:text-[#e6c200] transition-colors hover:scale-105 transform"
           >
             🚪 {isSidebarOpen && <span>Logout</span>}
           </button>
@@ -75,24 +75,24 @@ export default function DashboardLayout() {
       {/* Main Area dengan margin untuk sidebar */}
       <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-16'}`}>
         {/* Header - Fixed */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 z-40 transition-all duration-300" style={{ left: isSidebarOpen ? '16rem' : '4rem' }}>
+        <header className="h-16 bg-gradient-to-r from-[#1e3a8a] via-[#2563eb] to-[#1e40af] border-b-2 border-[#fed80b]/50 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 z-40 transition-all duration-300 shadow-xl" style={{ left: isSidebarOpen ? '16rem' : '4rem' }}>
           <div className="flex items-center gap-3">
             <button
               onClick={toggleSidebar}
-              className="p-2 rounded-md border border-slate-200 hover:bg-slate-100"
+              className="p-2 rounded-md bg-[#fed80b]/90 hover:bg-[#fed80b] text-[#1e3a8a] border border-[#fed80b] transition-all shadow-md hover:shadow-lg font-semibold"
             >
               ☰
             </button>
-            <h1 className="text-lg md:text-xl font-semibold text-slate-800">
+            <h1 className="text-lg md:text-xl font-bold text-white drop-shadow-lg">
               Dashboard
             </h1>
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="hidden md:inline text-sm text-slate-500">
+            <span className="hidden md:inline text-sm text-[#fed80b] font-medium">
               Hi, Azka 
             </span>
-            <div className="w-8 h-8 rounded-full bg-slate-300" />
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#fed80b] to-[#f5c400] ring-2 ring-white/50 shadow-lg" />
           </div>
         </header>
 

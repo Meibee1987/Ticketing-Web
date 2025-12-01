@@ -41,7 +41,9 @@ export default function RuanganPage() {
           Admin bisa melihat ruangan mana yang kosong sekarang, ruangan mana yang sudah terpakai, dan persentase okupansi ruangan.
         </p>
       </header>
-      <RuanganStats key={refreshKey} />
+      <div className="sticky top-0 z-30 bg-gradient-to-br from-blue-50 via-yellow-50 to-blue-100 pb-4 -mx-4 md:-mx-6 px-4 md:px-6 pt-2">
+        <RuanganStats key={refreshKey} />
+      </div>
       <RuanganList key={refreshKey + 1000} />
     </div>
   );
