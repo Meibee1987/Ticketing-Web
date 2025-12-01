@@ -40,10 +40,14 @@ export default function DashboardLayout() {
             {isSidebarOpen && <span>Overview</span>}
           </NavLink>
 
-          {/* ➕ Menu baru: Jadwal */}
           <NavLink to="/dashboard/jadwal" className={menuItemClass}>
             <span>📅</span>
             {isSidebarOpen && <span>Jadwal</span>}
+          </NavLink>
+
+          <NavLink to="/dashboard/ruangan" className={menuItemClass}>
+            <span>🏢</span>
+            {isSidebarOpen && <span>Ruangan</span>}
           </NavLink>
 
           <NavLink to="/dashboard/users" className={menuItemClass}>

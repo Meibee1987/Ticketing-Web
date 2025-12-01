@@ -13,7 +13,8 @@ import DashboardLayout from "./Pages/dashboard/DashboardLayout";
 import OverviewPage from "./Pages/dashboard/OverviewPage";
 import UsersPage from "./Pages/dashboard/UsersPage";
 import SettingsPage from "./Pages/dashboard/SettingsPage";
-import JadwalPage from "./Pages/dashboard/JadwalPage";   // ⬅️ sudah ditambahkan
+import JadwalPage from "./Pages/dashboard/JadwalPage";
+import RuanganPage from "./Pages/dashboard/RuanganPage";
 
 // Router configuration
 const router = createBrowserRouter([
@@ -36,7 +37,8 @@ const router = createBrowserRouter([
           { index: true, element: <OverviewPage /> },      // /dashboard
           { path: "users", element: <UsersPage /> },       // /dashboard/users
           { path: "settings", element: <SettingsPage /> }, // /dashboard/settings
-          { path: "jadwal", element: <JadwalPage /> },     // ⬅️ route baru
+          { path: "jadwal", element: <JadwalPage /> },     // /dashboard/jadwal
+          { path: "ruangan", element: <RuanganPage /> },   // /dashboard/ruangan
         ],
       },
     ],

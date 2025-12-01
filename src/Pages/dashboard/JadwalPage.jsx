@@ -251,9 +251,83 @@ function JadwalTable() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const checkConflict = async () => {
+    if (!form.awal_jadwal || !form.akhir_jadwal) {
+      return null; // Skip jika waktu belum diisi
+    }
+
+    // Validasi waktu
+    if (form.awal_jadwal >= form.akhir_jadwal) {
+      return "• Waktu mulai harus lebih awal dari waktu selesai";
+    }
+
+    try {
+      // Ambil semua jadwal kecuali yang sedang diedit
+      const { data: allJadwal } = await supabase
+        .from("jadwal_perkuliahan")
+        .select("*")
+        .neq("id", form.id || 0);
+
+      if (!allJadwal || allJadwal.length === 0) return null;
+
+      const conflicts = [];
+      const startKey = columnMapping.start;
+      const endKey = columnMapping.end;
+
+      // Normalisasi waktu form ke format HH:mm:ss
+      const normalizeTime = (time) => {
+        if (!time) return null;
+        // Jika format HH:mm, tambahkan :00
+        if (time.length === 5) return time + ":00";
+        return time;
+      };
+
+      const formStart = normalizeTime(form.awal_jadwal);
+      const formEnd = normalizeTime(form.akhir_jadwal);
+
+      for (const j of allJadwal) {
+        const existingStart = normalizeTime(j[startKey]);
+        const existingEnd = normalizeTime(j[endKey]);
+
+        if (!existingStart || !existingEnd) continue;
+
+        // Cek apakah waktu bertabrakan (overlap detection)
+        const isTimeOverlap = 
+          (formStart < existingEnd && formEnd > existingStart);
+
+        if (isTimeOverlap) {
+          // Cek ruangan bentrok
+          if (form.ruangan_id && String(j.ruangan_id) === String(form.ruangan_id)) {
+            const ruangan = ruanganOptions.find(r => String(r.id) === String(form.ruangan_id));
+            conflicts.push(`• Ruangan "${ruangan?.nama_ruangan || form.ruangan_id}" sudah dipakai jam ${existingStart.substring(0,5)} - ${existingEnd.substring(0,5)}`);
+          }
+
+          // Cek dosen bentrok
+          if (form.dosen_id && String(j.dosen_id) === String(form.dosen_id)) {
+            const dosen = dosenOptions.find(d => String(d.id) === String(form.dosen_id));
+            conflicts.push(`• Dosen "${dosen?.nama_dosen || form.dosen_id}" sudah mengajar jam ${existingStart.substring(0,5)} - ${existingEnd.substring(0,5)}`);
+          }
+        }
+      }
+
+      return conflicts.length > 0 ? conflicts.join('\n') : null;
+    } catch (err) {
+      console.error("Error checking conflict:", err);
+      return null;
+    }
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
+      
+      // Validasi bentrok sebelum save
+      const conflict = await checkConflict();
+      if (conflict) {
+        alert(`⚠️ Bentrok terdeteksi!\n\n${conflict}`);
+        setSaving(false);
+        return;
+      }
       
       // Use detected column names from database
       const payload = {
