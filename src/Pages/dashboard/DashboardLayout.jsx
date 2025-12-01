@@ -86,7 +86,7 @@ export default function DashboardLayout() {
 
           <div className="flex items-center gap-4">
             <span className="hidden md:inline text-sm text-slate-500">
-              Hi, Azka 👋
+              Hi, Azka 
             </span>
             <div className="w-8 h-8 rounded-full bg-slate-300" />
           </div>
