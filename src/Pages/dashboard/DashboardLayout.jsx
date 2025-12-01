@@ -20,11 +20,11 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen flex bg-slate-100">
-      {/* Sidebar */}
+      {/* Sidebar - Fixed */}
       <aside
         className={`${
           isSidebarOpen ? "w-64" : "w-16"
-        } bg-slate-900 text-slate-100 transition-all duration-300 overflow-hidden flex flex-col`}
+        } bg-slate-900 text-slate-100 transition-all duration-300 overflow-hidden flex flex-col fixed left-0 top-0 h-screen z-50`}
       >
         {/* Logo */}
         <div className="h-16 flex items-center px-4 border-b border-slate-800">
@@ -34,7 +34,7 @@ export default function DashboardLayout() {
         </div>
 
         {/* Menu */}
-        <nav className="flex-1 mt-4 space-y-1">
+        <nav className="flex-1 mt-4 space-y-1 overflow-y-auto">
           <NavLink to="/dashboard" end className={menuItemClass}>
             <span>📊</span>
             {isSidebarOpen && <span>Overview</span>}
@@ -72,14 +72,14 @@ export default function DashboardLayout() {
         </div>
       </aside>
 
-      {/* Main Area */}
-      <div className="flex-1 flex flex-col min-h-screen">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6">
+      {/* Main Area dengan margin untuk sidebar */}
+      <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-16'}`}>
+        {/* Header - Fixed */}
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 z-40 transition-all duration-300" style={{ left: isSidebarOpen ? '16rem' : '4rem' }}>
           <div className="flex items-center gap-3">
             <button
               onClick={toggleSidebar}
-              className="p-2 rounded-md border border-slate-200"
+              className="p-2 rounded-md border border-slate-200 hover:bg-slate-100"
             >
               ☰
             </button>
@@ -96,8 +96,8 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        {/* Konten route */}
-        <main className="flex-1 p-4 md:p-6">
+        {/* Konten route dengan padding top untuk header fixed */}
+        <main className="flex-1 p-4 md:p-6 mt-16">
           <Outlet />
         </main>
       </div>
