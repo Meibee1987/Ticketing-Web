@@ -1,87 +1,11 @@
-// src/pages/Dashboard.jsx
+// src/Pages/dashboard/OverviewPage.jsx
 import { useState, useEffect } from "react";
-import { supabase, TOKEN_KEY } from "../../supabaseClient";
+import { supabase } from "../../supabaseClient";
 
-export default function Dashboard() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    localStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
-    window.location.href = "/login";
-  };
-
+export default function OverviewPage() {
   return (
-    <div className="min-h-screen flex bg-slate-100">
-      {/* Sidebar */}
-      <aside
-        className={`${
-          isSidebarOpen ? "w-64" : "w-16"
-        } bg-slate-900 text-slate-100 transition-all duration-300 overflow-hidden flex flex-col`}
-      >
-        {/* Logo */}
-        <div className="h-16 flex items-center px-4 border-b border-slate-800">
-          <span className="text-xl font-bold tracking-tight">
-            {isSidebarOpen ? "MyDashboard" : "MD"}
-          </span>
-        </div>
-
-        {/* Menu */}
-        <nav className="flex-1 mt-4 space-y-1">
-          <button className="w-full text-left px-4 py-2 text-sm hover:bg-slate-800 rounded-r-full">
-            📊 <span className="ml-2">{isSidebarOpen && "Overview"}</span>
-          </button>
-          <button className="w-full text-left px-4 py-2 text-sm hover:bg-slate-800 rounded-r-full">
-            👥 <span className="ml-2">{isSidebarOpen && "Users"}</span>
-          </button>
-          <button className="w-full text-left px-4 py-2 text-sm hover:bg-slate-800 rounded-r-full">
-            ⚙️ <span className="ml-2">{isSidebarOpen && "Settings"}</span>
-          </button>
-        </nav>
-
-        {/* Logout di bawah */}
-        <div className="border-t border-slate-800 p-4">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 text-sm text-slate-300 hover:text-red-400"
-          >
-            🚪 {isSidebarOpen && <span>Logout</span>}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Area */}
-      <div className="flex-1 flex flex-col min-h-screen">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={toggleSidebar}
-              className="p-2 rounded-md border border-slate-200"
-            >
-              ☰
-            </button>
-            <h1 className="text-lg md:text-xl font-semibold text-slate-800">
-              Dashboard
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="hidden md:inline text-sm text-slate-500">
-              Hi, Azka 👋
-            </span>
-            <div className="w-8 h-8 rounded-full bg-slate-300" />
-          </div>
-        </header>
-
-        {/* Content (Overview page) */}
-        <main className="flex-1 p-4 md:p-6">
-          <DashboardContent />
-        </main>
-      </div>
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      <DashboardContent />
     </div>
   );
 }
@@ -110,13 +34,13 @@ function DashboardContent() {
         />
       </section>
 
-      {/* Tabel jadwal perkuliahan dari Supabase */}
+      {/* Jadwal Perkuliahan */}
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <JadwalPerkuliahanTable />
         </div>
 
-        {/* Kartu samping (notes) */}
+        {/* Notes */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <h2 className="text-base font-semibold text-slate-800 mb-2">
             Quick Notes
@@ -143,27 +67,46 @@ function JadwalPerkuliahanTable() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchJadwal = async () => {
-      setLoading(true);
-      setError("");
+      try {
+        setLoading(true);
+        setError("");
 
-      const { data, error } = await supabase
-        .from("jadwal_perkuliahan")
-        .select("*")
-        // OPTIONAL: urutkan, sesuaikan dengan nama kolommu
-        .order("hari", { ascending: true });
+        const { data, error } = await supabase
+          .from("jadwal_perkuliahan")
+          .select("*")
+          .order("id", { ascending: true });
 
-      if (error) {
-        console.error(error);
-        setError("Gagal mengambil data jadwal.");
-      } else {
-        setJadwal(data || []);
+        if (!isMounted) return;
+
+        if (error) {
+          console.error("Error fetching jadwal:", error);
+          setError("Gagal mengambil data jadwal: " + error.message);
+          setJadwal([]);
+        } else {
+          setJadwal(data || []);
+          setError("");
+        }
+      } catch (err) {
+        if (isMounted) {
+          console.error("Unexpected error:", err);
+          setError("Terjadi kesalahan saat mengambil data jadwal.");
+          setJadwal([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     };
 
     fetchJadwal();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   return (
@@ -189,24 +132,19 @@ function JadwalPerkuliahanTable() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-slate-500 border-b">
-                <th className="py-2 pr-2">Hari</th>
-                <th className="py-2 pr-2">Mata Kuliah</th>
-                <th className="py-2 pr-2">Dosen</th>
-                <th className="py-2 pr-2">Ruangan</th>
-                <th className="py-2 pr-2">Jam</th>
+                {Object.keys(jadwal[0]).map((key) => (
+                  <th key={key} className="py-2 pr-2 capitalize">{key.replace(/_/g, ' ')}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {jadwal.map((row) => (
                 <tr key={row.id} className="border-b last:border-0">
-                  {/* GANTI nama kolom di bawah sesuai dengan tabel kamu */}
-                  <td className="py-2 pr-2">{row.hari}</td>
-                  <td className="py-2 pr-2">{row.mata_kuliah}</td>
-                  <td className="py-2 pr-2">{row.dosen}</td>
-                  <td className="py-2 pr-2">{row.ruangan}</td>
-                  <td className="py-2 pr-2">
-                    {row.jam_mulai} - {row.jam_selesai}
-                  </td>
+                  {Object.entries(row).map(([key, value]) => (
+                    <td key={key} className="py-2 pr-2 text-xs">
+                      {typeof value === 'object' ? JSON.stringify(value) : String(value || '-')}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
