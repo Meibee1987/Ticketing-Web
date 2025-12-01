@@ -15,7 +15,7 @@ export default function DashboardLayout() {
   };
 
   const menuItemClass = ({ isActive }) =>
-    `w-full text-left px-4 py-2 text-sm rounded-r-full flex items-center
+    `w-full text-left px-4 py-2 text-sm rounded-r-full flex items-center gap-2
      ${isActive ? "bg-slate-800 text-white" : "hover:bg-slate-800"}`;
 
   return (
@@ -37,17 +37,23 @@ export default function DashboardLayout() {
         <nav className="flex-1 mt-4 space-y-1">
           <NavLink to="/dashboard" end className={menuItemClass}>
             <span>📊</span>
-            {isSidebarOpen && <span className="ml-2">Overview</span>}
+            {isSidebarOpen && <span>Overview</span>}
+          </NavLink>
+
+          {/* ➕ Menu baru: Jadwal */}
+          <NavLink to="/dashboard/jadwal" className={menuItemClass}>
+            <span>📅</span>
+            {isSidebarOpen && <span>Jadwal</span>}
           </NavLink>
 
           <NavLink to="/dashboard/users" className={menuItemClass}>
             <span>👥</span>
-            {isSidebarOpen && <span className="ml-2">Users</span>}
+            {isSidebarOpen && <span>Users</span>}
           </NavLink>
 
           <NavLink to="/dashboard/settings" className={menuItemClass}>
             <span>⚙️</span>
-            {isSidebarOpen && <span className="ml-2">Settings</span>}
+            {isSidebarOpen && <span>Settings</span>}
           </NavLink>
         </nav>
 
@@ -86,7 +92,7 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        {/* Di sini konten tiap route akan ditampilkan */}
+        {/* Konten route */}
         <main className="flex-1 p-4 md:p-6">
           <Outlet />
         </main>

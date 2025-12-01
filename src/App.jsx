@@ -13,6 +13,7 @@ import DashboardLayout from "./Pages/dashboard/DashboardLayout";
 import OverviewPage from "./Pages/dashboard/OverviewPage";
 import UsersPage from "./Pages/dashboard/UsersPage";
 import SettingsPage from "./Pages/dashboard/SettingsPage";
+import JadwalPage from "./Pages/dashboard/JadwalPage";   // ⬅️ sudah ditambahkan
 
 // Router configuration
 const router = createBrowserRouter([
@@ -32,9 +33,10 @@ const router = createBrowserRouter([
 
         // Nested routes di dalam dashboard
         children: [
-          { index: true, element: <OverviewPage /> }, // /dashboard
-          { path: "users", element: <UsersPage /> }, // /dashboard/users
+          { index: true, element: <OverviewPage /> },      // /dashboard
+          { path: "users", element: <UsersPage /> },       // /dashboard/users
           { path: "settings", element: <SettingsPage /> }, // /dashboard/settings
+          { path: "jadwal", element: <JadwalPage /> },     // ⬅️ route baru
         ],
       },
     ],

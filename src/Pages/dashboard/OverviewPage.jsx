@@ -82,42 +82,28 @@ function JadwalPerkuliahanTable() {
 
         if (jadwalError) throw jadwalError;
 
-        // 2. Jika relational select mengembalikan nested objects (dosen/ruangan), gunakan itu
-        //    supaya tidak perlu query tambahan. Jika tidak, ambil tabel dosen & ruangan.
+        // 2. Ambil tabel dosen dan ruangan (nama kolom umum: id, nama_dosen / nama_ruangan)
+        const [{ data: dosenData, error: dosenError }, { data: ruanganData, error: ruanganError }] =
+          await Promise.all([
+            supabase.from("dosen").select("id, nama_dosen"),
+            supabase.from("ruangan").select("id, nama_ruangan"),
+          ]);
+
+        if (dosenError) throw dosenError;
+        if (ruanganError) throw ruanganError;
+
         if (!isMounted) return;
 
+        // 3. Buat map id -> nama_dosen / nama_ruangan
         const dosenMap = {};
+        (dosenData || []).forEach((d) => {
+          dosenMap[d.id] = d.nama_dosen;
+        });
+
         const ruanganMap = {};
-        const sampleRow = (jadwalData && jadwalData[0]) || null;
-
-        if (sampleRow && (sampleRow.dosen || sampleRow.ruangan)) {
-          // Bangun map dari nested objects yang sudah tersedia di setiap row
-          (jadwalData || []).forEach((r) => {
-            if (r.dosen && r.dosen.id != null) {
-              dosenMap[r.dosen.id] = r.dosen.nama_dosen ?? r.dosen.nama ?? r.dosen.name;
-            }
-            if (r.ruangan && r.ruangan.id != null) {
-              ruanganMap[r.ruangan.id] = r.ruangan.nama_ruangan ?? r.ruangan.nama ?? r.ruangan.name;
-            }
-          });
-        } else {
-          const [{ data: dosenData, error: dosenError }, { data: ruanganData, error: ruanganError }] =
-            await Promise.all([
-              supabase.from("dosen").select("id, nama_dosen"),
-              supabase.from("ruangan").select("id, nama_ruangan"),
-            ]);
-
-          if (dosenError) throw dosenError;
-          if (ruanganError) throw ruanganError;
-
-          (dosenData || []).forEach((d) => {
-            dosenMap[d.id] = d.nama_dosen;
-          });
-
-          (ruanganData || []).forEach((r) => {
-            ruanganMap[r.id] = r.nama_ruangan;
-          });
-        }
+        (ruanganData || []).forEach((r) => {
+          ruanganMap[r.id] = r.nama_ruangan;
+        });
 
         // 4. Deteksi nama kolom di jadwal (agar kompatibel dengan berbagai skema)
         const sample = (jadwalData && jadwalData[0]) || {};
