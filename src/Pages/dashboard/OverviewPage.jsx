@@ -69,40 +69,82 @@ function JadwalPerkuliahanTable() {
   useEffect(() => {
     let isMounted = true;
 
-    const fetchJadwal = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
         setError("");
 
-        const { data, error } = await supabase
+        // 1. Ambil jadwal_perkuliahan (ambil semua kolom untuk menghindari 400 jika nama kolom berbeda)
+        const { data: jadwalData, error: jadwalError } = await supabase
           .from("jadwal_perkuliahan")
           .select("*")
           .order("id", { ascending: true });
 
+        if (jadwalError) throw jadwalError;
+
+        // 2. Ambil tabel dosen dan ruangan (nama kolom umum: id, nama_dosen / nama_ruangan)
+        const [{ data: dosenData, error: dosenError }, { data: ruanganData, error: ruanganError }] =
+          await Promise.all([
+            supabase.from("dosen").select("id, nama_dosen"),
+            supabase.from("ruangan").select("id, nama_ruangan"),
+          ]);
+
+        if (dosenError) throw dosenError;
+        if (ruanganError) throw ruanganError;
+
         if (!isMounted) return;
 
-        if (error) {
-          console.error("Error fetching jadwal:", error);
-          setError("Gagal mengambil data jadwal: " + error.message);
-          setJadwal([]);
-        } else {
-          setJadwal(data || []);
-          setError("");
-        }
+        // 3. Buat map id -> nama_dosen / nama_ruangan
+        const dosenMap = {};
+        (dosenData || []).forEach((d) => {
+          dosenMap[d.id] = d.nama_dosen;
+        });
+
+        const ruanganMap = {};
+        (ruanganData || []).forEach((r) => {
+          ruanganMap[r.id] = r.nama_ruangan;
+        });
+
+        // 4. Deteksi nama kolom di jadwal (agar kompatibel dengan berbagai skema)
+        const sample = (jadwalData && jadwalData[0]) || {};
+        const keys = Object.keys(sample);
+
+        const findKey = (patterns) => {
+          for (const p of patterns) {
+            const rx = new RegExp(p, "i");
+            const k = keys.find((kk) => rx.test(kk));
+            if (k) return k;
+          }
+          return null;
+        };
+
+        const dosenIdKey = findKey(["^dosen_id$", "dosen.*id", "id_dosen", "dosen"]) || "dosen_id";
+        const ruanganIdKey = findKey(["^ruangan_id$", "ruangan.*id", "id_ruangan", "ruangan"]) || "ruangan_id";
+        const startKey = findKey(["awal", "mulai", "start", "jam_mulai", "waktu_mulai"]) || "awal_jadwal";
+        const endKey = findKey(["akhir", "selesai", "end", "jam_selesai", "waktu_selesai"]) || "akhir_jadwal";
+
+        // 5. Gabungkan nama_dosen & nama_ruangan ke data jadwal menggunakan key yang terdeteksi
+        const merged = (jadwalData || []).map((j) => ({
+          ...j,
+          nama_dosen: dosenMap[j[dosenIdKey]] || "-",
+          nama_ruangan: ruanganMap[j[ruanganIdKey]] || "-",
+          _startKey: startKey,
+          _endKey: endKey,
+        }));
+
+        setJadwal(merged);
       } catch (err) {
+        console.error("Error mengambil data:", err);
         if (isMounted) {
-          console.error("Unexpected error:", err);
-          setError("Terjadi kesalahan saat mengambil data jadwal.");
+          setError("Gagal mengambil data jadwal: " + (err.message || ""));
           setJadwal([]);
         }
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
 
-    fetchJadwal();
+    fetchData();
 
     return () => {
       isMounted = false;
@@ -132,19 +174,19 @@ function JadwalPerkuliahanTable() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-slate-500 border-b">
-                {Object.keys(jadwal[0]).map((key) => (
-                  <th key={key} className="py-2 pr-2 capitalize">{key.replace(/_/g, ' ')}</th>
-                ))}
+                <th className="py-2 pr-2">Dosen</th>
+                <th className="py-2 pr-2">Ruangan</th>
+                <th className="py-2 pr-2">Mulai</th>
+                <th className="py-2 pr-2">Selesai</th>
               </tr>
             </thead>
             <tbody>
               {jadwal.map((row) => (
                 <tr key={row.id} className="border-b last:border-0">
-                  {Object.entries(row).map(([key, value]) => (
-                    <td key={key} className="py-2 pr-2 text-xs">
-                      {typeof value === 'object' ? JSON.stringify(value) : String(value || '-')}
-                    </td>
-                  ))}
+                  <td className="py-2 pr-2">{row.nama_dosen}</td>
+                  <td className="py-2 pr-2">{row.nama_ruangan}</td>
+                  <td className="py-2 pr-2">{row[row._startKey] ?? "-"}</td>
+                  <td className="py-2 pr-2">{row[row._endKey] ?? "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -154,6 +196,8 @@ function JadwalPerkuliahanTable() {
     </div>
   );
 }
+
+
 
 /* ================== STAT CARD ================== */
 
