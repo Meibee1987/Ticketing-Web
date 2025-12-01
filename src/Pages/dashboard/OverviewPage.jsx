@@ -77,33 +77,47 @@ function JadwalPerkuliahanTable() {
         // 1. Ambil jadwal_perkuliahan (ambil semua kolom untuk menghindari 400 jika nama kolom berbeda)
         const { data: jadwalData, error: jadwalError } = await supabase
           .from("jadwal_perkuliahan")
-          .select("*")
+          .select("*,dosen(*),ruangan(*)")
           .order("id", { ascending: true });
 
         if (jadwalError) throw jadwalError;
 
-        // 2. Ambil tabel dosen dan ruangan (nama kolom umum: id, nama_dosen / nama_ruangan)
-        const [{ data: dosenData, error: dosenError }, { data: ruanganData, error: ruanganError }] =
-          await Promise.all([
-            supabase.from("dosen").select("id, nama_dosen"),
-            supabase.from("ruangan").select("id, nama_ruangan"),
-          ]);
-
-        if (dosenError) throw dosenError;
-        if (ruanganError) throw ruanganError;
-
+        // 2. Jika relational select mengembalikan nested objects (dosen/ruangan), gunakan itu
+        //    supaya tidak perlu query tambahan. Jika tidak, ambil tabel dosen & ruangan.
         if (!isMounted) return;
 
-        // 3. Buat map id -> nama_dosen / nama_ruangan
         const dosenMap = {};
-        (dosenData || []).forEach((d) => {
-          dosenMap[d.id] = d.nama_dosen;
-        });
-
         const ruanganMap = {};
-        (ruanganData || []).forEach((r) => {
-          ruanganMap[r.id] = r.nama_ruangan;
-        });
+        const sampleRow = (jadwalData && jadwalData[0]) || null;
+
+        if (sampleRow && (sampleRow.dosen || sampleRow.ruangan)) {
+          // Bangun map dari nested objects yang sudah tersedia di setiap row
+          (jadwalData || []).forEach((r) => {
+            if (r.dosen && r.dosen.id != null) {
+              dosenMap[r.dosen.id] = r.dosen.nama_dosen ?? r.dosen.nama ?? r.dosen.name;
+            }
+            if (r.ruangan && r.ruangan.id != null) {
+              ruanganMap[r.ruangan.id] = r.ruangan.nama_ruangan ?? r.ruangan.nama ?? r.ruangan.name;
+            }
+          });
+        } else {
+          const [{ data: dosenData, error: dosenError }, { data: ruanganData, error: ruanganError }] =
+            await Promise.all([
+              supabase.from("dosen").select("id, nama_dosen"),
+              supabase.from("ruangan").select("id, nama_ruangan"),
+            ]);
+
+          if (dosenError) throw dosenError;
+          if (ruanganError) throw ruanganError;
+
+          (dosenData || []).forEach((d) => {
+            dosenMap[d.id] = d.nama_dosen;
+          });
+
+          (ruanganData || []).forEach((r) => {
+            ruanganMap[r.id] = r.nama_ruangan;
+          });
+        }
 
         // 4. Deteksi nama kolom di jadwal (agar kompatibel dengan berbagai skema)
         const sample = (jadwalData && jadwalData[0]) || {};
@@ -124,13 +138,62 @@ function JadwalPerkuliahanTable() {
         const endKey = findKey(["akhir", "selesai", "end", "jam_selesai", "waktu_selesai"]) || "akhir_jadwal";
 
         // 5. Gabungkan nama_dosen & nama_ruangan ke data jadwal menggunakan key yang terdeteksi
-        const merged = (jadwalData || []).map((j) => ({
+        let merged = (jadwalData || []).map((j) => ({
           ...j,
           nama_dosen: dosenMap[j[dosenIdKey]] || "-",
           nama_ruangan: ruanganMap[j[ruanganIdKey]] || "-",
           _startKey: startKey,
           _endKey: endKey,
         }));
+
+        // 6. Jika ada kolom id lain yang relevan (mis. jadwal_id), coba join nama_jadwal
+        const jadwalIdKeyAuto = keys.find((k) => /jadwal/i.test(k) && /id/i.test(k));
+        if (jadwalIdKeyAuto) {
+          const tableName = jadwalIdKeyAuto.replace(/(^id_|_id$)/i, "");
+          try {
+            // Ambil sample dari tabel terkait untuk mendeteksi nama kolom
+            const { data: sampleTbl, error: sampleErr } = await supabase
+              .from(tableName)
+              .select("*")
+              .limit(1)
+              .maybeSingle();
+
+            if (!sampleErr && sampleTbl) {
+              const candidateNameKeys = [
+                "nama_jadwal",
+                "nama",
+                "name",
+                "title",
+                "judul",
+                "nama_mata_kuliah",
+                "nama_matkul",
+              ];
+
+              const foundNameKey = candidateNameKeys.find((ck) => ck in sampleTbl) || Object.keys(sampleTbl).find((k) => /nama|name|title|judul/i.test(k));
+
+              if (foundNameKey) {
+                const { data: namaTblData, error: namaTblErr } = await supabase
+                  .from(tableName)
+                  .select("id, " + foundNameKey);
+
+                if (!namaTblErr) {
+                  const namaMap = {};
+                  (namaTblData || []).forEach((r) => {
+                    namaMap[r.id] = r[foundNameKey];
+                  });
+
+                  // Tambahkan properti nama_jadwal ke setiap row jadwal
+                  merged = merged.map((j) => ({
+                    ...j,
+                    nama_jadwal: namaMap[j[jadwalIdKeyAuto]] || "-",
+                  }));
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("Tidak dapat join nama_jadwal:", e);
+          }
+        }
 
         setJadwal(merged);
       } catch (err) {
@@ -176,6 +239,9 @@ function JadwalPerkuliahanTable() {
               <tr className="text-left text-slate-500 border-b">
                 <th className="py-2 pr-2">Dosen</th>
                 <th className="py-2 pr-2">Ruangan</th>
+                {jadwal[0] && jadwal[0].nama_jadwal && (
+                  <th className="py-2 pr-2">Nama Jadwal</th>
+                )}
                 <th className="py-2 pr-2">Mulai</th>
                 <th className="py-2 pr-2">Selesai</th>
               </tr>
@@ -185,6 +251,7 @@ function JadwalPerkuliahanTable() {
                 <tr key={row.id} className="border-b last:border-0">
                   <td className="py-2 pr-2">{row.nama_dosen}</td>
                   <td className="py-2 pr-2">{row.nama_ruangan}</td>
+                  {row.nama_jadwal && <td className="py-2 pr-2">{row.nama_jadwal}</td>}
                   <td className="py-2 pr-2">{row[row._startKey] ?? "-"}</td>
                   <td className="py-2 pr-2">{row[row._endKey] ?? "-"}</td>
                 </tr>
