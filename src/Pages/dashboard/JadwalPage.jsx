@@ -13,7 +13,7 @@ export default function JadwalPage() {
 // Header Component
 function PageHeader() {
   return (
-    <header>
+    <header className="text-center">
       <h1 className="text-2xl font-semibold text-slate-800">Jadwal Perkuliahan</h1>
       <p className="text-sm text-slate-500 mt-1">
         Daftar jadwal lengkap dengan nama dosen dan ruangan.
@@ -412,35 +412,18 @@ function JadwalTable() {
     <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-slate-900">Jadwal Perkuliahan</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={openAddModal}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
-          >
-            + Tambah Jadwal
-          </button>
-          <button
-            onClick={handleEditSelected}
-            className="bg-yellow-500 hover:bg-yellow-600 text-white text-sm px-4 py-2 rounded-lg transition-colors"
-          >
-            Edit Terpilih
-          </button>
-          <button
-            onClick={handleDeleteSelected}
-            className="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
-          >
-            Hapus Terpilih
-          </button>
-        </div>
+        <button
+          onClick={openAddModal}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+        >
+          + Tambah Jadwal
+        </button>
       </div>
 
       <TableContent
         jadwal={jadwal}
         loading={loading}
         error={error}
-        selectedIds={selectedIds}
-        toggleSelect={toggleSelect}
-        toggleSelectAll={toggleSelectAll}
         onEdit={openEditModal}
         onDelete={handleDelete}
       />
@@ -462,7 +445,7 @@ function JadwalTable() {
 }
 
 // Table Content with states
-function TableContent({ jadwal, loading, error, selectedIds, toggleSelect, toggleSelectAll, onEdit, onDelete }) {
+function TableContent({ jadwal, loading, error, onEdit, onDelete }) {
   if (loading) {
     return <LoadingState />;
   }
@@ -478,9 +461,6 @@ function TableContent({ jadwal, loading, error, selectedIds, toggleSelect, toggl
   return (
     <DataTable
       data={jadwal}
-      selectedIds={selectedIds}
-      onToggleSelect={toggleSelect}
-      onToggleSelectAll={toggleSelectAll}
       onEdit={onEdit}
       onDelete={onDelete}
     />
@@ -523,20 +503,12 @@ function EmptyState() {
 }
 
 // Data Table
-function DataTable({ data, selectedIds, onToggleSelect, onToggleSelectAll, onEdit, onDelete }) {
+function DataTable({ data, onEdit, onDelete }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-slate-700 border-b border-slate-300">
-            <th className="py-3 px-4 w-12">
-              <input
-                type="checkbox"
-                checked={selectedIds.length === data.length && data.length > 0}
-                onChange={onToggleSelectAll}
-                className="w-4 h-4 cursor-pointer"
-              />
-            </th>
             <th className="py-3 px-4 font-semibold">Dosen</th>
             <th className="py-3 px-4 font-semibold">Ruangan</th>
             <th className="py-3 px-4 font-semibold">Nama Jadwal</th>
@@ -548,14 +520,6 @@ function DataTable({ data, selectedIds, onToggleSelect, onToggleSelectAll, onEdi
         <tbody>
           {data.map((row) => (
             <tr key={row.id} className="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
-              <td className="py-3 px-4">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(row.id)}
-                  onChange={() => onToggleSelect(row.id)}
-                  className="w-4 h-4 cursor-pointer"
-                />
-              </td>
               <td className="py-3 px-4 text-slate-800">{row.nama_dosen}</td>
               <td className="py-3 px-4 text-slate-800">{row.nama_ruangan}</td>
               <td className="py-3 px-4 text-slate-800">{row.nama_jadwal}</td>
