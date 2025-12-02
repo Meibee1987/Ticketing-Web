@@ -11,6 +11,11 @@ import LoginPage from "./Pages/LoginPage";
 
 import DashboardLayout from "./Pages/dashboard/DashboardLayout";
 import OverviewPage from "./Pages/dashboard/OverviewPage";
+import DashboardTicketPage from "./Pages/dashboard/DashboardTicketPage";
+import TicketingPage from "./Pages/dashboard/TicketingPage";
+import AllTicketsPage from "./Pages/dashboard/AllTicketsPage";
+import MyTicketsPage from "./Pages/dashboard/MyTicketsPage";
+import CreateTicketPage from "./Pages/dashboard/CreateTicketPage";
 import UsersPage from "./Pages/dashboard/UsersPage";
 import SettingsPage from "./Pages/dashboard/SettingsPage";
 import JadwalPage from "./Pages/dashboard/JadwalPage";
@@ -34,7 +39,11 @@ const router = createBrowserRouter([
 
         // Nested routes di dalam dashboard
         children: [
-          { index: true, element: <OverviewPage /> },      // /dashboard
+          { index: true, element: <DashboardTicketPage /> },      // /dashboard
+          { path: "ticketing", element: <TicketingPage /> }, // /dashboard/ticketing
+          { path: "tickets", element: <AllTicketsPage /> }, // /dashboard/tickets
+          { path: "my-tickets", element: <MyTicketsPage /> }, // /dashboard/my-tickets
+          { path: "create-ticket", element: <CreateTicketPage /> }, // /dashboard/create-ticket
           { path: "users", element: <UsersPage /> },       // /dashboard/users
           { path: "settings", element: <SettingsPage /> }, // /dashboard/settings
           { path: "jadwal", element: <JadwalPage /> },     // /dashboard/jadwal

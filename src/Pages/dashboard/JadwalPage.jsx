@@ -27,7 +27,7 @@ function PageHeader() {
   return (
     <header className="text-center">
       <h1 className="text-2xl font-semibold text-slate-800">Jadwal Perkuliahan</h1>
-      <p className="text-sm text-slate-500 mt-1">{formattedDate}</p>
+      <p className="text-sm text-slate-500 mt-1 font-bold">{formattedDate}</p>
     </header>
   );
 }

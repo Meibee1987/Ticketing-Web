@@ -28,7 +28,22 @@ export default function DashboardLayout() {
         <nav className="flex-1 mt-4 space-y-1 overflow-y-auto">
           <NavLink to="/dashboard" end className={menuItemClass}>
             <span>📊</span>
-            <span>Overview</span>
+            <span>Dashboard</span>
+          </NavLink>
+
+          <NavLink to="/dashboard/tickets" className={menuItemClass}>
+            <span>🎫</span>
+            <span>Tickets</span>
+          </NavLink>
+
+          <NavLink to="/dashboard/my-tickets" className={menuItemClass}>
+            <span>📋</span>
+            <span>My Tickets</span>
+          </NavLink>
+
+          <NavLink to="/dashboard/create-ticket" className={menuItemClass}>
+            <span>➕</span>
+            <span>Create Ticket</span>
           </NavLink>
 
           <NavLink to="/dashboard/jadwal" className={menuItemClass}>
