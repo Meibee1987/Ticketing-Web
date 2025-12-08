@@ -19,7 +19,7 @@ import UsersPage from "./Pages/dashboard/UsersPage";
 import SettingsPage from "./Pages/dashboard/SettingsPage";
 import JadwalPage from "./Pages/dashboard/JadwalPage";
 import RuanganPage from "./Pages/dashboard/RuanganPage";
-import DatabaseManagementPage from "./Pages/dashboard/DatabaseManagementPage";
+import MasterData from "./Pages/dashboard/MasterData";
 
 // Router configuration
 const router = createBrowserRouter([
@@ -47,7 +47,7 @@ const router = createBrowserRouter([
           { path: "settings", element: <SettingsPage /> }, // /dashboard/settings
           { path: "jadwal", element: <JadwalPage /> },     // /dashboard/jadwal
           { path: "ruangan", element: <RuanganPage /> },   // /dashboard/ruangan
-          { path: "database", element: <DatabaseManagementPage /> }, // /dashboard/database
+          { path: "database", element: <MasterData /> }, // /dashboard/database
         ],
       },
     ],

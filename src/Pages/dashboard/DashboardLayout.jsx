@@ -53,7 +53,7 @@ export default function DashboardLayout() {
 
           <NavLink to="/dashboard/database" className={menuItemClass}>
             <span>🗄️</span>
-            <span>Database</span>
+            <span>Master Data</span>
           </NavLink>
 
           <NavLink to="/dashboard/users" className={menuItemClass}>
@@ -83,9 +83,6 @@ export default function DashboardLayout() {
         {/* Header - Fixed */}
         <header className="h-16 bg-gradient-to-r from-[#1e3a8a] via-[#2563eb] to-[#1e40af] border-b-2 border-[#fed80b]/50 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 z-40 shadow-xl" style={{ left: '16rem' }}>
           <div className="flex items-center gap-3">
-            <h1 className="text-lg md:text-xl font-bold text-white drop-shadow-lg">
-              Dashboard
-            </h1>
           </div>
 
           <div className="flex items-center gap-4">
