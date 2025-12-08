@@ -11,6 +11,7 @@ export default function MasterData() {
   const [ruangan, setRuangan] = useState([]);
   
   const [loading, setLoading] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   
   // Modal state
@@ -72,11 +73,7 @@ export default function MasterData() {
     setShowModal(true);
   };
 
-  const handleView = (item) => {
-    setModalMode("view");
-    setSelectedItem(item);
-    setShowModal(true);
-  };
+
 
   const handleDelete = async (id) => {
     if (!confirm("Yakin ingin menghapus data ini?")) return;
@@ -134,7 +131,7 @@ export default function MasterData() {
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Database Management</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Master Data</h1>
           <p className="text-slate-600">Kelola data master: Dosen, Angkatan, Mata Kuliah, dan Ruangan</p>
         </div>
         <button
@@ -155,7 +152,7 @@ export default function MasterData() {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setSearchQuery(""); }}
+                onClick={() => { setActiveTab(tab.id); setSearchInput(""); setSearchQuery(""); }}
                 className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? "border-blue-600 text-blue-600 bg-blue-50/50"
@@ -171,18 +168,27 @@ export default function MasterData() {
 
         {/* Search */}
         <div className="p-4 border-b border-slate-200 bg-slate-50">
-          <div className="relative max-w-md">
+          <form onSubmit={(e) => { e.preventDefault(); setSearchQuery(searchInput); }} className="relative max-w-md">
             <input
               type="text"
-              placeholder={`Cari ${tabs.find(t => t.id === activeTab)?.label}...`}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder={`Cari ${tabs.find(t => t.id === activeTab)?.label}... (Tekan Enter)`}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full pl-10 pr-20 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
             <svg className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-          </div>
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => { setSearchInput(""); setSearchQuery(""); }}
+                className="absolute right-2 top-2 px-2 py-1 text-xs text-slate-600 hover:text-slate-800 bg-slate-200 hover:bg-slate-300 rounded transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </form>
         </div>
 
         {/* Table Content */}
@@ -201,7 +207,6 @@ export default function MasterData() {
               activeTab={activeTab} 
               data={filteredData} 
               onEdit={handleEdit} 
-              onView={handleView} 
               onDelete={handleDelete} 
             />
           )}
@@ -230,7 +235,7 @@ export default function MasterData() {
 }
 
 // Data Table Component
-function DataTable({ activeTab, data, onEdit, onView, onDelete }) {
+function DataTable({ activeTab, data, onEdit, onDelete }) {
   const getColumns = () => {
     switch (activeTab) {
       case "dosen":
@@ -289,12 +294,7 @@ function DataTable({ activeTab, data, onEdit, onView, onDelete }) {
             ))}
             <td className="px-6 py-4">
               <div className="flex gap-2">
-                <button onClick={() => onView(item)} className="p-1.5 text-slate-600 hover:bg-slate-100 rounded" title="View">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                </button>
+
                 <button onClick={() => onEdit(item)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Edit">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -395,7 +395,7 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
     }
   };
 
-  const isReadOnly = mode === "view";
+  const isReadOnly = false;
 
   const getTitle = () => {
     const tabLabel = {
@@ -404,10 +404,9 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
       matakuliah: "Mata Kuliah",
       ruangan: "Ruangan"
     }[activeTab];
-    
     if (mode === "create") return `Tambah ${tabLabel}`;
     if (mode === "edit") return `Edit ${tabLabel}`;
-    return `Detail ${tabLabel}`;
+    return "";
   };
 
   const renderFields = () => {
@@ -492,7 +491,12 @@ function FormField({ label, name, type = "text", value, onChange, disabled, requ
         disabled={disabled}
         required={required}
         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500"
-        placeholder={`Masukkan ${label.toLowerCase()}`}
+        placeholder={
+          name === "nama_dosen" ? "Masukan Nama Dosen":
+          name === "nip" ? "Masukan NIP" : 
+          name === "email" ? "Masukan Email" :
+          name === "telepon" ? "Masukan Telepon" : 
+          `Masukkan ${label.toLowerCase()}`}
       />
     </div>
   );
