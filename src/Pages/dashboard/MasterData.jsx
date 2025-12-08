@@ -171,7 +171,12 @@ export default function MasterData() {
           <form onSubmit={(e) => { e.preventDefault(); setSearchQuery(searchInput); }} className="relative max-w-md">
             <input
               type="text"
-              placeholder={`Cari ${tabs.find(t => t.id === activeTab)?.label}... (Tekan Enter)`}
+              placeholder={
+                activeTab === "ruangan" ? "Masukan kata kunci Nama Ruangan" :
+                activeTab === "dosen" ? "Masukan kata kunci Nama Dosen" :
+                activeTab === "angkatan" ? "Masukan kata kunci Nama Angkatan":
+                   `Masukan kata kunci ${tabs.find(t => t.id === activeTab)?.label}`
+              }
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-10 pr-20 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
