@@ -15,11 +15,11 @@ import DashboardTicketPage from "./Pages/dashboard/DashboardTicketPage";
 import TicketingPage from "./Pages/dashboard/TicketingPage";
 import AllTicketsPage from "./Pages/dashboard/AllTicketsPage";
 import MyTicketsPage from "./Pages/dashboard/MyTicketsPage";
-import CreateTicketPage from "./Pages/dashboard/CreateTicketPage";
 import UsersPage from "./Pages/dashboard/UsersPage";
 import SettingsPage from "./Pages/dashboard/SettingsPage";
 import JadwalPage from "./Pages/dashboard/JadwalPage";
 import RuanganPage from "./Pages/dashboard/RuanganPage";
+import DatabaseManagementPage from "./Pages/dashboard/DatabaseManagementPage";
 
 // Router configuration
 const router = createBrowserRouter([
@@ -42,12 +42,12 @@ const router = createBrowserRouter([
           { index: true, element: <DashboardTicketPage /> },      // /dashboard
           { path: "ticketing", element: <TicketingPage /> }, // /dashboard/ticketing
           { path: "tickets", element: <AllTicketsPage /> }, // /dashboard/tickets
-          { path: "my-tickets", element: <MyTicketsPage /> }, // /dashboard/my-tickets
-          { path: "create-ticket", element: <CreateTicketPage /> }, // /dashboard/create-ticket
+          { path: "my-tickets", element: <MyTicketsPage /> }, // /dashboard/my-tickets (includes create ticket)
           { path: "users", element: <UsersPage /> },       // /dashboard/users
           { path: "settings", element: <SettingsPage /> }, // /dashboard/settings
           { path: "jadwal", element: <JadwalPage /> },     // /dashboard/jadwal
           { path: "ruangan", element: <RuanganPage /> },   // /dashboard/ruangan
+          { path: "database", element: <DatabaseManagementPage /> }, // /dashboard/database
         ],
       },
     ],

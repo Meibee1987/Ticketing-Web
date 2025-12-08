@@ -26,7 +26,7 @@ export default function DashboardLayout() {
 
         {/* Menu */}
         <nav className="flex-1 mt-4 space-y-1 overflow-y-auto">
-          <NavLink to="/dashboard" end className={menuItemClass}>
+          {/* <NavLink to="/dashboard" end className={menuItemClass}>
             <span>📊</span>
             <span>Dashboard</span>
           </NavLink>
@@ -39,12 +39,7 @@ export default function DashboardLayout() {
           <NavLink to="/dashboard/my-tickets" className={menuItemClass}>
             <span>📋</span>
             <span>My Tickets</span>
-          </NavLink>
-
-          <NavLink to="/dashboard/create-ticket" className={menuItemClass}>
-            <span>➕</span>
-            <span>Create Ticket</span>
-          </NavLink>
+          </NavLink> */}
 
           <NavLink to="/dashboard/jadwal" className={menuItemClass}>
             <span>📅</span>
@@ -54,6 +49,11 @@ export default function DashboardLayout() {
           <NavLink to="/dashboard/ruangan" className={menuItemClass}>
             <span>🏢</span>
             <span>Ruangan</span>
+          </NavLink>
+
+          <NavLink to="/dashboard/database" className={menuItemClass}>
+            <span>🗄️</span>
+            <span>Database</span>
           </NavLink>
 
           <NavLink to="/dashboard/users" className={menuItemClass}>
