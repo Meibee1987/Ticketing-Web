@@ -172,7 +172,7 @@ export default function MasterData() {
             <input
               type="text"
               placeholder={
-                activeTab === "ruangan" ? "Masukan kata kunci Nama Ruangan" :
+                activeTab === "ruangan" ? "pencarian Nama Ruangan (tekan enter untuk mulai mencari)" :
                 activeTab === "dosen" ? "Masukan kata kunci Nama Dosen" :
                 activeTab === "angkatan" ? "Masukan kata kunci Nama Angkatan":
                    `Masukan kata kunci ${tabs.find(t => t.id === activeTab)?.label}`
