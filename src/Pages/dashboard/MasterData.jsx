@@ -167,12 +167,12 @@ export default function MasterData() {
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b border-slate-200 bg-slate-50">
-          <form onSubmit={(e) => { e.preventDefault(); setSearchQuery(searchInput); }} className="relative max-w-md">
+        <div className="px-4 py-4 border-b border-slate-200 bg-slate-50">
+          <form onSubmit={(e) => { e.preventDefault(); setSearchQuery(searchInput); }} className="relative w-full">
             <input
               type="text"
               placeholder={
-                activeTab === "ruangan" ? "pencarian Nama Ruangan (tekan enter untuk mulai mencari)" :
+                activeTab === "ruangan" ? "Masukan Kata kunci Nama Ruangan" :
                 activeTab === "dosen" ? "Masukan kata kunci Nama Dosen" :
                 activeTab === "angkatan" ? "Masukan kata kunci Nama Angkatan":
                    `Masukan kata kunci ${tabs.find(t => t.id === activeTab)?.label}`

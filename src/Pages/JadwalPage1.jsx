@@ -99,7 +99,7 @@ function useJadwal() {
       // Try relational select first with all relations
       const jadwalRes = await supabase
         .from("jadwal_perkuliahan")
-        .select("*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)")
+        .select("*, dosen(*), ruangan(*), Angkatan(*), Mata_Kuliah(*)")
         .order("id", { ascending: true });
 
       if (jadwalRes.error) {
@@ -116,11 +116,11 @@ function useJadwal() {
         // Fetch related data
         // Fetch mata kuliah with fallback
         let mataKuliahData = null;
-        const mkRes1 = await supabase.from("mata_kuliah").select("*");
+        const mkRes1 = await supabase.from("Mata_Kuliah").select("*");
         if (!mkRes1.error && mkRes1.data) {
           mataKuliahData = mkRes1.data;
         } else {
-          const mkRes2 = await supabase.from("Mata_Kuliah").select("*");
+          const mkRes2 = await supabase.from("mata_kuliah").select("*");
           mataKuliahData = mkRes2.data || [];
         }
 
@@ -169,8 +169,8 @@ function useJadwal() {
           ...r,
           nama_dosen: r.dosen?.nama_dosen ?? r.dosen?.nama ?? r.dosen?.name ?? (r.dosen_id ? String(r.dosen_id) : "-"),
           nama_ruangan: r.ruangan?.nama_ruangan ?? r.ruangan?.nama ?? r.ruangan?.name ?? (r.ruangan_id ? String(r.ruangan_id) : "-"),
-          nama_angkatan: r.angkatan?.nama_angkatan ?? r.angkatan?.nama ?? (r.id_angkatan ? String(r.id_angkatan) : "-"),
-          nama_matkul: r.mata_kuliah?.mata_kuliah ?? r.mata_kuliah?.nama_matkul ?? r.mata_kuliah?.nama ?? (r.id_mata_kuliah ? String(r.id_mata_kuliah) : "-"),
+          nama_angkatan: r.Angkatan?.nama_angkatan ?? r.Angkatan?.nama ?? (r.id_angkatan ? String(r.id_angkatan) : "-"),
+          nama_matkul: r.Mata_Kuliah?.mata_kuliah ?? r.Mata_Kuliah?.nama_matkul ?? r.Mata_Kuliah?.nama ?? (r.id_mata_kuliah ? String(r.id_mata_kuliah) : "-"),
           awal_jadwal: r[findKey(r, ["awal", "mulai", "start", "jam_mulai", "waktu_mulai"])] || "-",
           akhir_jadwal: r[findKey(r, ["akhir", "selesai", "end", "jam_selesai", "waktu_selesai"])] || "-",
           nama_jadwal: r[findKey(r, ["nama_jadwal", "nama", "title", "judul"])] || "-"
@@ -223,7 +223,7 @@ function JadwalTable() {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const { data: mkData1, error: mkError1 } = await supabase.from("mata_kuliah").select("*");
+        const { data: mkData1, error: mkError1 } = await supabase.from("Mata_Kuliah").select("*");
         const mataKuliahData = mkData1 || (await supabase.from("mata_kuliah").select("*")).data;
 
         const [{ data: dosenData }, { data: ruanganData }, { data: angkatanData }, { data: sampleJadwal }] = await Promise.all([
@@ -871,7 +871,7 @@ function JadwalKaryaAkhirTable() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-6">
+    <div className="bg-white rounded-2xl">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-slate-900">Jadwal Karya Akhir</h2>
         <button
@@ -932,7 +932,7 @@ function KaryaAkhirDataTable({ data, onEdit, onDelete }) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
         <thead>
-          <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+          <tr className="bg-gradient-to-r from-purple-600 to-purple-700 text-white">
             {["Angkatan", "Waktu", "Agenda", "Ruangan", "Aksi"].map((label, i) => (
               <th key={i} className={`py-3 px-4 font-semibold ${i === 4 ? "text-center" : "text-left"} border border-slate-300`}>{label}</th>
             ))}
@@ -940,7 +940,7 @@ function KaryaAkhirDataTable({ data, onEdit, onDelete }) {
         </thead>
         <tbody>
           {data.map((row) => (
-            <tr key={row.id} className="border-b border-slate-200 hover:bg-blue-50 transition-colors">
+            <tr key={row.id} className="border-b border-slate-200 hover:bg-purple-50 transition-colors">
               <td className="py-3 px-4 text-slate-800 font-semibold border border-slate-200">
                 {row.display_angkatan || "-"}
               </td>
@@ -1161,6 +1161,7 @@ function JadwalLainLainTable() {
     agenda: "",
   });
   const [ruanganOptions, setRuanganOptions] = useState([]);
+  const [usersOptions, setUsersOptions] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -1272,13 +1273,11 @@ function JadwalLainLainTable() {
       }
       
       const payload = {
-        // nama_ruangan di DB adalah int8 (FK ke ruangan)
-        nama_ruangan: form.nama_ruangan ? parseInt(form.nama_ruangan) : null,
-        // nama_user di DB adalah text langsung
-        nama_user: form.nama_user || null,
-        mulai_jadwal: form.mulai_jadwal || null,
-        akhir_jadwal: form.akhir_jadwal || null,
-        agenda: form.agenda || null
+        ruangan_id: form.ruangan_id || null,
+        [columnMapping.user]: form.user_id || null,
+        [columnMapping.start]: form.mulai_jadwal || null,
+        [columnMapping.end]: form.akhir_jadwal || null,
+        [columnMapping.agenda]: form.agenda || null
       };
 
       if (modalMode === "add") {
@@ -1312,7 +1311,7 @@ function JadwalLainLainTable() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-6">
+    <div className="bg-white rounded-2xl">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-slate-900">Jadwal Lain-lain</h2>
         <button
@@ -1336,6 +1335,7 @@ function JadwalLainLainTable() {
           mode={modalMode}
           form={form}
           ruanganOptions={ruanganOptions}
+          usersOptions={usersOptions}
           saving={saving}
           onChange={handleChange}
           onSave={handleSave}
@@ -1381,7 +1381,7 @@ function LainLainDataTable({ data, onEdit, onDelete }) {
           {data.map((row) => (
             <tr key={row.id} className="border-b border-slate-200 hover:bg-blue-50 transition-colors">
               <td className="py-3 px-4 text-slate-800 font-semibold border border-slate-200">
-                {row.user_display || row.nama_user || "-"}
+                {row.nama_user || "-"}
               </td>
               <td className="py-3 px-4 text-slate-800 font-medium border border-slate-200">
                 {formatTime(row.awal_jadwal)} - {formatTime(row.akhir_jadwal)}
@@ -1390,7 +1390,7 @@ function LainLainDataTable({ data, onEdit, onDelete }) {
                 <div className="font-semibold text-slate-900">{row.agenda || "-"}</div>
               </td>
               <td className="py-3 px-4 text-slate-800 border border-slate-200">
-                {row.ruangan_display || "-"}
+                {row.nama_ruangan || "-"}
               </td>
               <td className="py-3 px-4 border border-slate-200 text-center">
                 <button
@@ -1415,7 +1415,7 @@ function LainLainDataTable({ data, onEdit, onDelete }) {
 }
 
 // Modal Component for Lain-lain
-function LainLainModal({ mode, form, ruanganOptions, saving, onChange, onSave, onClose }) {
+function LainLainModal({ mode, form, ruanganOptions, usersOptions, saving, onChange, onSave, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
@@ -1434,24 +1434,27 @@ function LainLainModal({ mode, form, ruanganOptions, saving, onChange, onSave, o
         </div>
 
         <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* nama_user adalah text langsung, bukan dropdown */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nama User</label>
-            <input
-              type="text"
-              value={form.nama_user}
-              onChange={(e) => onChange("nama_user", e.target.value)}
-              placeholder="Masukkan nama user"
+            <select
+              value={form.user_id}
+              onChange={(e) => onChange("user_id", e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            />
+            >
+              <option value="">-- Pilih User --</option>
+              {usersOptions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.nama_user || item.name || item.email || `User ${item.id}`}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* nama_ruangan adalah int8 FK ke tabel ruangan */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Ruangan</label>
             <select
-              value={form.nama_ruangan}
-              onChange={(e) => onChange("nama_ruangan", e.target.value)}
+              value={form.ruangan_id}
+              onChange={(e) => onChange("ruangan_id", e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             >
               <option value="">-- Pilih Ruangan --</option>
