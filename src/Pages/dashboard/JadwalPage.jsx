@@ -20,13 +20,23 @@ import { supabase } from "../../supabaseClient";
 
 const INITIAL_STATE = { jadwal: [], loading: true, error: null };
 
-// Helper untuk format timestamp ke tampilan "HH:MM"
+// Helper untuk format timestamp ke tampilan "DD MMM YYYY, HH:MM"
 const formatTimestamp = (ts) => {
   if (!ts || ts === "-") return "-";
   try {
     const date = new Date(ts);
     if (isNaN(date.getTime())) return "-";
-    return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch { return "-"; }
+};
+
+// Helper untuk format timestamp singkat (untuk alert/conflict)
+const formatTimestampShort = (ts) => {
+  if (!ts || ts === "-") return "-";
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return "-";
+    return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) + ' ' + date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
   } catch { return "-"; }
 };
 
@@ -73,7 +83,7 @@ const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, exclud
   for (const j of (jadwalPerkuliahan || [])) {
     if (excludeTable === "jadwal_perkuliahan" && j.id === excludeId) continue;
     if (String(j.ruangan_id) === String(ruanganId) && isOverlap(j.mulai_jadwal, j.akhir_jadwal)) {
-      conflicts.push(`• [Perkuliahan] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestamp(j.mulai_jadwal)} - ${formatTimestamp(j.akhir_jadwal)}`);
+      conflicts.push(`• [Perkuliahan] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`);
     }
   }
 
@@ -82,7 +92,7 @@ const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, exclud
   for (const j of (jadwalKaryaAkhir || [])) {
     if (excludeTable === "jadwal_karya_akhir" && j.id === excludeId) continue;
     if (String(j.nama_ruangan) === String(ruanganId) && isOverlap(j.mulai_jadwal, j.akhir_jadwal)) {
-      conflicts.push(`• [Karya Akhir] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestamp(j.mulai_jadwal)} - ${formatTimestamp(j.akhir_jadwal)}`);
+      conflicts.push(`• [Karya Akhir] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`);
     }
   }
 
@@ -91,7 +101,7 @@ const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, exclud
   for (const j of (jadwalLainLain || [])) {
     if (excludeTable === "jadwal_lain_lain" && j.id === excludeId) continue;
     if (String(j.nama_ruangan) === String(ruanganId) && isOverlap(j.mulai_jadwal, j.akhir_jadwal)) {
-      conflicts.push(`• [Lain-lain] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestamp(j.mulai_jadwal)} - ${formatTimestamp(j.akhir_jadwal)}`);
+      conflicts.push(`• [Lain-lain] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`);
     }
   }
 
@@ -135,20 +145,12 @@ export default function JadwalPage() {
 }
 
 // ================================================================================
-// KOMPONEN: PageHeader
+// KOMPONEN: PageHeader (tanpa tanggal)
 // ================================================================================
 function PageHeader({ title }) {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  useEffect(() => { const t = setInterval(() => setCurrentDate(new Date()), 60000); return () => clearInterval(t); }, []);
-  
-  const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-  const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-  const formattedDate = `${days[currentDate.getDay()]}, ${currentDate.getDate()} ${months[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
-
   return (
     <header className="text-center">
       <h1 className="text-2xl font-semibold text-slate-800">{title}</h1>
-      <p className="text-sm text-slate-500 mt-1 font-bold">{formattedDate}</p>
     </header>
   );
 }
@@ -364,7 +366,7 @@ function JadwalTable() {
         const isOverlap = formStart < new Date(j.akhir_jadwal) && formEnd > new Date(j.mulai_jadwal);
         if (isOverlap) {
           const d = options.dosen.find(x => String(x.id) === String(form.dosen_id));
-          dosenConflicts.push(`• [Perkuliahan] Dosen "${d?.nama_dosen || form.dosen_id}" sudah mengajar ${formatTimestamp(j.mulai_jadwal)} - ${formatTimestamp(j.akhir_jadwal)}`);
+          dosenConflicts.push(`• [Perkuliahan] Dosen "${d?.nama_dosen || form.dosen_id}" sudah mengajar ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`);
         }
       }
     }
@@ -398,7 +400,8 @@ function JadwalTable() {
 
   const columns = [
     { label: "Angkatan", render: (r) => <span className="font-semibold text-slate-800">{r.nama_angkatan}</span> },
-    { label: "Waktu", render: (r) => <span className="font-medium text-slate-800">{formatTimestamp(r.mulai_jadwal)} - {formatTimestamp(r.akhir_jadwal)}</span> },
+    { label: "Mulai", render: (r) => <span className="font-medium text-slate-800 text-xs">{formatTimestamp(r.mulai_jadwal)}</span> },
+    { label: "Selesai", render: (r) => <span className="font-medium text-slate-800 text-xs">{formatTimestamp(r.akhir_jadwal)}</span> },
     { label: "Agenda", render: (r) => <><div className="font-semibold text-slate-900">{r.nama_matkul}</div><div className="text-xs text-slate-600">{r.nama_dosen}</div></> },
     { label: "Tempat", render: (r) => <span className="text-slate-800">{r.nama_ruangan}</span> },
   ];
@@ -527,7 +530,8 @@ function JadwalKaryaAkhirTable() {
 
   const columns = [
     { label: "Angkatan", render: (r) => <span className="font-semibold text-slate-800">{r.display_angkatan}</span> },
-    { label: "Waktu", render: (r) => <span className="font-medium text-slate-800">{formatTimestamp(r.mulai_jadwal)} - {formatTimestamp(r.akhir_jadwal)}</span> },
+    { label: "Mulai", render: (r) => <span className="font-medium text-slate-800 text-xs">{formatTimestamp(r.mulai_jadwal)}</span> },
+    { label: "Selesai", render: (r) => <span className="font-medium text-slate-800 text-xs">{formatTimestamp(r.akhir_jadwal)}</span> },
     { label: "Agenda", render: (r) => <div className="font-semibold text-slate-900">{r.display_agenda}</div> },
     { label: "Ruangan", render: (r) => <span className="text-slate-800">{r.display_ruangan}</span> },
   ];
@@ -639,7 +643,8 @@ function JadwalLainLainTable() {
 
   const columns = [
     { label: "Nama User", render: (r) => <span className="font-semibold text-slate-800">{r.user_display}</span> },
-    { label: "Waktu", render: (r) => <span className="font-medium text-slate-800">{formatTimestamp(r.mulai_jadwal)} - {formatTimestamp(r.akhir_jadwal)}</span> },
+    { label: "Mulai", render: (r) => <span className="font-medium text-slate-800 text-xs">{formatTimestamp(r.mulai_jadwal)}</span> },
+    { label: "Selesai", render: (r) => <span className="font-medium text-slate-800 text-xs">{formatTimestamp(r.akhir_jadwal)}</span> },
     { label: "Agenda", render: (r) => <div className="font-semibold text-slate-900">{r.agenda || "-"}</div> },
     { label: "Tempat", render: (r) => <span className="text-slate-800">{r.ruangan_display}</span> },
   ];
