@@ -1,53 +1,6 @@
-/**
- * ================================================================================
- * FILE: JadwalPage.jsx
- * DESKRIPSI: Halaman manajemen jadwal dengan 3 tab (Perkuliahan, Karya Akhir, Lain-lain)
- * ================================================================================
- * 
- * STRUKTUR DATABASE (Supabase PostgreSQL):
- * 
- * 1. jadwal_perkuliahan
- *    - id (int8, PK)
- *    - dosen_id (int8, FK → dosen.id)
- *    - ruangan_id (int8, FK → ruangan.id)
- *    - id_angkatan (int8, FK → angkatan.id)
- *    - id_mata_kuliah (int8, FK → mata_kuliah.id)
- *    - mulai_jadwal (time)
- *    - akhir_jadwal (time)
- * 
- * 2. jadwal_karya_akhir
- *    - id (int8, PK)
- *    - nama_ruangan (int8, FK → ruangan.id)
- *    - nama_angkatan (int8, FK → angkatan.id)
- *    - agenda_jadwal_karya_akhir (int8, FK → agenda_karya_akhir.id)
- *    - mulai_jadwal (time)
- *    - akhir_jadwal (time)
- * 
- * 3. jadwal_lain_lain
- *    - id (int8, PK)
- *    - nama_ruangan (int8, FK → ruangan.id)
- *    - nama_user (text) - langsung nama, BUKAN FK
- *    - agenda (text)
- *    - mulai_jadwal (time)
- *    - akhir_jadwal (time)
- * 
- * 4. Tabel Referensi:
- *    - dosen: id, nama_dosen
- *    - ruangan: id, nama_ruangan
- *    - angkatan: id, nama_angkatan
- *    - mata_kuliah: id, nama_mata_kuliah
- *    - agenda_karya_akhir: id, agenda_karya_akhir
- * 
- * ================================================================================
- */
-
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
 
-// ================================================================================
-// KOMPONEN UTAMA: JadwalPage
-// Fungsi: Menampilkan halaman jadwal dengan navigasi tab
-// ================================================================================
 export default function JadwalPage() {
   const [activeTab, setActiveTab] = useState("perkuliahan");
 
@@ -109,10 +62,7 @@ export default function JadwalPage() {
   );
 }
 
-// ================================================================================
-// KOMPONEN: PageHeader
-// Fungsi: Menampilkan judul halaman dan tanggal saat ini (auto-update setiap menit)
-// ================================================================================
+// Header Component
 function PageHeader({ title }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -134,17 +84,7 @@ function PageHeader({ title }) {
   );
 }
 
-// ================================================================================
-// SECTION: JADWAL PERKULIAHAN
-// Tabel: jadwal_perkuliahan
-// Relasi: dosen, ruangan, angkatan, mata_kuliah
-// ================================================================================
-
-/**
- * Hook: useJadwal
- * Fungsi: Mengambil data jadwal_perkuliahan dari Supabase
- * Return: { jadwal, loading, error, refetch }
- */
+// Custom hook untuk fetch jadwal
 function useJadwal() {
   const [state, setState] = useState({
     jadwal: [],
@@ -255,15 +195,7 @@ function useJadwal() {
   return { ...state, refetch: fetchJadwal };
 }
 
-/**
- * Komponen: JadwalTable
- * Fungsi: CRUD jadwal perkuliahan (Create, Read, Update, Delete)
- * Fitur: 
- *   - Tabel data dengan kolom: Dosen, Waktu, Mata Kuliah, Angkatan, Tempat
- *   - Modal form untuk tambah/edit
- *   - Validasi bentrok ruangan/dosen pada waktu yang sama
- *   - Multi-select delete
- */
+// Table Component
 function JadwalTable() {
   const { jadwal, loading, error, refetch } = useJadwal();
   const [modalOpen, setModalOpen] = useState(false);
@@ -523,11 +455,6 @@ function JadwalTable() {
   );
 }
 
-// ================================================================================
-// KOMPONEN UI SHARED (Digunakan oleh semua tab)
-// ================================================================================
-
-/** Komponen: LoadingState - Menampilkan spinner loading */
 const LoadingState = () => (
   <div className="flex items-center justify-center py-8">
     <div className="text-center">
@@ -537,14 +464,12 @@ const LoadingState = () => (
   </div>
 );
 
-/** Komponen: ErrorState - Menampilkan pesan error */
 const ErrorState = ({ message }) => (
   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
     <p className="text-sm text-red-600">⚠️ {message}</p>
   </div>
 );
 
-/** Komponen: EmptyState - Menampilkan pesan data kosong */
 const EmptyState = () => (
   <div className="text-center py-12">
     <div className="text-slate-400 mb-2">
@@ -556,7 +481,6 @@ const EmptyState = () => (
   </div>
 );
 
-/** Komponen: TableContent - Wrapper untuk conditional rendering tabel */
 function TableContent({ jadwal, loading, error, onEdit, onDelete }) {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -564,13 +488,7 @@ function TableContent({ jadwal, loading, error, onEdit, onDelete }) {
   return <DataTable data={jadwal} onEdit={onEdit} onDelete={onDelete} />;
 }
 
-/**
- * Komponen: DataTable
- * Fungsi: Menampilkan tabel data jadwal perkuliahan
- * Kolom: Angkatan, Waktu, Agenda (Mata Kuliah + Dosen), Tempat, Aksi
- */
 function DataTable({ data, onEdit, onDelete }) {
-  /** Helper: Format waktu dari HH:MM:SS menjadi HH:MM */
   const formatTime = (time) => !time || time === "-" ? "-" : time.length === 8 ? time.slice(0, 5) : time;
 
   return (
@@ -621,11 +539,7 @@ function DataTable({ data, onEdit, onDelete }) {
   );
 }
 
-/**
- * Komponen: JadwalModal
- * Fungsi: Modal form untuk tambah/edit jadwal perkuliahan
- * Fields: Angkatan, Mata Kuliah, Dosen, Ruangan, Waktu Mulai, Waktu Selesai
- */
+// Modal Component
 function JadwalModal({ mode, form, dosenOptions, ruanganOptions, angkatanOptions, mataKuliahOptions, saving, onChange, onSave, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -705,19 +619,11 @@ function JadwalModal({ mode, form, dosenOptions, ruanganOptions, angkatanOptions
   );
 }
 
-// ================================================================================
-// SECTION: JADWAL KARYA AKHIR
-// Tabel: jadwal_karya_akhir
-// Relasi: ruangan, angkatan, agenda_karya_akhir
-// Catatan: Kolom nama_ruangan & nama_angkatan adalah FK (int8), BUKAN text
-// ================================================================================
+// =============================================
+// JADWAL KARYA AKHIR COMPONENTS
+// =============================================
 
-/**
- * Hook: useJadwalKaryaAkhir
- * Fungsi: Mengambil data jadwal_karya_akhir dari Supabase
- * Mapping: Konversi FK (nama_ruangan, nama_angkatan, agenda_jadwal_karya_akhir) ke nama display
- * Return: { jadwal, loading, error, refetch }
- */
+// Custom hook untuk fetch jadwal karya akhir
 function useJadwalKaryaAkhir() {
   const [state, setState] = useState({
     jadwal: [],
@@ -777,14 +683,7 @@ function useJadwalKaryaAkhir() {
   return { ...state, refetch: fetchJadwal };
 }
 
-/**
- * Komponen: JadwalKaryaAkhirTable
- * Fungsi: CRUD jadwal karya akhir (Create, Read, Update, Delete)
- * Fitur:
- *   - Tabel data dengan kolom: Angkatan, Waktu, Agenda, Tempat
- *   - Modal form untuk tambah/edit
- *   - Validasi bentrok ruangan pada waktu yang sama
- */
+// Table Component for Karya Akhir
 function JadwalKaryaAkhirTable() {
   const { jadwal, loading, error, refetch } = useJadwalKaryaAkhir();
   const [modalOpen, setModalOpen] = useState(false);
@@ -1008,7 +907,6 @@ function JadwalKaryaAkhirTable() {
   );
 }
 
-/** Komponen: KaryaAkhirTableContent - Wrapper untuk conditional rendering */
 function KaryaAkhirTableContent({ jadwal, loading, error, onEdit, onDelete }) {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -1016,7 +914,6 @@ function KaryaAkhirTableContent({ jadwal, loading, error, onEdit, onDelete }) {
   return <KaryaAkhirDataTable data={jadwal} onEdit={onEdit} onDelete={onDelete} />;
 }
 
-/** Komponen: EmptyStateKaryaAkhir - Pesan data kosong untuk tab Karya Akhir */
 const EmptyStateKaryaAkhir = () => (
   <div className="text-center py-12">
     <div className="text-slate-400 mb-2">
@@ -1028,13 +925,7 @@ const EmptyStateKaryaAkhir = () => (
   </div>
 );
 
-/**
- * Komponen: KaryaAkhirDataTable
- * Fungsi: Menampilkan tabel data jadwal karya akhir
- * Kolom: Angkatan, Waktu, Agenda, Ruangan, Aksi
- */
 function KaryaAkhirDataTable({ data, onEdit, onDelete }) {
-  /** Helper: Format waktu dari HH:MM:SS menjadi HH:MM */
   const formatTime = (time) => !time || time === "-" ? "-" : time.length === 8 ? time.slice(0, 5) : time;
 
   return (
@@ -1084,11 +975,7 @@ function KaryaAkhirDataTable({ data, onEdit, onDelete }) {
   );
 }
 
-/**
- * Komponen: KaryaAkhirModal
- * Fungsi: Modal form untuk tambah/edit jadwal karya akhir
- * Fields: Angkatan, Ruangan, Agenda, Waktu Mulai, Waktu Selesai
- */
+// Modal Component for Karya Akhir
 function KaryaAkhirModal({ mode, form, ruanganOptions, angkatanOptions, agendaOptions, saving, onChange, onSave, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1193,19 +1080,11 @@ function KaryaAkhirModal({ mode, form, ruanganOptions, angkatanOptions, agendaOp
   );
 }
 
-// ================================================================================
-// SECTION: JADWAL LAIN-LAIN
-// Tabel: jadwal_lain_lain
-// Relasi: ruangan (FK)
-// Catatan: nama_user adalah TEXT langsung (BUKAN FK), nama_ruangan adalah FK int8
-// ================================================================================
+// =============================================
+// JADWAL LAIN-LAIN COMPONENTS
+// =============================================
 
-/**
- * Hook: useJadwalLainLain
- * Fungsi: Mengambil data jadwal_lain_lain dari Supabase
- * Mapping: Konversi FK (nama_ruangan) ke nama display, nama_user langsung dari DB
- * Return: { jadwal, loading, error, refetch }
- */
+// Custom hook untuk fetch jadwal lain-lain
 function useJadwalLainLain() {
   const [state, setState] = useState({
     jadwal: [],
@@ -1268,15 +1147,7 @@ function useJadwalLainLain() {
   return { ...state, refetch: fetchJadwal };
 }
 
-/**
- * Komponen: JadwalLainLainTable
- * Fungsi: CRUD jadwal lain-lain (Create, Read, Update, Delete)
- * Fitur:
- *   - Tabel data dengan kolom: Nama User, Waktu, Agenda, Tempat
- *   - Modal form untuk tambah/edit
- *   - Validasi bentrok ruangan pada waktu yang sama
- *   - nama_user adalah input text (bukan dropdown)
- */
+// Table Component for Lain-lain
 function JadwalLainLainTable() {
   const { jadwal, loading, error, refetch } = useJadwalLainLain();
   const [modalOpen, setModalOpen] = useState(false);
@@ -1475,7 +1346,6 @@ function JadwalLainLainTable() {
   );
 }
 
-/** Komponen: LainLainTableContent - Wrapper untuk conditional rendering */
 function LainLainTableContent({ jadwal, loading, error, onEdit, onDelete }) {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -1483,7 +1353,6 @@ function LainLainTableContent({ jadwal, loading, error, onEdit, onDelete }) {
   return <LainLainDataTable data={jadwal} onEdit={onEdit} onDelete={onDelete} />;
 }
 
-/** Komponen: EmptyStateLainLain - Pesan data kosong untuk tab Lain-lain */
 const EmptyStateLainLain = () => (
   <div className="text-center py-12">
     <div className="text-slate-400 mb-2">
@@ -1495,13 +1364,7 @@ const EmptyStateLainLain = () => (
   </div>
 );
 
-/**
- * Komponen: LainLainDataTable
- * Fungsi: Menampilkan tabel data jadwal lain-lain
- * Kolom: Nama User, Waktu, Agenda, Tempat, Aksi
- */
 function LainLainDataTable({ data, onEdit, onDelete }) {
-  /** Helper: Format waktu dari HH:MM:SS menjadi HH:MM */
   const formatTime = (time) => !time || time === "-" ? "-" : time.length === 8 ? time.slice(0, 5) : time;
 
   return (
@@ -1551,11 +1414,7 @@ function LainLainDataTable({ data, onEdit, onDelete }) {
   );
 }
 
-/**
- * Komponen: LainLainModal
- * Fungsi: Modal form untuk tambah/edit jadwal lain-lain
- * Fields: Nama User (text input), Ruangan (dropdown), Agenda (text), Waktu Mulai, Waktu Selesai
- */
+// Modal Component for Lain-lain
 function LainLainModal({ mode, form, ruanganOptions, saving, onChange, onSave, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
