@@ -39,6 +39,15 @@ const isSameDate = (date1, date2) => {
 
 export default function RuanganPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update current time setiap menit untuk refresh status "sedang digunakan"
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update setiap 1 menit
+    return () => clearInterval(timer);
+  }, []);
 
   const handleDateChange = (e) => {
     setSelectedDate(new Date(e.target.value + 'T00:00:00'));
@@ -89,8 +98,8 @@ export default function RuanganPage() {
         </div>
       </div>
 
-      <RuanganStats key={`stats-${selectedDate.toDateString()}`} selectedDate={selectedDate} />
-      <RuanganList key={`list-${selectedDate.toDateString()}`} selectedDate={selectedDate} />
+      <RuanganStats key={`stats-${selectedDate.toDateString()}-${currentTime.getMinutes()}`} selectedDate={selectedDate} currentTime={currentTime} />
+      <RuanganList key={`list-${selectedDate.toDateString()}-${currentTime.getMinutes()}`} selectedDate={selectedDate} currentTime={currentTime} />
     </div>
   );
 }
@@ -224,13 +233,13 @@ function useRuanganData(selectedDate) {
 }
 
 // ============= STATS COMPONENT =============
-function RuanganStats({ selectedDate }) {
+function RuanganStats({ selectedDate, currentTime }) {
   const { ruangan, filteredBookings, loading } = useRuanganData(selectedDate);
 
   const stats = useMemo(() => {
     if (loading || !ruangan.length) return { total: 0, tersedia: 0, adaJadwal: 0, sedangDigunakan: 0 };
 
-    const now = new Date();
+    const now = currentTime || new Date();
     const isToday = isSameDate(selectedDate, now);
     
     const ruanganSedangDigunakan = new Set();
@@ -255,7 +264,7 @@ function RuanganStats({ selectedDate }) {
       adaJadwal: ruanganAdaJadwal.size,
       tersedia: ruangan.length - ruanganSedangDigunakan.size,
     };
-  }, [ruangan, filteredBookings, loading, selectedDate]);
+  }, [ruangan, filteredBookings, loading, selectedDate, currentTime]);
 
   if (loading) {
     return (
@@ -296,14 +305,14 @@ function RuanganStats({ selectedDate }) {
 }
 
 // ============= RUANGAN LIST =============
-function RuanganList({ selectedDate }) {
+function RuanganList({ selectedDate, currentTime }) {
   const { ruangan, filteredBookings, loading, error } = useRuanganData(selectedDate);
   const [filter, setFilter] = useState("all");
 
   const enhancedRuangan = useMemo(() => {
     if (loading || !ruangan.length) return [];
 
-    const now = new Date();
+    const now = currentTime || new Date();
     const isToday = isSameDate(selectedDate, now);
 
     return ruangan.map(r => {
@@ -347,7 +356,7 @@ function RuanganList({ selectedDate }) {
       
       return getNextStartTime(a) - getNextStartTime(b);
     });
-  }, [ruangan, filteredBookings, loading, selectedDate]);
+  }, [ruangan, filteredBookings, loading, selectedDate, currentTime]);
 
   const filteredRuangan = useMemo(() => {
     if (filter === "all") return enhancedRuangan;
