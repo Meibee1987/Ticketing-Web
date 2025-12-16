@@ -58,6 +58,23 @@ const compareTimestamp = (ts1, ts2) => {
 
 const createMap = (data, key) => Object.fromEntries((data || []).map(item => [item.id, item[key]]));
 
+// Helper untuk format input date (YYYY-MM-DD)
+const formatDateInput = (date) => {
+  return date.toISOString().split('T')[0];
+};
+
+// Helper untuk format tanggal display (Indonesia)
+const formatDate = (date) => {
+  return date.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+};
+
+// Helper untuk compare tanggal (tanpa waktu)
+const isSameDate = (date1, date2) => {
+  return date1.getFullYear() === date2.getFullYear() &&
+         date1.getMonth() === date2.getMonth() &&
+         date1.getDate() === date2.getDate();
+};
+
 // ================================================================================
 // FUNGSI CEK KONFLIK RUANGAN (CROSS-TABLE) - MENGGUNAKAN VIEW UNION ALL
 // Single query ke view_jadwal_union untuk cek konflik di semua tabel jadwal
@@ -114,6 +131,8 @@ const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, exclud
 // ================================================================================
 export default function JadwalPage() {
   const [activeTab, setActiveTab] = useState("perkuliahan");
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  
   const tabs = [
     { id: "perkuliahan", label: "Jadwal Perkuliahan", icon: "📚" },
     { id: "karya_akhir", label: "Jadwal Karya Akhir", icon: "🎓" },
@@ -123,9 +142,52 @@ export default function JadwalPage() {
   const tabTitles = { perkuliahan: "Jadwal Perkuliahan", karya_akhir: "Jadwal Karya Akhir", lain_lain: "Jadwal Lain-lain" };
   const TabComponent = { perkuliahan: JadwalTable, karya_akhir: JadwalKaryaAkhirTable, lain_lain: JadwalLainLainTable }[activeTab];
 
+  const handleDateChange = (e) => {
+    setSelectedDate(new Date(e.target.value + 'T00:00:00'));
+  };
+
+  const goToToday = () => setSelectedDate(new Date());
+  const goToPrevDay = () => setSelectedDate(prev => new Date(prev.getTime() - 86400000));
+  const goToNextDay = () => setSelectedDate(prev => new Date(prev.getTime() + 86400000));
+
+  const isToday = isSameDate(selectedDate, new Date());
+
   return (
     <div className="space-y-6">
       <PageHeader title={tabTitles[activeTab] || "Jadwal"} />
+      
+      {/* Date Filter */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-2">
+            <button onClick={goToPrevDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <input
+              type="date"
+              value={formatDateInput(selectedDate)}
+              onChange={handleDateChange}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <button onClick={goToNextDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={goToToday} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}>
+              Hari Ini
+            </button>
+            <span className="text-sm font-medium text-slate-700">{formatDate(selectedDate)}</span>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="border-b border-slate-200">
           <nav className="flex -mb-px overflow-x-auto">
@@ -139,7 +201,7 @@ export default function JadwalPage() {
             ))}
           </nav>
         </div>
-        <div className="p-6">{TabComponent && <TabComponent />}</div>
+        <div className="p-6">{TabComponent && <TabComponent selectedDate={selectedDate} />}</div>
       </div>
     </div>
   );
@@ -283,7 +345,7 @@ const TimeFields = ({ form, onChange }) => (
 );
 
 // ================================================================================
-// SECTION: JADWAL PERKULIAHAN
+// SECTION: JADWAL PERKULIAHAN (dengan Realtime Subscription)
 // ================================================================================
 function useJadwal() {
   const [state, setState] = useState(INITIAL_STATE);
@@ -291,7 +353,7 @@ function useJadwal() {
   const fetchJadwal = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
-      const { data, error } = await supabase.from("jadwal_perkuliahan").select("*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)").order("id");
+      const { data, error } = await supabase.from("jadwal_perkuliahan").select("*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)").order("mulai_jadwal");
       
       if (error) throw error;
       
@@ -311,12 +373,32 @@ function useJadwal() {
     }
   }, []);
 
-  useEffect(() => { fetchJadwal(); }, [fetchJadwal]);
+  useEffect(() => {
+    fetchJadwal();
+    
+    // Realtime subscription
+    const channel = supabase
+      .channel('jadwal_perkuliahan_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal_perkuliahan' }, () => {
+        fetchJadwal();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchJadwal]);
+
   return { ...state, refetch: fetchJadwal };
 }
 
-function JadwalTable() {
+function JadwalTable({ selectedDate }) {
   const { jadwal, loading, error, refetch } = useJadwal();
+  
+  // Filter jadwal berdasarkan tanggal yang dipilih
+  const filteredJadwal = jadwal.filter(j => {
+    if (!j.mulai_jadwal) return false;
+    const jadwalDate = new Date(j.mulai_jadwal);
+    return isSameDate(jadwalDate, selectedDate);
+  });
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("add");
   const [form, setForm] = useState({ id: null, dosen_id: "", ruangan_id: "", id_angkatan: "", id_mata_kuliah: "", mulai_jadwal: "", akhir_jadwal: "" });
@@ -412,7 +494,7 @@ function JadwalTable() {
 
   return (
     <TableWrapper title="Jadwal Perkuliahan" onAdd={openAdd}>
-      {jadwal.length === 0 ? <EmptyState text="Belum ada data jadwal perkuliahan." /> : <GenericDataTable data={jadwal} columns={columns} onEdit={openEdit} onDelete={handleDelete} />}
+      {filteredJadwal.length === 0 ? <EmptyState text={`Tidak ada jadwal perkuliahan pada ${formatDate(selectedDate)}.`} /> : <GenericDataTable data={filteredJadwal} columns={columns} onEdit={openEdit} onDelete={handleDelete} />}
       {modalOpen && (
         <Modal title={modalMode === "add" ? "Tambah Jadwal" : "Edit Jadwal"} saving={saving} onSave={handleSave} onClose={closeModal}>
           <SelectField label="Angkatan" value={form.id_angkatan} onChange={(v) => handleChange("id_angkatan", v)} options={options.angkatan} displayKey="nama_angkatan" />
@@ -427,7 +509,7 @@ function JadwalTable() {
 }
 
 // ================================================================================
-// SECTION: JADWAL KARYA AKHIR
+// SECTION: JADWAL KARYA AKHIR (dengan Realtime Subscription)
 // ================================================================================
 function useJadwalKaryaAkhir() {
   const [state, setState] = useState(INITIAL_STATE);
@@ -435,7 +517,7 @@ function useJadwalKaryaAkhir() {
   const fetchJadwal = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
-      const { data: jadwalData, error } = await supabase.from("jadwal_karya_akhir").select("*").order("id");
+      const { data: jadwalData, error } = await supabase.from("jadwal_karya_akhir").select("*").order("mulai_jadwal");
       if (error) throw error;
 
       const [{ data: ruangan }, { data: angkatan }, { data: agenda }] = await Promise.all([
@@ -463,12 +545,33 @@ function useJadwalKaryaAkhir() {
     }
   }, []);
 
-  useEffect(() => { fetchJadwal(); }, [fetchJadwal]);
+  useEffect(() => {
+    fetchJadwal();
+    
+    // Realtime subscription
+    const channel = supabase
+      .channel('jadwal_karya_akhir_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal_karya_akhir' }, () => {
+        fetchJadwal();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchJadwal]);
+
   return { ...state, refetch: fetchJadwal };
 }
 
-function JadwalKaryaAkhirTable() {
+function JadwalKaryaAkhirTable({ selectedDate }) {
   const { jadwal, loading, error, refetch } = useJadwalKaryaAkhir();
+  
+  // Filter jadwal berdasarkan tanggal yang dipilih
+  const filteredJadwal = jadwal.filter(j => {
+    if (!j.mulai_jadwal) return false;
+    const jadwalDate = new Date(j.mulai_jadwal);
+    return isSameDate(jadwalDate, selectedDate);
+  });
+  
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("add");
   const [form, setForm] = useState({ id: null, nama_ruangan: "", nama_angkatan: "", mulai_jadwal: "", akhir_jadwal: "", agenda_jadwal_karya_akhir: "" });
@@ -542,7 +645,7 @@ function JadwalKaryaAkhirTable() {
 
   return (
     <TableWrapper title="Jadwal Karya Akhir" onAdd={openAdd}>
-      {jadwal.length === 0 ? <EmptyState text="Belum ada data jadwal karya akhir." /> : <GenericDataTable data={jadwal} columns={columns} onEdit={openEdit} onDelete={handleDelete} />}
+      {filteredJadwal.length === 0 ? <EmptyState text={`Tidak ada jadwal karya akhir pada ${formatDate(selectedDate)}.`} /> : <GenericDataTable data={filteredJadwal} columns={columns} onEdit={openEdit} onDelete={handleDelete} />}
       {modalOpen && (
         <Modal title={modalMode === "add" ? "Tambah Jadwal Karya Akhir" : "Edit Jadwal Karya Akhir"} saving={saving} onSave={handleSave} onClose={closeModal}>
           <SelectField label="Angkatan" value={form.nama_angkatan} onChange={(v) => handleChange("nama_angkatan", v)} options={options.angkatan} displayKey="nama_angkatan" />
@@ -556,7 +659,7 @@ function JadwalKaryaAkhirTable() {
 }
 
 // ================================================================================
-// SECTION: JADWAL LAIN-LAIN
+// SECTION: JADWAL LAIN-LAIN (dengan Realtime Subscription)
 // ================================================================================
 function useJadwalLainLain() {
   const [state, setState] = useState(INITIAL_STATE);
@@ -564,7 +667,7 @@ function useJadwalLainLain() {
   const fetchJadwal = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
-      const { data: jadwalData, error } = await supabase.from("jadwal_lain_lain").select("*").order("id");
+      const { data: jadwalData, error } = await supabase.from("jadwal_lain_lain").select("*").order("mulai_jadwal");
       if (error) throw error;
 
       const { data: ruangan } = await supabase.from("ruangan").select("id, nama_ruangan");
@@ -584,12 +687,33 @@ function useJadwalLainLain() {
     }
   }, []);
 
-  useEffect(() => { fetchJadwal(); }, [fetchJadwal]);
+  useEffect(() => {
+    fetchJadwal();
+    
+    // Realtime subscription
+    const channel = supabase
+      .channel('jadwal_lain_lain_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal_lain_lain' }, () => {
+        fetchJadwal();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchJadwal]);
+
   return { ...state, refetch: fetchJadwal };
 }
 
-function JadwalLainLainTable() {
+function JadwalLainLainTable({ selectedDate }) {
   const { jadwal, loading, error, refetch } = useJadwalLainLain();
+  
+  // Filter jadwal berdasarkan tanggal yang dipilih
+  const filteredJadwal = jadwal.filter(j => {
+    if (!j.mulai_jadwal) return false;
+    const jadwalDate = new Date(j.mulai_jadwal);
+    return isSameDate(jadwalDate, selectedDate);
+  });
+  
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("add");
   const [form, setForm] = useState({ id: null, nama_ruangan: "", nama_user: "", mulai_jadwal: "", akhir_jadwal: "", agenda: "" });
@@ -655,7 +779,7 @@ function JadwalLainLainTable() {
 
   return (
     <TableWrapper title="Jadwal Lain-lain" onAdd={openAdd}>
-      {jadwal.length === 0 ? <EmptyState text="Belum ada data jadwal lain-lain." /> : <GenericDataTable data={jadwal} columns={columns} onEdit={openEdit} onDelete={handleDelete} />}
+      {filteredJadwal.length === 0 ? <EmptyState text={`Tidak ada jadwal lain-lain pada ${formatDate(selectedDate)}.`} /> : <GenericDataTable data={filteredJadwal} columns={columns} onEdit={openEdit} onDelete={handleDelete} />}
       {modalOpen && (
         <Modal title={modalMode === "add" ? "Tambah Jadwal Lain-lain" : "Edit Jadwal Lain-lain"} saving={saving} onSave={handleSave} onClose={closeModal}>
           <InputField label="Nama User" value={form.nama_user} onChange={(v) => handleChange("nama_user", v)} placeholder="Masukkan nama user" />

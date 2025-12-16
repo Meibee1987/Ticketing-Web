@@ -39,12 +39,6 @@ const isSameDate = (date1, date2) => {
 
 export default function RuanganPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => setRefreshKey(prev => prev + 1), 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleDateChange = (e) => {
     setSelectedDate(new Date(e.target.value + 'T00:00:00'));
@@ -95,8 +89,8 @@ export default function RuanganPage() {
         </div>
       </div>
 
-      <RuanganStats key={`stats-${refreshKey}-${selectedDate.toDateString()}`} selectedDate={selectedDate} />
-      <RuanganList key={`list-${refreshKey}-${selectedDate.toDateString()}`} selectedDate={selectedDate} />
+      <RuanganStats key={`stats-${selectedDate.toDateString()}`} selectedDate={selectedDate} />
+      <RuanganList key={`list-${selectedDate.toDateString()}`} selectedDate={selectedDate} />
     </div>
   );
 }
@@ -195,6 +189,28 @@ function useRuanganData(selectedDate) {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Realtime subscription untuk 3 tabel jadwal + ruangan
+  useEffect(() => {
+    const channels = [
+      supabase.channel('ruangan-realtime-ruangan')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ruangan' }, fetchData)
+        .subscribe(),
+      supabase.channel('ruangan-realtime-perkuliahan')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal_perkuliahan' }, fetchData)
+        .subscribe(),
+      supabase.channel('ruangan-realtime-karya-akhir')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal_karya_akhir' }, fetchData)
+        .subscribe(),
+      supabase.channel('ruangan-realtime-lain-lain')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal_lain_lain' }, fetchData)
+        .subscribe(),
+    ];
+
+    return () => {
+      channels.forEach(channel => supabase.removeChannel(channel));
+    };
+  }, [fetchData]);
 
   // Filter bookings berdasarkan tanggal yang dipilih
   const filteredBookings = useMemo(() => {
@@ -312,8 +328,24 @@ function RuanganList({ selectedDate }) {
 
       return { ...r, status, currentBooking, scheduledBookings, totalBookings: bookingsForRoom.length };
     }).sort((a, b) => {
+      // Sort by status priority first
       const order = { sedang_digunakan: 0, ada_jadwal: 1, tersedia: 2 };
-      return order[a.status] - order[b.status];
+      const statusDiff = order[a.status] - order[b.status];
+      if (statusDiff !== 0) return statusDiff;
+      
+      // For rooms with the same status, sort by nearest start time
+      const getNextStartTime = (room) => {
+        if (room.currentBooking) return room.currentBooking.mulai;
+        if (room.scheduledBookings.length > 0) {
+          // Find the nearest upcoming booking or the earliest booking
+          const now = new Date();
+          const upcomingBooking = room.scheduledBookings.find(b => b.mulai > now);
+          return upcomingBooking ? upcomingBooking.mulai : room.scheduledBookings[0].mulai;
+        }
+        return new Date(9999, 11, 31); // Far future for rooms without bookings
+      };
+      
+      return getNextStartTime(a) - getNextStartTime(b);
     });
   }, [ruangan, filteredBookings, loading, selectedDate]);
 
