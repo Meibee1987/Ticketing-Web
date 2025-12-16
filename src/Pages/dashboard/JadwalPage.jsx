@@ -59,51 +59,52 @@ const compareTimestamp = (ts1, ts2) => {
 const createMap = (data, key) => Object.fromEntries((data || []).map(item => [item.id, item[key]]));
 
 // ================================================================================
-// FUNGSI CEK KONFLIK RUANGAN (CROSS-TABLE)
-// Cek konflik ruangan di SEMUA tabel jadwal (perkuliahan, karya_akhir, lain_lain)
+// FUNGSI CEK KONFLIK RUANGAN (CROSS-TABLE) - MENGGUNAKAN VIEW UNION ALL
+// Single query ke view_jadwal_union untuk cek konflik di semua tabel jadwal
 // ================================================================================
 const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, excludeTable, ruanganMap }) => {
   if (!mulai || !akhir) return "• Waktu mulai dan selesai harus diisi";
   
   const formStart = new Date(mulai), formEnd = new Date(akhir);
   if (formStart >= formEnd) return "• Waktu mulai harus lebih awal dari waktu selesai";
-  if (!ruanganId) return null; // Tidak ada ruangan yang dipilih, skip conflict check
+  if (!ruanganId) return null;
 
-  const conflicts = [];
   const namaRuangan = ruanganMap?.[ruanganId] || `Ruangan ${ruanganId}`;
 
-  // Helper untuk cek overlap waktu
-  const isOverlap = (start, end) => {
-    if (!start || !end) return false;
-    return formStart < new Date(end) && formEnd > new Date(start);
-  };
+  // Map excludeTable ke jenis_jadwal di view
+  const excludeJenis = {
+    "jadwal_perkuliahan": "PERKULIAHAN",
+    "jadwal_karya_akhir": "KARYA_AKHIR",
+    "jadwal_lain_lain": "LAIN_LAIN"
+  }[excludeTable];
 
-  // 1. CEK DI JADWAL PERKULIAHAN
-  const { data: jadwalPerkuliahan } = await supabase.from("jadwal_perkuliahan").select("id, ruangan_id, mulai_jadwal, akhir_jadwal");
-  for (const j of (jadwalPerkuliahan || [])) {
-    if (excludeTable === "jadwal_perkuliahan" && j.id === excludeId) continue;
-    if (String(j.ruangan_id) === String(ruanganId) && isOverlap(j.mulai_jadwal, j.akhir_jadwal)) {
-      conflicts.push(`• [Perkuliahan] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`);
-    }
+  // Single query menggunakan view UNION ALL
+  const { data, error } = await supabase
+    .from("view_jadwal_union")
+    .select("jenis_jadwal, id_asli, ruangan_id, mulai_jadwal, akhir_jadwal")
+    .eq("ruangan_id", ruanganId)
+    .order("mulai_jadwal");
+
+  if (error) {
+    console.error("Error checking conflict:", error);
+    return null;
   }
 
-  // 2. CEK DI JADWAL KARYA AKHIR
-  const { data: jadwalKaryaAkhir } = await supabase.from("jadwal_karya_akhir").select("id, nama_ruangan, mulai_jadwal, akhir_jadwal");
-  for (const j of (jadwalKaryaAkhir || [])) {
-    if (excludeTable === "jadwal_karya_akhir" && j.id === excludeId) continue;
-    if (String(j.nama_ruangan) === String(ruanganId) && isOverlap(j.mulai_jadwal, j.akhir_jadwal)) {
-      conflicts.push(`• [Karya Akhir] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`);
-    }
-  }
-
-  // 3. CEK DI JADWAL LAIN-LAIN
-  const { data: jadwalLainLain } = await supabase.from("jadwal_lain_lain").select("id, nama_ruangan, mulai_jadwal, akhir_jadwal");
-  for (const j of (jadwalLainLain || [])) {
-    if (excludeTable === "jadwal_lain_lain" && j.id === excludeId) continue;
-    if (String(j.nama_ruangan) === String(ruanganId) && isOverlap(j.mulai_jadwal, j.akhir_jadwal)) {
-      conflicts.push(`• [Lain-lain] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`);
-    }
-  }
+  // Filter konflik waktu
+  const conflicts = (data || [])
+    .filter(j => {
+      // Skip jika ini adalah record yang sedang di-edit
+      if (j.jenis_jadwal === excludeJenis && j.id_asli === excludeId) return false;
+      if (!j.mulai_jadwal || !j.akhir_jadwal) return false;
+      
+      // Cek overlap waktu
+      const start = new Date(j.mulai_jadwal), end = new Date(j.akhir_jadwal);
+      return formStart < end && formEnd > start;
+    })
+    .map(j => {
+      const jenisLabel = { "PERKULIAHAN": "Perkuliahan", "KARYA_AKHIR": "Karya Akhir", "LAIN_LAIN": "Lain-lain" }[j.jenis_jadwal];
+      return `• [${jenisLabel}] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`;
+    });
 
   return conflicts.length ? conflicts.join('\n') : null;
 };

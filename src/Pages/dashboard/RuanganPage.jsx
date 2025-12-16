@@ -1,31 +1,44 @@
+/**
+ * ================================================================================
+ * FILE: RuanganPage.jsx
+ * DESKRIPSI: Dashboard Ketersediaan Ruangan - Filter tanggal, data dari 3 tabel jadwal
+ * ================================================================================
+ */
+
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
 
-// ============= UTILITIES =============
-const timeToSeconds = (timeStr) => {
-  const [hours, minutes, seconds] = timeStr.split(':').map(Number);
-  return hours * 3600 + minutes * 60 + (seconds || 0);
+// ============= HELPER FUNCTIONS =============
+const formatDate = (date) => {
+  return date.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
 };
 
-const normalizeTime = (time) => time?.length === 5 ? time + ":00" : time;
+const formatDateShort = (ts) => {
+  if (!ts) return "-";
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
-const detectTimeKeys = (jadwal) => {
-  if (!jadwal?.[0]) return { startKey: "mulai", endKey: "selesai" };
-  const keys = Object.keys(jadwal[0]);
-  const findKey = (patterns) => {
-    for (const pattern of patterns) {
-      const key = keys.find(k => new RegExp(pattern, "i").test(k));
-      if (key) return key;
-    }
-    return patterns[0];
-  };
-  return {
-    startKey: findKey(["mulai", "awal", "start", "jam_mulai"]),
-    endKey: findKey(["selesai", "akhir", "end", "jam_selesai"])
-  };
+const formatTime = (ts) => {
+  if (!ts) return "-";
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return "-";
+  return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+};
+
+const formatDateInput = (date) => {
+  return date.toISOString().split('T')[0];
+};
+
+const isSameDate = (date1, date2) => {
+  return date1.getFullYear() === date2.getFullYear() &&
+         date1.getMonth() === date2.getMonth() &&
+         date1.getDate() === date2.getDate();
 };
 
 export default function RuanganPage() {
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -33,27 +46,66 @@ export default function RuanganPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleDateChange = (e) => {
+    setSelectedDate(new Date(e.target.value + 'T00:00:00'));
+  };
+
+  const goToToday = () => setSelectedDate(new Date());
+  const goToPrevDay = () => setSelectedDate(prev => new Date(prev.getTime() - 86400000));
+  const goToNextDay = () => setSelectedDate(prev => new Date(prev.getTime() + 86400000));
+
+  const isToday = isSameDate(selectedDate, new Date());
+
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold text-slate-800">Manajemen Ruangan & Ketersediaan</h1>
+        <h1 className="text-2xl font-semibold text-slate-800">📍 Ketersediaan Ruangan</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Admin bisa melihat ruangan mana yang kosong sekarang, ruangan mana yang sudah terpakai, dan persentase okupansi ruangan.
+          Lihat ketersediaan ruangan berdasarkan tanggal. Ruangan "Tersedia" hanya berkurang jika sedang digunakan.
         </p>
       </header>
-      <div className="sticky top-0 z-30 bg-gradient-to-br from-blue-50 via-yellow-50 to-blue-100 pb-4 -mx-4 md:-mx-6 px-4 md:px-6 pt-2">
-        <RuanganStats key={refreshKey} />
+
+      {/* Date Filter */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-2">
+            <button onClick={goToPrevDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <input
+              type="date"
+              value={formatDateInput(selectedDate)}
+              onChange={handleDateChange}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <button onClick={goToNextDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={goToToday} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              Hari Ini
+            </button>
+            <span className="text-sm font-medium text-slate-700">{formatDate(selectedDate)}</span>
+          </div>
+        </div>
       </div>
-      <RuanganList key={refreshKey + 1000} />
+
+      <RuanganStats key={`stats-${refreshKey}-${selectedDate.toDateString()}`} selectedDate={selectedDate} />
+      <RuanganList key={`list-${refreshKey}-${selectedDate.toDateString()}`} selectedDate={selectedDate} />
     </div>
   );
 }
 
-// ============= HOOKS =============
-function useRuanganData() {
+// ============= DATA HOOK =============
+function useRuanganData(selectedDate) {
   const [state, setState] = useState({
     ruangan: [],
-    jadwal: [],
+    allBookings: [],
     loading: true,
     error: null,
   });
@@ -61,115 +113,139 @@ function useRuanganData() {
   const fetchData = useCallback(async () => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
-      
-      const [ruanganRes, jadwalRes] = await Promise.all([
+
+      const [ruanganRes, perkuliahanRes, karyaAkhirRes, lainLainRes, dosenRes, angkatanRes, matkulRes, agendaKARes] = await Promise.all([
         supabase.from("ruangan").select("*").order("nama_ruangan"),
         supabase.from("jadwal_perkuliahan").select("*"),
+        supabase.from("jadwal_karya_akhir").select("*"),
+        supabase.from("jadwal_lain_lain").select("*"),
+        supabase.from("dosen").select("id, nama_dosen"),
+        supabase.from("angkatan").select("id, nama_angkatan"),
+        supabase.from("mata_kuliah").select("*"),
+        supabase.from("agenda_karya_akhir").select("id, agenda_karya_akhir"),
       ]);
 
       if (ruanganRes.error) throw ruanganRes.error;
-      if (jadwalRes.error) throw jadwalRes.error;
 
-      setState({
-        ruangan: ruanganRes.data || [],
-        jadwal: jadwalRes.data || [],
-        loading: false,
-        error: null,
+      const ruangan = ruanganRes.data || [];
+      const dosenMap = Object.fromEntries((dosenRes.data || []).map(d => [d.id, d.nama_dosen]));
+      const angkatanMap = Object.fromEntries((angkatanRes.data || []).map(a => [a.id, a.nama_angkatan]));
+      const matkulMap = Object.fromEntries((matkulRes.data || []).map(m => [m.id, m.mata_kuliah || m.nama_matkul]));
+      const agendaKAMap = Object.fromEntries((agendaKARes.data || []).map(a => [a.id, a.agenda_karya_akhir]));
+      const ruanganMap = Object.fromEntries(ruangan.map(r => [r.id, r.nama_ruangan]));
+
+      const allBookings = [];
+
+      // 1. Jadwal Perkuliahan
+      (perkuliahanRes.data || []).forEach(j => {
+        if (!j.mulai_jadwal || !j.akhir_jadwal) return;
+        allBookings.push({
+          id: `perkuliahan-${j.id}`,
+          ruangan_id: j.ruangan_id,
+          ruangan_nama: ruanganMap[j.ruangan_id] || `Ruangan ${j.ruangan_id}`,
+          mulai: new Date(j.mulai_jadwal),
+          akhir: new Date(j.akhir_jadwal),
+          source: "Perkuliahan",
+          sourceColor: "blue",
+          description: matkulMap[j.id_mata_kuliah] || "Mata Kuliah",
+          detail: dosenMap[j.dosen_id] || "",
+          angkatan: angkatanMap[j.id_angkatan] || "",
+        });
       });
+
+      // 2. Jadwal Karya Akhir
+      (karyaAkhirRes.data || []).forEach(j => {
+        if (!j.mulai_jadwal || !j.akhir_jadwal) return;
+        allBookings.push({
+          id: `karya_akhir-${j.id}`,
+          ruangan_id: j.nama_ruangan,
+          ruangan_nama: ruanganMap[j.nama_ruangan] || `Ruangan ${j.nama_ruangan}`,
+          mulai: new Date(j.mulai_jadwal),
+          akhir: new Date(j.akhir_jadwal),
+          source: "Karya Akhir",
+          sourceColor: "purple",
+          description: agendaKAMap[j.agenda_jadwal_karya_akhir] || "Sidang/Seminar",
+          detail: angkatanMap[j.nama_angkatan] || "",
+        });
+      });
+
+      // 3. Jadwal Lain-lain
+      (lainLainRes.data || []).forEach(j => {
+        if (!j.mulai_jadwal || !j.akhir_jadwal) return;
+        allBookings.push({
+          id: `lain_lain-${j.id}`,
+          ruangan_id: j.nama_ruangan,
+          ruangan_nama: ruanganMap[j.nama_ruangan] || `Ruangan ${j.nama_ruangan}`,
+          mulai: new Date(j.mulai_jadwal),
+          akhir: new Date(j.akhir_jadwal),
+          source: "Lain-lain",
+          sourceColor: "orange",
+          description: j.agenda || "Kegiatan",
+          detail: j.nama_user || "",
+        });
+      });
+
+      allBookings.sort((a, b) => a.mulai - b.mulai);
+
+      setState({ ruangan, allBookings, loading: false, error: null });
     } catch (err) {
-      setState({
-        ruangan: [],
-        jadwal: [],
-        loading: false,
-        error: err.message || "Gagal mengambil data",
-      });
+      console.error("Error fetching data:", err);
+      setState({ ruangan: [], allBookings: [], loading: false, error: err.message || "Gagal mengambil data" });
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  return state;
+  // Filter bookings berdasarkan tanggal yang dipilih
+  const filteredBookings = useMemo(() => {
+    return state.allBookings.filter(b => {
+      const bookingDate = new Date(b.mulai);
+      return isSameDate(bookingDate, selectedDate);
+    });
+  }, [state.allBookings, selectedDate]);
+
+  return { ...state, filteredBookings };
 }
 
-function useRuanganStats(ruangan, jadwal, loading) {
-  return useMemo(() => {
-    if (loading || !ruangan.length) {
-      return { total: 0, kosong: 0, terjadwal: 0, terpakai: 0 };
-    }
+// ============= STATS COMPONENT =============
+function RuanganStats({ selectedDate }) {
+  const { ruangan, filteredBookings, loading } = useRuanganData(selectedDate);
 
-    const currentSeconds = timeToSeconds(new Date().toTimeString().slice(0, 8));
-    const { startKey, endKey } = detectTimeKeys(jadwal);
+  const stats = useMemo(() => {
+    if (loading || !ruangan.length) return { total: 0, tersedia: 0, adaJadwal: 0, sedangDigunakan: 0 };
+
+    const now = new Date();
+    const isToday = isSameDate(selectedDate, now);
     
-    const ruanganTerpakai = new Set();
-    const ruanganTerjadwal = new Set();
-    
-    jadwal.forEach(j => {
-      if (!j[startKey] || !j[endKey]) return;
-      
-      const startSeconds = timeToSeconds(normalizeTime(j[startKey]));
-      const endSeconds = timeToSeconds(normalizeTime(j[endKey]));
-      
-      if (currentSeconds >= startSeconds && currentSeconds < endSeconds) {
-        ruanganTerpakai.add(j.ruangan_id);
-      } else if (currentSeconds < startSeconds && !ruanganTerpakai.has(j.ruangan_id)) {
-        ruanganTerjadwal.add(j.ruangan_id);
+    const ruanganSedangDigunakan = new Set();
+    const ruanganAdaJadwal = new Set();
+
+    filteredBookings.forEach(b => {
+      // Hanya cek "sedang digunakan" jika hari ini
+      if (isToday && now >= b.mulai && now < b.akhir) {
+        ruanganSedangDigunakan.add(b.ruangan_id);
+      } else {
+        ruanganAdaJadwal.add(b.ruangan_id);
       }
     });
 
+    // Ruangan yang sedang digunakan jangan dihitung sebagai "ada jadwal"
+    ruanganSedangDigunakan.forEach(id => ruanganAdaJadwal.delete(id));
+
+    // TERSEDIA = Total - Sedang Digunakan (ada jadwal TIDAK mengurangi ketersediaan)
     return {
       total: ruangan.length,
-      kosong: ruangan.length - ruanganTerpakai.size - ruanganTerjadwal.size,
-      terjadwal: ruanganTerjadwal.size,
-      terpakai: ruanganTerpakai.size,
+      sedangDigunakan: ruanganSedangDigunakan.size,
+      adaJadwal: ruanganAdaJadwal.size,
+      tersedia: ruangan.length - ruanganSedangDigunakan.size,
     };
-  }, [ruangan, jadwal, loading]);
-}
-
-function useEnhancedRuangan(ruangan, jadwal, loading) {
-  return useMemo(() => {
-    if (loading || !ruangan.length) return [];
-
-    const currentSeconds = timeToSeconds(new Date().toTimeString().slice(0, 8));
-    const { startKey, endKey } = detectTimeKeys(jadwal);
-
-    return ruangan.map(r => {
-      const jadwalRuangan = jadwal.filter(j => String(j.ruangan_id) === String(r.id));
-      
-      const jadwalAktif = jadwalRuangan.filter(j => {
-        if (!j[startKey] || !j[endKey]) return false;
-        const startSeconds = timeToSeconds(normalizeTime(j[startKey]));
-        const endSeconds = timeToSeconds(normalizeTime(j[endKey]));
-        return currentSeconds >= startSeconds && currentSeconds < endSeconds;
-      });
-
-      const jadwalTerjadwal = jadwalRuangan.filter(j => {
-        if (!j[startKey] || !j[endKey]) return false;
-        const startSeconds = timeToSeconds(normalizeTime(j[startKey]));
-        return currentSeconds < startSeconds;
-      });
-
-      return {
-        ...r,
-        status: jadwalAktif.length > 0 ? "terpakai" : jadwalTerjadwal.length > 0 ? "terjadwal" : "kosong",
-        jadwalAktif,
-        jadwalTerjadwal,
-      };
-    });
-  }, [ruangan, jadwal, loading]);
-}
-
-// ============= COMPONENTS =============
-function RuanganStats() {
-  const { ruangan, jadwal, loading } = useRuanganData();
-  const stats = useRuanganStats(ruangan, jadwal, loading);
+  }, [ruangan, filteredBookings, loading, selectedDate]);
 
   if (loading) {
     return (
       <div className="grid gap-4 md:grid-cols-4">
         {[1, 2, 3, 4].map(i => (
-          <div key={i} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 animate-pulse">
+          <div key={i} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 animate-pulse">
             <div className="h-4 bg-slate-200 rounded w-24 mb-2"></div>
             <div className="h-8 bg-slate-200 rounded w-16"></div>
           </div>
@@ -179,53 +255,79 @@ function RuanganStats() {
   }
 
   const cards = [
-    { title: "Total Ruangan", value: stats.total, icon: "📊", color: "blue" },
-    { title: "Ruangan Kosong", value: stats.kosong, icon: "✓", color: "green" },
-    { title: "Ruangan Terjadwal", value: stats.terjadwal, icon: "📅", color: "blue" },
-    { title: "Ruangan Terpakai", value: stats.terpakai, icon: "🔒", color: "orange" },
+    { title: "Total Ruangan", value: stats.total, icon: "🏢", bgColor: "bg-slate-50", textColor: "text-slate-700" },
+    { title: "Tersedia", value: stats.tersedia, icon: "✅", bgColor: "bg-green-50", textColor: "text-green-600", subtitle: "Tidak sedang digunakan" },
+    { title: "Sedang Digunakan", value: stats.sedangDigunakan, icon: "🔴", bgColor: "bg-red-50", textColor: "text-red-600" },
+    { title: "Ada Jadwal", value: stats.adaJadwal, icon: "📅", bgColor: "bg-amber-50", textColor: "text-amber-600", subtitle: "Sudah di-booking" },
   ];
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {cards.map((card, idx) => (
-        <StatCard key={idx} {...card} />
+        <div key={idx} className={`${card.bgColor} rounded-xl shadow-sm border border-slate-200 p-5`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">{card.title}</p>
+              <p className={`text-3xl font-bold ${card.textColor} mt-1`}>{card.value}</p>
+              {card.subtitle && <p className="text-xs text-slate-400 mt-1">{card.subtitle}</p>}
+            </div>
+            <span className="text-3xl">{card.icon}</span>
+          </div>
+        </div>
       ))}
     </div>
   );
 }
 
-function StatCard({ title, value, icon, color }) {
-  const colors = {
-    blue: "bg-blue-50 text-blue-600",
-    green: "bg-green-50 text-green-600",
-    orange: "bg-orange-50 text-orange-600",
-  };
+// ============= RUANGAN LIST =============
+function RuanganList({ selectedDate }) {
+  const { ruangan, filteredBookings, loading, error } = useRuanganData(selectedDate);
+  const [filter, setFilter] = useState("all");
 
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium text-slate-600">{title}</p>
-        <span className={`text-2xl ${colors[color]} w-10 h-10 rounded-lg flex items-center justify-center`}>
-          {icon}
-        </span>
-      </div>
-      <p className="text-3xl font-bold text-slate-800">{value}</p>
-    </div>
-  );
-}
+  const enhancedRuangan = useMemo(() => {
+    if (loading || !ruangan.length) return [];
 
-function RuanganList() {
-  const { ruangan, jadwal, loading, error } = useRuanganData();
-  const enhancedRuangan = useEnhancedRuangan(ruangan, jadwal, loading);
+    const now = new Date();
+    const isToday = isSameDate(selectedDate, now);
+
+    return ruangan.map(r => {
+      const bookingsForRoom = filteredBookings.filter(b => String(b.ruangan_id) === String(r.id));
+      
+      // Sedang digunakan (hanya jika hari ini)
+      const currentBooking = isToday ? bookingsForRoom.find(b => now >= b.mulai && now < b.akhir) : null;
+      
+      // Jadwal yang akan datang atau sudah lewat di hari itu
+      const scheduledBookings = bookingsForRoom.filter(b => {
+        if (currentBooking && b.id === currentBooking.id) return false;
+        return true;
+      }).sort((a, b) => a.mulai - b.mulai);
+
+      // Tentukan status
+      let status = "tersedia";
+      if (currentBooking) {
+        status = "sedang_digunakan";
+      } else if (scheduledBookings.length > 0) {
+        status = "ada_jadwal";
+      }
+
+      return { ...r, status, currentBooking, scheduledBookings, totalBookings: bookingsForRoom.length };
+    }).sort((a, b) => {
+      const order = { sedang_digunakan: 0, ada_jadwal: 1, tersedia: 2 };
+      return order[a.status] - order[b.status];
+    });
+  }, [ruangan, filteredBookings, loading, selectedDate]);
+
+  const filteredRuangan = useMemo(() => {
+    if (filter === "all") return enhancedRuangan;
+    return enhancedRuangan.filter(r => r.status === filter);
+  }, [enhancedRuangan, filter]);
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 animate-pulse">
-        <div className="h-6 bg-slate-200 rounded w-48 mb-4"></div>
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-16 bg-slate-100 rounded"></div>
-          ))}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-slate-200 rounded w-48"></div>
+          {[1, 2, 3].map(i => <div key={i} className="h-32 bg-slate-100 rounded-lg"></div>)}
         </div>
       </div>
     );
@@ -241,65 +343,111 @@ function RuanganList() {
     );
   }
 
+  const filterButtons = [
+    { key: "all", label: "Semua", count: enhancedRuangan.length },
+    { key: "tersedia", label: "Tersedia", count: enhancedRuangan.filter(r => r.status === "tersedia").length },
+    { key: "sedang_digunakan", label: "Sedang Digunakan", count: enhancedRuangan.filter(r => r.status === "sedang_digunakan").length },
+    { key: "ada_jadwal", label: "Ada Jadwal", count: enhancedRuangan.filter(r => r.status === "ada_jadwal").length },
+  ];
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-      <h2 className="text-lg font-semibold text-slate-800 mb-4">Daftar Ruangan</h2>
-      <div className="space-y-3">
-        {enhancedRuangan.map(r => (
-          <RuanganCard key={r.id} ruangan={r} />
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {filterButtons.map(btn => (
+          <button key={btn.key} onClick={() => setFilter(btn.key)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+              filter === btn.key ? "bg-indigo-600 text-white shadow-md" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}>
+            {btn.label} ({btn.count})
+          </button>
         ))}
       </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {filteredRuangan.map(r => <RuanganCard key={r.id} ruangan={r} selectedDate={selectedDate} />)}
+      </div>
+
+      {filteredRuangan.length === 0 && (
+        <div className="bg-slate-50 rounded-xl p-8 text-center">
+          <p className="text-slate-500">Tidak ada ruangan dengan filter ini pada tanggal {formatDate(selectedDate)}</p>
+        </div>
+      )}
     </div>
   );
 }
 
-function RuanganCard({ ruangan }) {
-  const config = {
-    kosong: { bg: "bg-green-50", border: "border-green-200", badge: "bg-green-100 text-green-700", icon: "✅", text: "Kosong" },
-    terjadwal: { bg: "bg-blue-50", border: "border-blue-200", badge: "bg-blue-100 text-blue-700", icon: "📅", text: "Terjadwal" },
-    terpakai: { bg: "bg-orange-50", border: "border-orange-200", badge: "bg-orange-100 text-orange-700", icon: "🔒", text: "Terpakai" },
-  }[ruangan.status];
+// ============= RUANGAN CARD =============
+function RuanganCard({ ruangan, selectedDate }) {
+  const [expanded, setExpanded] = useState(false);
+  const isToday = isSameDate(selectedDate, new Date());
 
-  const sampleJadwal = ruangan.jadwalAktif?.[0] || ruangan.jadwalTerjadwal?.[0];
-  const { startKey, endKey } = detectTimeKeys(sampleJadwal ? [sampleJadwal] : []);
-  const formatTime = (time) => time?.substring(0, 5) || "-";
+  const statusConfig = {
+    sedang_digunakan: { bg: "bg-red-50", border: "border-red-200", badge: "bg-red-100 text-red-700", icon: "🔴", text: "Sedang Digunakan" },
+    ada_jadwal: { bg: "bg-amber-50", border: "border-amber-200", badge: "bg-amber-100 text-amber-700", icon: "📅", text: "Ada Jadwal" },
+    tersedia: { bg: "bg-green-50", border: "border-green-200", badge: "bg-green-100 text-green-700", icon: "✅", text: "Tersedia" },
+  };
+
+  const config = statusConfig[ruangan.status];
+  const sourceColors = { blue: "bg-blue-100 text-blue-700", purple: "bg-purple-100 text-purple-700", orange: "bg-orange-100 text-orange-700" };
 
   return (
-    <div className={`${config.bg} ${config.border} border rounded-lg p-4 transition-all hover:shadow-md`}>
-      <div className="flex items-center gap-3 mb-2">
-        <h3 className="text-base font-semibold text-slate-800">
-          {ruangan.nama_ruangan || `Ruangan ${ruangan.id}`}
-        </h3>
-        <span className={`${config.badge} text-xs font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1`}>
-          <span>{config.icon}</span>
-          {config.text}
-        </span>
+    <div className={`${config.bg} ${config.border} border rounded-xl p-4 transition-all hover:shadow-md`}>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-800">{ruangan.nama_ruangan || `Ruangan ${ruangan.id}`}</h3>
+          <span className={`${config.badge} text-xs font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1 mt-1`}>
+            <span>{config.icon}</span>{config.text}
+          </span>
+        </div>
+        {ruangan.totalBookings > 0 && (
+          <span className="text-xs text-slate-400 bg-white px-2 py-1 rounded-full">{ruangan.totalBookings} jadwal</span>
+        )}
       </div>
 
-      {ruangan.jadwalAktif?.length > 0 && (
-        <div className="text-sm text-slate-600 mb-2">
-          <p className="font-medium">Sedang digunakan:</p>
-          <ul className="mt-1 space-y-1">
-            {ruangan.jadwalAktif.map((j, idx) => (
-              <li key={idx} className="text-xs text-orange-600 font-medium">
-                • {j.nama_jadwal || "Jadwal"} ({formatTime(j[startKey])} - {formatTime(j[endKey])})
-              </li>
-            ))}
-          </ul>
+      {/* Sedang digunakan (hanya tampil jika hari ini) */}
+      {ruangan.currentBooking && isToday && (
+        <div className="bg-red-100/50 rounded-lg p-3 mb-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-medium text-red-600">🔴 SEDANG BERLANGSUNG</span>
+            <span className={`${sourceColors[ruangan.currentBooking.sourceColor]} text-xs px-2 py-0.5 rounded-full`}>
+              {ruangan.currentBooking.source}
+            </span>
+          </div>
+          <p className="text-sm font-semibold text-slate-800">{ruangan.currentBooking.description}</p>
+          {ruangan.currentBooking.detail && <p className="text-xs text-slate-500">{ruangan.currentBooking.detail}</p>}
+          <p className="text-xs text-slate-600 mt-1">⏰ {formatTime(ruangan.currentBooking.mulai)} - {formatTime(ruangan.currentBooking.akhir)}</p>
         </div>
       )}
 
-      {ruangan.jadwalTerjadwal?.length > 0 && (
-        <div className="text-sm text-slate-600">
-          <p className="font-medium">Dijadwalkan berikutnya:</p>
-          <ul className="mt-1 space-y-1">
-            {ruangan.jadwalTerjadwal.map((j, idx) => (
-              <li key={idx} className="text-xs text-blue-600">
-                • {j.nama_jadwal || "Jadwal"} ({formatTime(j[startKey])} - {formatTime(j[endKey])})
-              </li>
-            ))}
-          </ul>
+      {/* Jadwal lain di hari ini */}
+      {ruangan.scheduledBookings.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+            {isToday ? "Jadwal Hari Ini:" : `Jadwal ${formatDateShort(selectedDate)}:`}
+          </p>
+          
+          {(expanded ? ruangan.scheduledBookings : ruangan.scheduledBookings.slice(0, 2)).map((booking) => (
+            <div key={booking.id} className="bg-white/60 rounded-lg p-2.5 border border-slate-100">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`${sourceColors[booking.sourceColor]} text-xs px-2 py-0.5 rounded-full`}>{booking.source}</span>
+                <span className="text-xs text-slate-400">{formatTime(booking.mulai)} - {formatTime(booking.akhir)}</span>
+              </div>
+              <p className="text-sm font-medium text-slate-800">{booking.description}</p>
+              {booking.detail && <p className="text-xs text-slate-500">{booking.detail}</p>}
+            </div>
+          ))}
+
+          {ruangan.scheduledBookings.length > 2 && (
+            <button onClick={() => setExpanded(!expanded)} className="w-full text-xs text-indigo-600 hover:text-indigo-800 font-medium py-1">
+              {expanded ? "⬆️ Tutup" : `⬇️ Lihat ${ruangan.scheduledBookings.length - 2} jadwal lainnya`}
+            </button>
+          )}
         </div>
+      )}
+
+      {/* Jika tidak ada jadwal sama sekali */}
+      {ruangan.status === "tersedia" && ruangan.scheduledBookings.length === 0 && (
+        <p className="text-sm text-green-600 font-medium">✨ Tidak ada jadwal pada tanggal ini</p>
       )}
     </div>
   );
