@@ -4,10 +4,10 @@
  * DESKRIPSI: Halaman manajemen jadwal dengan 3 tab (Perkuliahan, Karya Akhir, Lain-lain)
  * ================================================================================
  * 
- * STRUKTUR DATABASE:
- * 1. jadwal_perkuliahan: dosen_id, ruangan_id, id_angkatan, id_mata_kuliah, mulai_jadwal, akhir_jadwal
- * 2. jadwal_karya_akhir: nama_ruangan(FK), nama_angkatan(FK), agenda_jadwal_karya_akhir(FK), mulai_jadwal, akhir_jadwal
- * 3. jadwal_lain_lain: nama_ruangan(FK), nama_user(text), agenda(text), mulai_jadwal, akhir_jadwal
+ * STRUKTUR DATABASE (semua kolom waktu bertipe TIMESTAMP):
+ * 1. jadwal_perkuliahan: dosen_id, ruangan_id, id_angkatan, id_mata_kuliah, mulai_jadwal(timestamp), akhir_jadwal(timestamp)
+ * 2. jadwal_karya_akhir: nama_ruangan(FK), nama_angkatan(FK), agenda_jadwal_karya_akhir(FK), mulai_jadwal(timestamp), akhir_jadwal(timestamp)
+ * 3. jadwal_lain_lain: nama_ruangan(FK), nama_user(text), agenda(text), mulai_jadwal(timestamp), akhir_jadwal(timestamp)
  * ================================================================================
  */
 
@@ -19,10 +19,84 @@ import { supabase } from "../../supabaseClient";
 // ================================================================================
 
 const INITIAL_STATE = { jadwal: [], loading: true, error: null };
-const formatTime = (t) => (!t || t === "-" ? "-" : t.length === 8 ? t.slice(0, 5) : t);
-const toSec = (t) => t?.split(":").reduce((a, v, i) => a + (parseInt(v) || 0) * [3600, 60, 1][i], 0) || 0;
-const normalizeTime = (t) => t?.length === 5 ? t + ":00" : t;
+
+// Helper untuk format timestamp ke tampilan "HH:MM"
+const formatTimestamp = (ts) => {
+  if (!ts || ts === "-") return "-";
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return "-";
+    return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch { return "-"; }
+};
+
+// Helper untuk format timestamp ke input datetime-local (YYYY-MM-DDTHH:MM)
+const toDatetimeLocal = (ts) => {
+  if (!ts || ts === "-") return "";
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return "";
+    return date.toISOString().slice(0, 16);
+  } catch { return ""; }
+};
+
+// Helper untuk compare timestamp
+const compareTimestamp = (ts1, ts2) => {
+  const d1 = new Date(ts1), d2 = new Date(ts2);
+  return d1.getTime() - d2.getTime();
+};
+
 const createMap = (data, key) => Object.fromEntries((data || []).map(item => [item.id, item[key]]));
+
+// ================================================================================
+// FUNGSI CEK KONFLIK RUANGAN (CROSS-TABLE)
+// Cek konflik ruangan di SEMUA tabel jadwal (perkuliahan, karya_akhir, lain_lain)
+// ================================================================================
+const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, excludeTable, ruanganMap }) => {
+  if (!mulai || !akhir) return "• Waktu mulai dan selesai harus diisi";
+  
+  const formStart = new Date(mulai), formEnd = new Date(akhir);
+  if (formStart >= formEnd) return "• Waktu mulai harus lebih awal dari waktu selesai";
+  if (!ruanganId) return null; // Tidak ada ruangan yang dipilih, skip conflict check
+
+  const conflicts = [];
+  const namaRuangan = ruanganMap?.[ruanganId] || `Ruangan ${ruanganId}`;
+
+  // Helper untuk cek overlap waktu
+  const isOverlap = (start, end) => {
+    if (!start || !end) return false;
+    return formStart < new Date(end) && formEnd > new Date(start);
+  };
+
+  // 1. CEK DI JADWAL PERKULIAHAN
+  const { data: jadwalPerkuliahan } = await supabase.from("jadwal_perkuliahan").select("id, ruangan_id, mulai_jadwal, akhir_jadwal");
+  for (const j of (jadwalPerkuliahan || [])) {
+    if (excludeTable === "jadwal_perkuliahan" && j.id === excludeId) continue;
+    if (String(j.ruangan_id) === String(ruanganId) && isOverlap(j.mulai_jadwal, j.akhir_jadwal)) {
+      conflicts.push(`• [Perkuliahan] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestamp(j.mulai_jadwal)} - ${formatTimestamp(j.akhir_jadwal)}`);
+    }
+  }
+
+  // 2. CEK DI JADWAL KARYA AKHIR
+  const { data: jadwalKaryaAkhir } = await supabase.from("jadwal_karya_akhir").select("id, nama_ruangan, mulai_jadwal, akhir_jadwal");
+  for (const j of (jadwalKaryaAkhir || [])) {
+    if (excludeTable === "jadwal_karya_akhir" && j.id === excludeId) continue;
+    if (String(j.nama_ruangan) === String(ruanganId) && isOverlap(j.mulai_jadwal, j.akhir_jadwal)) {
+      conflicts.push(`• [Karya Akhir] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestamp(j.mulai_jadwal)} - ${formatTimestamp(j.akhir_jadwal)}`);
+    }
+  }
+
+  // 3. CEK DI JADWAL LAIN-LAIN
+  const { data: jadwalLainLain } = await supabase.from("jadwal_lain_lain").select("id, nama_ruangan, mulai_jadwal, akhir_jadwal");
+  for (const j of (jadwalLainLain || [])) {
+    if (excludeTable === "jadwal_lain_lain" && j.id === excludeId) continue;
+    if (String(j.nama_ruangan) === String(ruanganId) && isOverlap(j.mulai_jadwal, j.akhir_jadwal)) {
+      conflicts.push(`• [Lain-lain] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestamp(j.mulai_jadwal)} - ${formatTimestamp(j.akhir_jadwal)}`);
+    }
+  }
+
+  return conflicts.length ? conflicts.join('\n') : null;
+};
 
 // ================================================================================
 // KOMPONEN UTAMA: JadwalPage
@@ -200,8 +274,8 @@ const InputField = ({ label, value, onChange, type = "text", placeholder }) => (
 
 const TimeFields = ({ form, onChange }) => (
   <>
-    <InputField label="Waktu Mulai" type="time" value={form.mulai_jadwal} onChange={(v) => onChange("mulai_jadwal", v)} />
-    <InputField label="Waktu Selesai" type="time" value={form.akhir_jadwal} onChange={(v) => onChange("akhir_jadwal", v)} />
+    <InputField label="Waktu Mulai" type="datetime-local" value={form.mulai_jadwal} onChange={(v) => onChange("mulai_jadwal", v)} />
+    <InputField label="Waktu Selesai" type="datetime-local" value={form.akhir_jadwal} onChange={(v) => onChange("akhir_jadwal", v)} />
   </>
 );
 
@@ -224,7 +298,7 @@ function useJadwal() {
         nama_ruangan: r.ruangan?.nama_ruangan || "-",
         nama_angkatan: r.angkatan?.nama_angkatan || "-",
         nama_matkul: r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || "-",
-        awal_jadwal: r.mulai_jadwal || "-",
+        mulai_jadwal: r.mulai_jadwal || "-",
         akhir_jadwal: r.akhir_jadwal || "-",
       }));
       setState({ jadwal: merged, loading: false, error: null });
@@ -261,36 +335,43 @@ function JadwalTable() {
 
   const resetForm = () => setForm({ id: null, dosen_id: "", ruangan_id: "", id_angkatan: "", id_mata_kuliah: "", mulai_jadwal: "", akhir_jadwal: "" });
   const openAdd = () => { setModalMode("add"); resetForm(); setModalOpen(true); };
-  const openEdit = (row) => { setModalMode("edit"); setForm({ id: row.id, dosen_id: row.dosen_id || "", ruangan_id: row.ruangan_id || "", id_angkatan: row.id_angkatan || "", id_mata_kuliah: row.id_mata_kuliah || "", mulai_jadwal: row.mulai_jadwal || row.awal_jadwal || "", akhir_jadwal: row.akhir_jadwal || "" }); setModalOpen(true); };
+  const openEdit = (row) => { setModalMode("edit"); setForm({ id: row.id, dosen_id: row.dosen_id || "", ruangan_id: row.ruangan_id || "", id_angkatan: row.id_angkatan || "", id_mata_kuliah: row.id_mata_kuliah || "", mulai_jadwal: toDatetimeLocal(row.mulai_jadwal), akhir_jadwal: toDatetimeLocal(row.akhir_jadwal) }); setModalOpen(true); };
   const closeModal = () => { setModalOpen(false); resetForm(); };
   const handleChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const checkConflict = async () => {
-    if (!form.mulai_jadwal || !form.akhir_jadwal) return "• Waktu mulai dan selesai harus diisi";
-    if (toSec(form.mulai_jadwal) >= toSec(form.akhir_jadwal)) return "• Waktu mulai harus lebih awal dari waktu selesai";
+    const ruanganMap = Object.fromEntries(options.ruangan.map(r => [r.id, r.nama_ruangan]));
     
-    const { data: allJadwal } = await supabase.from("jadwal_perkuliahan").select("*").neq("id", form.id || 0);
-    if (!allJadwal?.length) return null;
+    // 1. Cek konflik RUANGAN di semua tabel jadwal
+    const ruanganConflict = await checkRuanganConflict({
+      mulai: form.mulai_jadwal,
+      akhir: form.akhir_jadwal,
+      ruanganId: form.ruangan_id,
+      excludeId: form.id,
+      excludeTable: "jadwal_perkuliahan",
+      ruanganMap
+    });
+    if (ruanganConflict?.startsWith("•")) return ruanganConflict; // Error validasi waktu
 
-    const formStart = normalizeTime(form.mulai_jadwal), formEnd = normalizeTime(form.akhir_jadwal);
-    const conflicts = [];
-
-    for (const j of allJadwal) {
-      const existingStart = normalizeTime(j.mulai_jadwal), existingEnd = normalizeTime(j.akhir_jadwal);
-      if (!existingStart || !existingEnd) continue;
-      const isOverlap = formStart < existingEnd && formEnd > existingStart;
-      if (!isOverlap) continue;
-
-      if (form.ruangan_id && String(j.ruangan_id) === String(form.ruangan_id)) {
-        const r = options.ruangan.find(x => String(x.id) === String(form.ruangan_id));
-        conflicts.push(`• Ruangan "${r?.nama_ruangan || form.ruangan_id}" sudah dipakai jam ${existingStart.slice(0,5)} - ${existingEnd.slice(0,5)}`);
-      }
-      if (form.dosen_id && String(j.dosen_id) === String(form.dosen_id)) {
-        const d = options.dosen.find(x => String(x.id) === String(form.dosen_id));
-        conflicts.push(`• Dosen "${d?.nama_dosen || form.dosen_id}" sudah mengajar jam ${existingStart.slice(0,5)} - ${existingEnd.slice(0,5)}`);
+    // 2. Cek konflik DOSEN (hanya di jadwal_perkuliahan)
+    const dosenConflicts = [];
+    if (form.dosen_id) {
+      const { data: jadwalDosen } = await supabase.from("jadwal_perkuliahan").select("*").eq("dosen_id", form.dosen_id).neq("id", form.id || 0);
+      const formStart = new Date(form.mulai_jadwal), formEnd = new Date(form.akhir_jadwal);
+      
+      for (const j of (jadwalDosen || [])) {
+        if (!j.mulai_jadwal || !j.akhir_jadwal) continue;
+        const isOverlap = formStart < new Date(j.akhir_jadwal) && formEnd > new Date(j.mulai_jadwal);
+        if (isOverlap) {
+          const d = options.dosen.find(x => String(x.id) === String(form.dosen_id));
+          dosenConflicts.push(`• [Perkuliahan] Dosen "${d?.nama_dosen || form.dosen_id}" sudah mengajar ${formatTimestamp(j.mulai_jadwal)} - ${formatTimestamp(j.akhir_jadwal)}`);
+        }
       }
     }
-    return conflicts.length ? conflicts.join('\n') : null;
+
+    // Gabungkan semua konflik
+    const allConflicts = [...(ruanganConflict ? [ruanganConflict] : []), ...dosenConflicts];
+    return allConflicts.length ? allConflicts.join('\n') : null;
   };
 
   const handleSave = async () => {
@@ -317,7 +398,7 @@ function JadwalTable() {
 
   const columns = [
     { label: "Angkatan", render: (r) => <span className="font-semibold text-slate-800">{r.nama_angkatan}</span> },
-    { label: "Waktu", render: (r) => <span className="font-medium text-slate-800">{formatTime(r.awal_jadwal)} - {formatTime(r.akhir_jadwal)}</span> },
+    { label: "Waktu", render: (r) => <span className="font-medium text-slate-800">{formatTimestamp(r.mulai_jadwal)} - {formatTimestamp(r.akhir_jadwal)}</span> },
     { label: "Agenda", render: (r) => <><div className="font-semibold text-slate-900">{r.nama_matkul}</div><div className="text-xs text-slate-600">{r.nama_dosen}</div></> },
     { label: "Tempat", render: (r) => <span className="text-slate-800">{r.nama_ruangan}</span> },
   ];
@@ -368,7 +449,7 @@ function useJadwalKaryaAkhir() {
         display_ruangan: ruanganMap[j.nama_ruangan] || "-",
         display_angkatan: angkatanMap[j.nama_angkatan] || "-",
         display_agenda: agendaMap[j.agenda_jadwal_karya_akhir] || "-",
-        awal_jadwal: j.mulai_jadwal || "-",
+        mulai_jadwal: j.mulai_jadwal || "-",
         akhir_jadwal: j.akhir_jadwal || "-",
       }));
       setState({ jadwal: merged, loading: false, error: null });
@@ -404,32 +485,22 @@ function JadwalKaryaAkhirTable() {
 
   const resetForm = () => setForm({ id: null, nama_ruangan: "", nama_angkatan: "", mulai_jadwal: "", akhir_jadwal: "", agenda_jadwal_karya_akhir: "" });
   const openAdd = () => { setModalMode("add"); resetForm(); setModalOpen(true); };
-  const openEdit = (row) => { setModalMode("edit"); setForm({ id: row.id, nama_ruangan: row.nama_ruangan || "", nama_angkatan: row.nama_angkatan || "", mulai_jadwal: row.mulai_jadwal || row.awal_jadwal || "", akhir_jadwal: row.akhir_jadwal || "", agenda_jadwal_karya_akhir: row.agenda_jadwal_karya_akhir || "" }); setModalOpen(true); };
+  const openEdit = (row) => { setModalMode("edit"); setForm({ id: row.id, nama_ruangan: row.nama_ruangan || "", nama_angkatan: row.nama_angkatan || "", mulai_jadwal: toDatetimeLocal(row.mulai_jadwal), akhir_jadwal: toDatetimeLocal(row.akhir_jadwal), agenda_jadwal_karya_akhir: row.agenda_jadwal_karya_akhir || "" }); setModalOpen(true); };
   const closeModal = () => { setModalOpen(false); resetForm(); };
   const handleChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
+  // Cek konflik RUANGAN di semua tabel jadwal (cross-table)
   const checkConflict = async () => {
-    if (!form.mulai_jadwal || !form.akhir_jadwal) return "• Waktu mulai dan selesai harus diisi";
-    if (toSec(form.mulai_jadwal) >= toSec(form.akhir_jadwal)) return "• Waktu mulai harus lebih awal dari waktu selesai";
-
-    const { data: allJadwal } = await supabase.from("jadwal_karya_akhir").select("*").neq("id", form.id || 0);
-    if (!allJadwal?.length) return null;
-
-    const formStart = normalizeTime(form.mulai_jadwal), formEnd = normalizeTime(form.akhir_jadwal);
-    const conflicts = [];
-
-    for (const j of allJadwal) {
-      const existingStart = normalizeTime(j.mulai_jadwal), existingEnd = normalizeTime(j.akhir_jadwal);
-      if (!existingStart || !existingEnd) continue;
-      const isOverlap = formStart < existingEnd && formEnd > existingStart;
-      if (!isOverlap) continue;
-
-      if (form.nama_ruangan && String(j.nama_ruangan) === String(form.nama_ruangan)) {
-        const r = options.ruangan.find(x => String(x.id) === String(form.nama_ruangan));
-        conflicts.push(`• Ruangan "${r?.nama_ruangan || form.nama_ruangan}" sudah dipakai jam ${existingStart.slice(0,5)} - ${existingEnd.slice(0,5)}`);
-      }
-    }
-    return conflicts.length ? conflicts.join('\n') : null;
+    const ruanganMap = Object.fromEntries(options.ruangan.map(r => [r.id, r.nama_ruangan]));
+    
+    return await checkRuanganConflict({
+      mulai: form.mulai_jadwal,
+      akhir: form.akhir_jadwal,
+      ruanganId: form.nama_ruangan,
+      excludeId: form.id,
+      excludeTable: "jadwal_karya_akhir",
+      ruanganMap
+    });
   };
 
   const handleSave = async () => {
@@ -456,7 +527,7 @@ function JadwalKaryaAkhirTable() {
 
   const columns = [
     { label: "Angkatan", render: (r) => <span className="font-semibold text-slate-800">{r.display_angkatan}</span> },
-    { label: "Waktu", render: (r) => <span className="font-medium text-slate-800">{formatTime(r.awal_jadwal)} - {formatTime(r.akhir_jadwal)}</span> },
+    { label: "Waktu", render: (r) => <span className="font-medium text-slate-800">{formatTimestamp(r.mulai_jadwal)} - {formatTimestamp(r.akhir_jadwal)}</span> },
     { label: "Agenda", render: (r) => <div className="font-semibold text-slate-900">{r.display_agenda}</div> },
     { label: "Ruangan", render: (r) => <span className="text-slate-800">{r.display_ruangan}</span> },
   ];
@@ -498,7 +569,7 @@ function useJadwalLainLain() {
         ...j,
         ruangan_display: ruanganMap[j.nama_ruangan] || "-",
         user_display: j.nama_user || "-",
-        awal_jadwal: j.mulai_jadwal || "-",
+        mulai_jadwal: j.mulai_jadwal || "-",
         akhir_jadwal: j.akhir_jadwal || "-",
       }));
       setState({ jadwal: merged, loading: false, error: null });
@@ -526,32 +597,22 @@ function JadwalLainLainTable() {
 
   const resetForm = () => setForm({ id: null, nama_ruangan: "", nama_user: "", mulai_jadwal: "", akhir_jadwal: "", agenda: "" });
   const openAdd = () => { setModalMode("add"); resetForm(); setModalOpen(true); };
-  const openEdit = (row) => { setModalMode("edit"); setForm({ id: row.id, nama_ruangan: row.nama_ruangan || "", nama_user: row.nama_user || "", mulai_jadwal: row.mulai_jadwal || "", akhir_jadwal: row.akhir_jadwal || "", agenda: row.agenda || "" }); setModalOpen(true); };
+  const openEdit = (row) => { setModalMode("edit"); setForm({ id: row.id, nama_ruangan: row.nama_ruangan || "", nama_user: row.nama_user || "", mulai_jadwal: toDatetimeLocal(row.mulai_jadwal), akhir_jadwal: toDatetimeLocal(row.akhir_jadwal), agenda: row.agenda || "" }); setModalOpen(true); };
   const closeModal = () => { setModalOpen(false); resetForm(); };
   const handleChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
+  // Cek konflik RUANGAN di semua tabel jadwal (cross-table)
   const checkConflict = async () => {
-    if (!form.mulai_jadwal || !form.akhir_jadwal) return "• Waktu mulai dan selesai harus diisi";
-    if (toSec(form.mulai_jadwal) >= toSec(form.akhir_jadwal)) return "• Waktu mulai harus lebih awal dari waktu selesai";
-
-    const { data: allJadwal } = await supabase.from("jadwal_lain_lain").select("*").neq("id", form.id || 0);
-    if (!allJadwal?.length) return null;
-
-    const formStart = normalizeTime(form.mulai_jadwal), formEnd = normalizeTime(form.akhir_jadwal);
-    const conflicts = [];
-
-    for (const j of allJadwal) {
-      const existingStart = normalizeTime(j.mulai_jadwal), existingEnd = normalizeTime(j.akhir_jadwal);
-      if (!existingStart || !existingEnd) continue;
-      const isOverlap = formStart < existingEnd && formEnd > existingStart;
-      if (!isOverlap) continue;
-
-      if (form.nama_ruangan && String(j.nama_ruangan) === String(form.nama_ruangan)) {
-        const r = ruanganOptions.find(x => String(x.id) === String(form.nama_ruangan));
-        conflicts.push(`• Ruangan "${r?.nama_ruangan || form.nama_ruangan}" sudah dipakai jam ${existingStart.slice(0,5)} - ${existingEnd.slice(0,5)}`);
-      }
-    }
-    return conflicts.length ? conflicts.join('\n') : null;
+    const ruanganMap = Object.fromEntries(ruanganOptions.map(r => [r.id, r.nama_ruangan]));
+    
+    return await checkRuanganConflict({
+      mulai: form.mulai_jadwal,
+      akhir: form.akhir_jadwal,
+      ruanganId: form.nama_ruangan,
+      excludeId: form.id,
+      excludeTable: "jadwal_lain_lain",
+      ruanganMap
+    });
   };
 
   const handleSave = async () => {
@@ -578,7 +639,7 @@ function JadwalLainLainTable() {
 
   const columns = [
     { label: "Nama User", render: (r) => <span className="font-semibold text-slate-800">{r.user_display}</span> },
-    { label: "Waktu", render: (r) => <span className="font-medium text-slate-800">{formatTime(r.awal_jadwal)} - {formatTime(r.akhir_jadwal)}</span> },
+    { label: "Waktu", render: (r) => <span className="font-medium text-slate-800">{formatTimestamp(r.mulai_jadwal)} - {formatTimestamp(r.akhir_jadwal)}</span> },
     { label: "Agenda", render: (r) => <div className="font-semibold text-slate-900">{r.agenda || "-"}</div> },
     { label: "Tempat", render: (r) => <span className="text-slate-800">{r.ruangan_display}</span> },
   ];
