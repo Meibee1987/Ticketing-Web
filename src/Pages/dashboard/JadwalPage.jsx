@@ -132,6 +132,11 @@ const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, exclud
 export default function JadwalPage() {
   const [activeTab, setActiveTab] = useState("perkuliahan");
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+  const [downloadType, setDownloadType] = useState("date"); // "date" atau "month"
+  const [downloadStartDate, setDownloadStartDate] = useState("");
+  const [downloadEndDate, setDownloadEndDate] = useState("");
+  const [downloadMonth, setDownloadMonth] = useState("");
   
   const tabs = [
     { id: "perkuliahan", label: "Jadwal Perkuliahan", icon: "📚" },
@@ -152,39 +157,174 @@ export default function JadwalPage() {
 
   const isToday = isSameDate(selectedDate, new Date());
 
+  // Fungsi untuk download data
+  const handleDownload = async () => {
+    try {
+      let startDate, endDate;
+      
+      if (downloadType === "date") {
+        if (!downloadStartDate || !downloadEndDate) {
+          alert("Pilih tanggal mulai dan selesai");
+          return;
+        }
+        startDate = new Date(downloadStartDate + 'T00:00:00');
+        endDate = new Date(downloadEndDate + 'T23:59:59');
+      } else {
+        if (!downloadMonth) {
+          alert("Pilih bulan");
+          return;
+        }
+        const [year, month] = downloadMonth.split('-');
+        startDate = new Date(year, month - 1, 1);
+        endDate = new Date(year, month, 0, 23, 59, 59);
+      }
+
+      // Fetch data berdasarkan activeTab
+      let data = [];
+      let fileName = '';
+      
+      if (activeTab === "perkuliahan") {
+        const { data: jadwalData } = await supabase
+          .from("jadwal_perkuliahan")
+          .select("*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)")
+          .gte("mulai_jadwal", startDate.toISOString())
+          .lte("mulai_jadwal", endDate.toISOString())
+          .order("mulai_jadwal");
+        
+        data = (jadwalData || []).map(r => ({
+          'Angkatan': r.angkatan?.nama_angkatan || '-',
+          'Mata Kuliah': r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',
+          'Dosen': r.dosen?.nama_dosen || '-',
+          'Ruangan': r.ruangan?.nama_ruangan || '-',
+          'Waktu Mulai': formatTimestamp(r.mulai_jadwal),
+          'Waktu Selesai': formatTimestamp(r.akhir_jadwal)
+        }));
+        fileName = 'jadwal_perkuliahan';
+      } else if (activeTab === "karya_akhir") {
+        const { data: jadwalData } = await supabase
+          .from("jadwal_karya_akhir")
+          .select("*")
+          .gte("mulai_jadwal", startDate.toISOString())
+          .lte("mulai_jadwal", endDate.toISOString())
+          .order("mulai_jadwal");
+        
+        const [{ data: ruangan }, { data: angkatan }, { data: agenda }] = await Promise.all([
+          supabase.from("ruangan").select("id, nama_ruangan"),
+          supabase.from("angkatan").select("id, nama_angkatan"),
+          supabase.from("agenda_karya_akhir").select("id, agenda_karya_akhir")
+        ]);
+        
+        const ruanganMap = createMap(ruangan, 'nama_ruangan');
+        const angkatanMap = createMap(angkatan, 'nama_angkatan');
+        const agendaMap = createMap(agenda, 'agenda_karya_akhir');
+        
+        data = (jadwalData || []).map(r => ({
+          'Angkatan': angkatanMap[r.nama_angkatan] || '-',
+          'Agenda': agendaMap[r.agenda_jadwal_karya_akhir] || '-',
+          'Ruangan': ruanganMap[r.nama_ruangan] || '-',
+          'Waktu Mulai': formatTimestamp(r.mulai_jadwal),
+          'Waktu Selesai': formatTimestamp(r.akhir_jadwal)
+        }));
+        fileName = 'jadwal_karya_akhir';
+      } else {
+        const { data: jadwalData } = await supabase
+          .from("jadwal_lain_lain")
+          .select("*")
+          .gte("mulai_jadwal", startDate.toISOString())
+          .lte("mulai_jadwal", endDate.toISOString())
+          .order("mulai_jadwal");
+        
+        const { data: ruangan } = await supabase.from("ruangan").select("id, nama_ruangan");
+        const ruanganMap = createMap(ruangan, 'nama_ruangan');
+        
+        data = (jadwalData || []).map(r => ({
+          'Nama User': r.nama_user || '-',
+          'Agenda': r.agenda || '-',
+          'Ruangan': ruanganMap[r.nama_ruangan] || '-',
+          'Waktu Mulai': formatTimestamp(r.mulai_jadwal),
+          'Waktu Selesai': formatTimestamp(r.akhir_jadwal)
+        }));
+        fileName = 'jadwal_lain_lain';
+      }
+
+      if (data.length === 0) {
+        alert("Tidak ada data untuk periode yang dipilih");
+        return;
+      }
+
+      // Generate CSV
+      const headers = Object.keys(data[0]);
+      const csvContent = [
+        headers.join(','),
+        ...data.map(row => headers.map(h => `"${row[h]}"`).join(','))
+      ].join('\n');
+
+      // Download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      const dateStr = downloadType === "date" 
+        ? `${formatDateInput(startDate)}_${formatDateInput(endDate)}`
+        : downloadMonth;
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${fileName}_${dateStr}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setDownloadModalOpen(false);
+      alert(`Data berhasil didownload (${data.length} data)`);
+    } catch (error) {
+      console.error('Error downloading:', error);
+      alert('Gagal mendownload data: ' + error.message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title={tabTitles[activeTab] || "Jadwal"} />
       
       {/* Date Filter */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex items-center gap-2">
-            <button onClick={goToPrevDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
-              <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <input
-              type="date"
-              value={formatDateInput(selectedDate)}
-              onChange={handleDateChange}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            />
-            <button onClick={goToNextDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
-              <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-2">
+              <button onClick={goToPrevDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <input
+                type="date"
+                value={formatDateInput(selectedDate)}
+                onChange={handleDateChange}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+              <button onClick={goToNextDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={goToToday} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}>
+                Hari Ini
+              </button>
+              <span className="text-sm font-medium text-slate-700">{formatDate(selectedDate)}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={goToToday} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}>
-              Hari Ini
-            </button>
-            <span className="text-sm font-medium text-slate-700">{formatDate(selectedDate)}</span>
-          </div>
+          <button 
+            onClick={() => setDownloadModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Download Data
+          </button>
         </div>
       </div>
 
@@ -203,6 +343,102 @@ export default function JadwalPage() {
         </div>
         <div className="p-6">{TabComponent && <TabComponent selectedDate={selectedDate} />}</div>
       </div>
+
+      {/* Download Modal */}
+      {downloadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Download Data Jadwal</h3>
+              <button onClick={() => setDownloadModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Pilih Tipe Download</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="date"
+                      checked={downloadType === "date"}
+                      onChange={(e) => setDownloadType(e.target.value)}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Range Tanggal</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="month"
+                      checked={downloadType === "month"}
+                      onChange={(e) => setDownloadType(e.target.value)}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Per Bulan</span>
+                  </label>
+                </div>
+              </div>
+
+              {downloadType === "date" ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Tanggal Mulai</label>
+                    <input
+                      type="date"
+                      value={downloadStartDate}
+                      onChange={(e) => setDownloadStartDate(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Tanggal Selesai</label>
+                    <input
+                      type="date"
+                      value={downloadEndDate}
+                      onChange={(e) => setDownloadEndDate(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Pilih Bulan</label>
+                  <input
+                    type="month"
+                    value={downloadMonth}
+                    onChange={(e) => setDownloadMonth(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-800">
+                  <strong>Info:</strong> Data akan didownload dalam format CSV untuk tab <strong>{tabTitles[activeTab]}</strong> yang sedang aktif.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200">
+              <button 
+                onClick={() => setDownloadModalOpen(false)} 
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                Batal
+              </button>
+              <button 
+                onClick={handleDownload}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Download
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
