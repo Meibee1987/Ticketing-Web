@@ -46,6 +46,11 @@ export default function DashboardLayout() {
             <span>Jadwal</span>
           </NavLink>
 
+          <NavLink to="/dashboard/jadwal-admin" className={menuItemClass}>
+            <span>🔐</span>
+            <span>Jadwal Admin</span>
+          </NavLink>
+
           <NavLink to="/dashboard/ruangan" className={menuItemClass}>
             <span>🏢</span>
             <span>Ruangan</span>

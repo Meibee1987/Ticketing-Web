@@ -18,6 +18,7 @@ import MyTicketsPage from "./Pages/dashboard/MyTicketsPage";
 import UsersPage from "./Pages/dashboard/UsersPage";
 import SettingsPage from "./Pages/dashboard/SettingsPage";
 import JadwalPage from "./Pages/dashboard/JadwalPage";
+import JadwalPageAdmin from "./Pages/dashboard/JadwalPageAdmin";
 import RuanganPage from "./Pages/dashboard/RuanganPage";
 import MasterData from "./Pages/dashboard/MasterData";
 
@@ -46,6 +47,7 @@ const router = createBrowserRouter([
           { path: "users", element: <UsersPage /> },       // /dashboard/users
           { path: "settings", element: <SettingsPage /> }, // /dashboard/settings
           { path: "jadwal", element: <JadwalPage /> },     // /dashboard/jadwal
+          { path: "jadwal-admin", element: <JadwalPageAdmin /> }, // /dashboard/jadwal-admin
           { path: "ruangan", element: <RuanganPage /> },   // /dashboard/ruangan
           { path: "database", element: <MasterData /> }, // /dashboard/database
         ],

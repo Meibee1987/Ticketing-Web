@@ -1,13 +1,7 @@
 /**
  * ================================================================================
  * FILE: JadwalPage.jsx
- * DESKRIPSI: Halaman manajemen jadwal dengan 3 tab (Perkuliahan, Karya Akhir, Lain-lain)
- * ================================================================================
- * 
- * STRUKTUR DATABASE (semua kolom waktu bertipe TIMESTAMP):
- * 1. jadwal_perkuliahan: dosen_id, ruangan_id, id_angkatan, id_mata_kuliah, mulai_jadwal(timestamp), akhir_jadwal(timestamp)
- * 2. jadwal_karya_akhir: nama_ruangan(FK), nama_angkatan(FK), agenda_jadwal_karya_akhir(FK), mulai_jadwal(timestamp), akhir_jadwal(timestamp)
- * 3. jadwal_lain_lain: nama_ruangan(FK), nama_user(text), agenda(text), mulai_jadwal(timestamp), akhir_jadwal(timestamp)
+ * DESKRIPSI: Halaman VIEW ONLY jadwal dengan 3 tab (Perkuliahan, Karya Akhir, Lain-lain)
  * ================================================================================
  */
 
@@ -30,34 +24,6 @@ const formatTimestamp = (ts) => {
   } catch { return "-"; }
 };
 
-// Helper untuk format timestamp singkat (untuk alert/conflict)
-const formatTimestampShort = (ts) => {
-  if (!ts || ts === "-") return "-";
-  try {
-    const date = new Date(ts);
-    if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) + ' ' + date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
-  } catch { return "-"; }
-};
-
-// Helper untuk format timestamp ke input datetime-local (YYYY-MM-DDTHH:MM)
-const toDatetimeLocal = (ts) => {
-  if (!ts || ts === "-") return "";
-  try {
-    const date = new Date(ts);
-    if (isNaN(date.getTime())) return "";
-    return date.toISOString().slice(0, 16);
-  } catch { return ""; }
-};
-
-// Helper untuk compare timestamp
-const compareTimestamp = (ts1, ts2) => {
-  const d1 = new Date(ts1), d2 = new Date(ts2);
-  return d1.getTime() - d2.getTime();
-};
-
-const createMap = (data, key) => Object.fromEntries((data || []).map(item => [item.id, item[key]]));
-
 // Helper untuk format input date (YYYY-MM-DD)
 const formatDateInput = (date) => {
   return date.toISOString().split('T')[0];
@@ -76,67 +42,11 @@ const isSameDate = (date1, date2) => {
 };
 
 // ================================================================================
-// FUNGSI CEK KONFLIK RUANGAN (CROSS-TABLE) - MENGGUNAKAN VIEW UNION ALL
-// Single query ke view_jadwal_union untuk cek konflik di semua tabel jadwal
-// ================================================================================
-const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, excludeTable, ruanganMap }) => {
-  if (!mulai || !akhir) return "• Waktu mulai dan selesai harus diisi";
-  
-  const formStart = new Date(mulai), formEnd = new Date(akhir);
-  if (formStart >= formEnd) return "• Waktu mulai harus lebih awal dari waktu selesai";
-  if (!ruanganId) return null;
-
-  const namaRuangan = ruanganMap?.[ruanganId] || `Ruangan ${ruanganId}`;
-
-  // Map excludeTable ke jenis_jadwal di view
-  const excludeJenis = {
-    "jadwal_perkuliahan": "PERKULIAHAN",
-    "jadwal_karya_akhir": "KARYA_AKHIR",
-    "jadwal_lain_lain": "LAIN_LAIN"
-  }[excludeTable];
-
-  // Single query menggunakan view UNION ALL
-  const { data, error } = await supabase
-    .from("view_jadwal_union")
-    .select("jenis_jadwal, id_asli, ruangan_id, mulai_jadwal, akhir_jadwal")
-    .eq("ruangan_id", ruanganId)
-    .order("mulai_jadwal");
-
-  if (error) {
-    console.error("Error checking conflict:", error);
-    return null;
-  }
-
-  // Filter konflik waktu
-  const conflicts = (data || [])
-    .filter(j => {
-      // Skip jika ini adalah record yang sedang di-edit
-      if (j.jenis_jadwal === excludeJenis && j.id_asli === excludeId) return false;
-      if (!j.mulai_jadwal || !j.akhir_jadwal) return false;
-      
-      // Cek overlap waktu
-      const start = new Date(j.mulai_jadwal), end = new Date(j.akhir_jadwal);
-      return formStart < end && formEnd > start;
-    })
-    .map(j => {
-      const jenisLabel = { "PERKULIAHAN": "Perkuliahan", "KARYA_AKHIR": "Karya Akhir", "LAIN_LAIN": "Lain-lain" }[j.jenis_jadwal];
-      return `• [${jenisLabel}] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`;
-    });
-
-  return conflicts.length ? conflicts.join('\n') : null;
-};
-
-// ================================================================================
-// KOMPONEN UTAMA: JadwalPage
+// KOMPONEN UTAMA: JadwalPage (VIEW ONLY)
 // ================================================================================
 export default function JadwalPage() {
   const [activeTab, setActiveTab] = useState("perkuliahan");
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
-  const [downloadType, setDownloadType] = useState("date"); // "date" atau "month"
-  const [downloadStartDate, setDownloadStartDate] = useState("");
-  const [downloadEndDate, setDownloadEndDate] = useState("");
-  const [downloadMonth, setDownloadMonth] = useState("");
   
   const tabs = [
     { id: "perkuliahan", label: "Jadwal Perkuliahan", icon: "📚" },
@@ -157,174 +67,39 @@ export default function JadwalPage() {
 
   const isToday = isSameDate(selectedDate, new Date());
 
-  // Fungsi untuk download data
-  const handleDownload = async () => {
-    try {
-      let startDate, endDate;
-      
-      if (downloadType === "date") {
-        if (!downloadStartDate || !downloadEndDate) {
-          alert("Pilih tanggal mulai dan selesai");
-          return;
-        }
-        startDate = new Date(downloadStartDate + 'T00:00:00');
-        endDate = new Date(downloadEndDate + 'T23:59:59');
-      } else {
-        if (!downloadMonth) {
-          alert("Pilih bulan");
-          return;
-        }
-        const [year, month] = downloadMonth.split('-');
-        startDate = new Date(year, month - 1, 1);
-        endDate = new Date(year, month, 0, 23, 59, 59);
-      }
-
-      // Fetch data berdasarkan activeTab
-      let data = [];
-      let fileName = '';
-      
-      if (activeTab === "perkuliahan") {
-        const { data: jadwalData } = await supabase
-          .from("jadwal_perkuliahan")
-          .select("*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)")
-          .gte("mulai_jadwal", startDate.toISOString())
-          .lte("mulai_jadwal", endDate.toISOString())
-          .order("mulai_jadwal");
-        
-        data = (jadwalData || []).map(r => ({
-          'Angkatan': r.angkatan?.nama_angkatan || '-',
-          'Mata Kuliah': r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',
-          'Dosen': r.dosen?.nama_dosen || '-',
-          'Ruangan': r.ruangan?.nama_ruangan || '-',
-          'Waktu Mulai': formatTimestamp(r.mulai_jadwal),
-          'Waktu Selesai': formatTimestamp(r.akhir_jadwal)
-        }));
-        fileName = 'jadwal_perkuliahan';
-      } else if (activeTab === "karya_akhir") {
-        const { data: jadwalData } = await supabase
-          .from("jadwal_karya_akhir")
-          .select("*")
-          .gte("mulai_jadwal", startDate.toISOString())
-          .lte("mulai_jadwal", endDate.toISOString())
-          .order("mulai_jadwal");
-        
-        const [{ data: ruangan }, { data: angkatan }, { data: agenda }] = await Promise.all([
-          supabase.from("ruangan").select("id, nama_ruangan"),
-          supabase.from("angkatan").select("id, nama_angkatan"),
-          supabase.from("agenda_karya_akhir").select("id, agenda_karya_akhir")
-        ]);
-        
-        const ruanganMap = createMap(ruangan, 'nama_ruangan');
-        const angkatanMap = createMap(angkatan, 'nama_angkatan');
-        const agendaMap = createMap(agenda, 'agenda_karya_akhir');
-        
-        data = (jadwalData || []).map(r => ({
-          'Angkatan': angkatanMap[r.nama_angkatan] || '-',
-          'Agenda': agendaMap[r.agenda_jadwal_karya_akhir] || '-',
-          'Ruangan': ruanganMap[r.nama_ruangan] || '-',
-          'Waktu Mulai': formatTimestamp(r.mulai_jadwal),
-          'Waktu Selesai': formatTimestamp(r.akhir_jadwal)
-        }));
-        fileName = 'jadwal_karya_akhir';
-      } else {
-        const { data: jadwalData } = await supabase
-          .from("jadwal_lain_lain")
-          .select("*")
-          .gte("mulai_jadwal", startDate.toISOString())
-          .lte("mulai_jadwal", endDate.toISOString())
-          .order("mulai_jadwal");
-        
-        const { data: ruangan } = await supabase.from("ruangan").select("id, nama_ruangan");
-        const ruanganMap = createMap(ruangan, 'nama_ruangan');
-        
-        data = (jadwalData || []).map(r => ({
-          'Nama User': r.nama_user || '-',
-          'Agenda': r.agenda || '-',
-          'Ruangan': ruanganMap[r.nama_ruangan] || '-',
-          'Waktu Mulai': formatTimestamp(r.mulai_jadwal),
-          'Waktu Selesai': formatTimestamp(r.akhir_jadwal)
-        }));
-        fileName = 'jadwal_lain_lain';
-      }
-
-      if (data.length === 0) {
-        alert("Tidak ada data untuk periode yang dipilih");
-        return;
-      }
-
-      // Generate CSV
-      const headers = Object.keys(data[0]);
-      const csvContent = [
-        headers.join(','),
-        ...data.map(row => headers.map(h => `"${row[h]}"`).join(','))
-      ].join('\n');
-
-      // Download file
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      const dateStr = downloadType === "date" 
-        ? `${formatDateInput(startDate)}_${formatDateInput(endDate)}`
-        : downloadMonth;
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${fileName}_${dateStr}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      setDownloadModalOpen(false);
-      alert(`Data berhasil didownload (${data.length} data)`);
-    } catch (error) {
-      console.error('Error downloading:', error);
-      alert('Gagal mendownload data: ' + error.message);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <PageHeader title={tabTitles[activeTab] || "Jadwal"} />
       
       {/* Date Filter */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="flex items-center gap-2">
-              <button onClick={goToPrevDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
-                <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <input
-                type="date"
-                value={formatDateInput(selectedDate)}
-                onChange={handleDateChange}
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-              <button onClick={goToNextDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
-                <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={goToToday} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}>
-                Hari Ini
-              </button>
-              <span className="text-sm font-medium text-slate-700">{formatDate(selectedDate)}</span>
-            </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-2">
+            <button onClick={goToPrevDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <input
+              type="date"
+              value={formatDateInput(selectedDate)}
+              onChange={handleDateChange}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <button onClick={goToNextDay} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
-          <button 
-            onClick={() => setDownloadModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Download Data
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={goToToday} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}>
+              Hari Ini
+            </button>
+            <span className="text-sm font-medium text-slate-700">{formatDate(selectedDate)}</span>
+          </div>
         </div>
       </div>
 
@@ -343,108 +118,12 @@ export default function JadwalPage() {
         </div>
         <div className="p-6">{TabComponent && <TabComponent selectedDate={selectedDate} />}</div>
       </div>
-
-      {/* Download Modal */}
-      {downloadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Download Data Jadwal</h3>
-              <button onClick={() => setDownloadModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Pilih Tipe Download</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      value="date"
-                      checked={downloadType === "date"}
-                      onChange={(e) => setDownloadType(e.target.value)}
-                      className="mr-2"
-                    />
-                    <span className="text-sm">Range Tanggal</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      value="month"
-                      checked={downloadType === "month"}
-                      onChange={(e) => setDownloadType(e.target.value)}
-                      className="mr-2"
-                    />
-                    <span className="text-sm">Per Bulan</span>
-                  </label>
-                </div>
-              </div>
-
-              {downloadType === "date" ? (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Tanggal Mulai</label>
-                    <input
-                      type="date"
-                      value={downloadStartDate}
-                      onChange={(e) => setDownloadStartDate(e.target.value)}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Tanggal Selesai</label>
-                    <input
-                      type="date"
-                      value={downloadEndDate}
-                      onChange={(e) => setDownloadEndDate(e.target.value)}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Pilih Bulan</label>
-                  <input
-                    type="month"
-                    value={downloadMonth}
-                    onChange={(e) => setDownloadMonth(e.target.value)}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-              )}
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs text-blue-800">
-                  <strong>Info:</strong> Data akan didownload dalam format CSV untuk tab <strong>{tabTitles[activeTab]}</strong> yang sedang aktif.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200">
-              <button 
-                onClick={() => setDownloadModalOpen(false)} 
-                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                Batal
-              </button>
-              <button 
-                onClick={handleDownload}
-                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
-              >
-                Download
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 // ================================================================================
-// KOMPONEN: PageHeader (tanpa tanggal)
+// KOMPONEN: PageHeader
 // ================================================================================
 function PageHeader({ title }) {
   return (
@@ -481,23 +160,20 @@ const EmptyState = ({ text = "Belum ada data jadwal." }) => (
   </div>
 );
 
-// Reusable Table Wrapper
-function TableWrapper({ title, onAdd, children }) {
+// Table Wrapper (View Only - tanpa tombol tambah)
+function TableWrapper({ title, children }) {
   return (
     <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
-        <button onClick={onAdd} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-          + Tambah Jadwal
-        </button>
       </div>
       {children}
     </div>
   );
 }
 
-// Reusable Data Table
-function GenericDataTable({ data, columns, onEdit, onDelete }) {
+// Data Table (View Only - tanpa kolom aksi)
+function ViewDataTable({ data, columns }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
@@ -506,7 +182,6 @@ function GenericDataTable({ data, columns, onEdit, onDelete }) {
             {columns.map((col, i) => (
               <th key={i} className={`py-3 px-4 font-semibold ${col.center ? "text-center" : "text-left"} border border-slate-300`}>{col.label}</th>
             ))}
-            <th className="py-3 px-4 font-semibold text-center border border-slate-300">Aksi</th>
           </tr>
         </thead>
         <tbody>
@@ -517,10 +192,6 @@ function GenericDataTable({ data, columns, onEdit, onDelete }) {
                   {col.render ? col.render(row) : row[col.key] || "-"}
                 </td>
               ))}
-              <td className="py-3 px-4 border border-slate-200 text-center">
-                <button onClick={() => onEdit(row)} className="text-indigo-600 hover:text-indigo-800 mr-3 font-medium text-xs">Edit</button>
-                <button onClick={() => onDelete(row.id)} className="text-red-600 hover:text-red-800 font-medium text-xs">Hapus</button>
-              </td>
             </tr>
           ))}
         </tbody>
@@ -529,59 +200,8 @@ function GenericDataTable({ data, columns, onEdit, onDelete }) {
   );
 }
 
-// Reusable Modal Component
-function Modal({ title, saving, onSave, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-6 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">{children}</div>
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200">
-          <button onClick={onClose} disabled={saving} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50">Batal</button>
-          <button onClick={onSave} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
-            {saving ? "Menyimpan..." : "Simpan"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Reusable Form Fields
-const SelectField = ({ label, value, onChange, options, displayKey, placeholder }) => (
-  <div>
-    <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-      <option value="">{placeholder || `-- Pilih ${label} --`}</option>
-      {options.map((item) => <option key={item.id} value={item.id}>{typeof displayKey === "function" ? displayKey(item) : item[displayKey]}</option>)}
-    </select>
-  </div>
-);
-
-const InputField = ({ label, value, onChange, type = "text", placeholder }) => (
-  <div>
-    <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-    <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
-  </div>
-);
-
-const TimeFields = ({ form, onChange }) => (
-  <>
-    <InputField label="Waktu Mulai" type="datetime-local" value={form.mulai_jadwal} onChange={(v) => onChange("mulai_jadwal", v)} />
-    <InputField label="Waktu Selesai" type="datetime-local" value={form.akhir_jadwal} onChange={(v) => onChange("akhir_jadwal", v)} />
-  </>
-);
-
 // ================================================================================
-// SECTION: JADWAL PERKULIAHAN (dengan Realtime Subscription)
+// SECTION: JADWAL PERKULIAHAN (VIEW ONLY dengan Realtime)
 // ================================================================================
 function useJadwal() {
   const [state, setState] = useState(INITIAL_STATE);
@@ -614,7 +234,7 @@ function useJadwal() {
     
     // Realtime subscription
     const channel = supabase
-      .channel('jadwal_perkuliahan_changes')
+      .channel('jadwal_perkuliahan_view')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal_perkuliahan' }, () => {
         fetchJadwal();
       })
@@ -623,11 +243,11 @@ function useJadwal() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchJadwal]);
 
-  return { ...state, refetch: fetchJadwal };
+  return state;
 }
 
 function JadwalTable({ selectedDate }) {
-  const { jadwal, loading, error, refetch } = useJadwal();
+  const { jadwal, loading, error } = useJadwal();
   
   // Filter jadwal berdasarkan tanggal yang dipilih
   const filteredJadwal = jadwal.filter(j => {
@@ -635,87 +255,6 @@ function JadwalTable({ selectedDate }) {
     const jadwalDate = new Date(j.mulai_jadwal);
     return isSameDate(jadwalDate, selectedDate);
   });
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState("add");
-  const [form, setForm] = useState({ id: null, dosen_id: "", ruangan_id: "", id_angkatan: "", id_mata_kuliah: "", mulai_jadwal: "", akhir_jadwal: "" });
-  const [options, setOptions] = useState({ dosen: [], ruangan: [], angkatan: [], mataKuliah: [] });
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const fetchOptions = async () => {
-      const [{ data: dosen }, { data: ruangan }, { data: angkatan }, { data: mataKuliah }] = await Promise.all([
-        supabase.from("dosen").select("id, nama_dosen"),
-        supabase.from("ruangan").select("id, nama_ruangan"),
-        supabase.from("angkatan").select("id, nama_angkatan"),
-        supabase.from("mata_kuliah").select("*")
-      ]);
-      setOptions({ dosen: dosen || [], ruangan: ruangan || [], angkatan: angkatan || [], mataKuliah: mataKuliah || [] });
-    };
-    fetchOptions();
-  }, []);
-
-  const resetForm = () => setForm({ id: null, dosen_id: "", ruangan_id: "", id_angkatan: "", id_mata_kuliah: "", mulai_jadwal: "", akhir_jadwal: "" });
-  const openAdd = () => { setModalMode("add"); resetForm(); setModalOpen(true); };
-  const openEdit = (row) => { setModalMode("edit"); setForm({ id: row.id, dosen_id: row.dosen_id || "", ruangan_id: row.ruangan_id || "", id_angkatan: row.id_angkatan || "", id_mata_kuliah: row.id_mata_kuliah || "", mulai_jadwal: toDatetimeLocal(row.mulai_jadwal), akhir_jadwal: toDatetimeLocal(row.akhir_jadwal) }); setModalOpen(true); };
-  const closeModal = () => { setModalOpen(false); resetForm(); };
-  const handleChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
-
-  const checkConflict = async () => {
-    const ruanganMap = Object.fromEntries(options.ruangan.map(r => [r.id, r.nama_ruangan]));
-    
-    // 1. Cek konflik RUANGAN di semua tabel jadwal
-    const ruanganConflict = await checkRuanganConflict({
-      mulai: form.mulai_jadwal,
-      akhir: form.akhir_jadwal,
-      ruanganId: form.ruangan_id,
-      excludeId: form.id,
-      excludeTable: "jadwal_perkuliahan",
-      ruanganMap
-    });
-    if (ruanganConflict?.startsWith("•")) return ruanganConflict; // Error validasi waktu
-
-    // 2. Cek konflik DOSEN (hanya di jadwal_perkuliahan)
-    const dosenConflicts = [];
-    if (form.dosen_id) {
-      const { data: jadwalDosen } = await supabase.from("jadwal_perkuliahan").select("*").eq("dosen_id", form.dosen_id).neq("id", form.id || 0);
-      const formStart = new Date(form.mulai_jadwal), formEnd = new Date(form.akhir_jadwal);
-      
-      for (const j of (jadwalDosen || [])) {
-        if (!j.mulai_jadwal || !j.akhir_jadwal) continue;
-        const isOverlap = formStart < new Date(j.akhir_jadwal) && formEnd > new Date(j.mulai_jadwal);
-        if (isOverlap) {
-          const d = options.dosen.find(x => String(x.id) === String(form.dosen_id));
-          dosenConflicts.push(`• [Perkuliahan] Dosen "${d?.nama_dosen || form.dosen_id}" sudah mengajar ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`);
-        }
-      }
-    }
-
-    // Gabungkan semua konflik
-    const allConflicts = [...(ruanganConflict ? [ruanganConflict] : []), ...dosenConflicts];
-    return allConflicts.length ? allConflicts.join('\n') : null;
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    const conflict = await checkConflict();
-    if (conflict) { alert(`⚠️ Bentrok!\n\n${conflict}`); setSaving(false); return; }
-
-    const payload = { dosen_id: form.dosen_id || null, ruangan_id: form.ruangan_id || null, id_angkatan: form.id_angkatan || null, id_mata_kuliah: form.id_mata_kuliah || null, mulai_jadwal: form.mulai_jadwal || null, akhir_jadwal: form.akhir_jadwal || null };
-    const { error } = modalMode === "add" 
-      ? await supabase.from("jadwal_perkuliahan").insert(payload)
-      : await supabase.from("jadwal_perkuliahan").update(payload).eq("id", form.id);
-    
-    setSaving(false);
-    if (error) { alert("Gagal menyimpan: " + error.message); return; }
-    closeModal(); refetch();
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm("Hapus jadwal ini?")) return;
-    const { error } = await supabase.from("jadwal_perkuliahan").delete().eq("id", id);
-    if (error) alert("Gagal menghapus: " + error.message);
-    else refetch();
-  };
 
   const columns = [
     { label: "Angkatan", render: (r) => <span className="font-semibold text-slate-800">{r.nama_angkatan}</span> },
@@ -729,23 +268,17 @@ function JadwalTable({ selectedDate }) {
   if (error) return <ErrorState message={error} />;
 
   return (
-    <TableWrapper title="Jadwal Perkuliahan" onAdd={openAdd}>
-      {filteredJadwal.length === 0 ? <EmptyState text={`Tidak ada jadwal perkuliahan pada ${formatDate(selectedDate)}.`} /> : <GenericDataTable data={filteredJadwal} columns={columns} onEdit={openEdit} onDelete={handleDelete} />}
-      {modalOpen && (
-        <Modal title={modalMode === "add" ? "Tambah Jadwal" : "Edit Jadwal"} saving={saving} onSave={handleSave} onClose={closeModal}>
-          <SelectField label="Angkatan" value={form.id_angkatan} onChange={(v) => handleChange("id_angkatan", v)} options={options.angkatan} displayKey="nama_angkatan" />
-          <SelectField label="Mata Kuliah" value={form.id_mata_kuliah} onChange={(v) => handleChange("id_mata_kuliah", v)} options={options.mataKuliah} displayKey={(m) => m.mata_kuliah || m.nama_matkul || m.nama || `MK ${m.id}`} />
-          <SelectField label="Dosen" value={form.dosen_id} onChange={(v) => handleChange("dosen_id", v)} options={options.dosen} displayKey="nama_dosen" />
-          <SelectField label="Ruangan" value={form.ruangan_id} onChange={(v) => handleChange("ruangan_id", v)} options={options.ruangan} displayKey="nama_ruangan" />
-          <TimeFields form={form} onChange={handleChange} />
-        </Modal>
-      )}
+    <TableWrapper title="Jadwal Perkuliahan">
+      {filteredJadwal.length === 0 
+        ? <EmptyState text={`Tidak ada jadwal perkuliahan pada ${formatDate(selectedDate)}.`} /> 
+        : <ViewDataTable data={filteredJadwal} columns={columns} />
+      }
     </TableWrapper>
   );
 }
 
 // ================================================================================
-// SECTION: JADWAL KARYA AKHIR (dengan Realtime Subscription)
+// SECTION: JADWAL KARYA AKHIR (VIEW ONLY dengan Realtime)
 // ================================================================================
 function useJadwalKaryaAkhir() {
   const [state, setState] = useState(INITIAL_STATE);
@@ -753,20 +286,21 @@ function useJadwalKaryaAkhir() {
   const fetchJadwal = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
-      const { data: jadwalData, error } = await supabase.from("jadwal_karya_akhir").select("*").order("mulai_jadwal");
-      if (error) throw error;
-
-      const [{ data: ruangan }, { data: angkatan }, { data: agenda }] = await Promise.all([
+      
+      const [jadwalRes, ruanganRes, angkatanRes, agendaRes] = await Promise.all([
+        supabase.from("jadwal_karya_akhir").select("*").order("mulai_jadwal"),
         supabase.from("ruangan").select("id, nama_ruangan"),
         supabase.from("angkatan").select("id, nama_angkatan"),
-        supabase.from("agenda_karya_akhir").select("id, agenda_karya_akhir")
+        supabase.from("agenda_karya_akhir").select("id, agenda_karya_akhir"),
       ]);
 
-      const ruanganMap = createMap(ruangan, 'nama_ruangan');
-      const angkatanMap = createMap(angkatan, 'nama_angkatan');
-      const agendaMap = createMap(agenda, 'agenda_karya_akhir');
+      if (jadwalRes.error) throw jadwalRes.error;
 
-      const merged = (jadwalData || []).map((j) => ({
+      const ruanganMap = Object.fromEntries((ruanganRes.data || []).map(r => [r.id, r.nama_ruangan]));
+      const angkatanMap = Object.fromEntries((angkatanRes.data || []).map(a => [a.id, a.nama_angkatan]));
+      const agendaMap = Object.fromEntries((agendaRes.data || []).map(a => [a.id, a.agenda_karya_akhir]));
+
+      const merged = (jadwalRes.data || []).map((j) => ({
         ...j,
         display_ruangan: ruanganMap[j.nama_ruangan] || "-",
         display_angkatan: angkatanMap[j.nama_angkatan] || "-",
@@ -786,7 +320,7 @@ function useJadwalKaryaAkhir() {
     
     // Realtime subscription
     const channel = supabase
-      .channel('jadwal_karya_akhir_changes')
+      .channel('jadwal_karya_akhir_view')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal_karya_akhir' }, () => {
         fetchJadwal();
       })
@@ -795,11 +329,11 @@ function useJadwalKaryaAkhir() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchJadwal]);
 
-  return { ...state, refetch: fetchJadwal };
+  return state;
 }
 
 function JadwalKaryaAkhirTable({ selectedDate }) {
-  const { jadwal, loading, error, refetch } = useJadwalKaryaAkhir();
+  const { jadwal, loading, error } = useJadwalKaryaAkhir();
   
   // Filter jadwal berdasarkan tanggal yang dipilih
   const filteredJadwal = jadwal.filter(j => {
@@ -807,66 +341,6 @@ function JadwalKaryaAkhirTable({ selectedDate }) {
     const jadwalDate = new Date(j.mulai_jadwal);
     return isSameDate(jadwalDate, selectedDate);
   });
-  
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState("add");
-  const [form, setForm] = useState({ id: null, nama_ruangan: "", nama_angkatan: "", mulai_jadwal: "", akhir_jadwal: "", agenda_jadwal_karya_akhir: "" });
-  const [options, setOptions] = useState({ ruangan: [], angkatan: [], agenda: [] });
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const fetchOptions = async () => {
-      const [{ data: ruangan }, { data: angkatan }, { data: agenda }] = await Promise.all([
-        supabase.from("ruangan").select("id, nama_ruangan"),
-        supabase.from("angkatan").select("id, nama_angkatan"),
-        supabase.from("agenda_karya_akhir").select("id, agenda_karya_akhir")
-      ]);
-      setOptions({ ruangan: ruangan || [], angkatan: angkatan || [], agenda: agenda || [] });
-    };
-    fetchOptions();
-  }, []);
-
-  const resetForm = () => setForm({ id: null, nama_ruangan: "", nama_angkatan: "", mulai_jadwal: "", akhir_jadwal: "", agenda_jadwal_karya_akhir: "" });
-  const openAdd = () => { setModalMode("add"); resetForm(); setModalOpen(true); };
-  const openEdit = (row) => { setModalMode("edit"); setForm({ id: row.id, nama_ruangan: row.nama_ruangan || "", nama_angkatan: row.nama_angkatan || "", mulai_jadwal: toDatetimeLocal(row.mulai_jadwal), akhir_jadwal: toDatetimeLocal(row.akhir_jadwal), agenda_jadwal_karya_akhir: row.agenda_jadwal_karya_akhir || "" }); setModalOpen(true); };
-  const closeModal = () => { setModalOpen(false); resetForm(); };
-  const handleChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
-
-  // Cek konflik RUANGAN di semua tabel jadwal (cross-table)
-  const checkConflict = async () => {
-    const ruanganMap = Object.fromEntries(options.ruangan.map(r => [r.id, r.nama_ruangan]));
-    
-    return await checkRuanganConflict({
-      mulai: form.mulai_jadwal,
-      akhir: form.akhir_jadwal,
-      ruanganId: form.nama_ruangan,
-      excludeId: form.id,
-      excludeTable: "jadwal_karya_akhir",
-      ruanganMap
-    });
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    const conflict = await checkConflict();
-    if (conflict) { alert(`⚠️ Bentrok!\n\n${conflict}`); setSaving(false); return; }
-
-    const payload = { nama_ruangan: form.nama_ruangan || null, nama_angkatan: form.nama_angkatan || null, mulai_jadwal: form.mulai_jadwal || null, akhir_jadwal: form.akhir_jadwal || null, agenda_jadwal_karya_akhir: form.agenda_jadwal_karya_akhir || null };
-    const { error } = modalMode === "add"
-      ? await supabase.from("jadwal_karya_akhir").insert(payload)
-      : await supabase.from("jadwal_karya_akhir").update(payload).eq("id", form.id);
-
-    setSaving(false);
-    if (error) { alert("Gagal menyimpan: " + error.message); return; }
-    closeModal(); refetch();
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm("Hapus jadwal ini?")) return;
-    const { error } = await supabase.from("jadwal_karya_akhir").delete().eq("id", id);
-    if (error) alert("Gagal menghapus: " + error.message);
-    else refetch();
-  };
 
   const columns = [
     { label: "Angkatan", render: (r) => <span className="font-semibold text-slate-800">{r.display_angkatan}</span> },
@@ -880,22 +354,17 @@ function JadwalKaryaAkhirTable({ selectedDate }) {
   if (error) return <ErrorState message={error} />;
 
   return (
-    <TableWrapper title="Jadwal Karya Akhir" onAdd={openAdd}>
-      {filteredJadwal.length === 0 ? <EmptyState text={`Tidak ada jadwal karya akhir pada ${formatDate(selectedDate)}.`} /> : <GenericDataTable data={filteredJadwal} columns={columns} onEdit={openEdit} onDelete={handleDelete} />}
-      {modalOpen && (
-        <Modal title={modalMode === "add" ? "Tambah Jadwal Karya Akhir" : "Edit Jadwal Karya Akhir"} saving={saving} onSave={handleSave} onClose={closeModal}>
-          <SelectField label="Angkatan" value={form.nama_angkatan} onChange={(v) => handleChange("nama_angkatan", v)} options={options.angkatan} displayKey="nama_angkatan" />
-          <SelectField label="Ruangan" value={form.nama_ruangan} onChange={(v) => handleChange("nama_ruangan", v)} options={options.ruangan} displayKey="nama_ruangan" />
-          <SelectField label="Agenda" value={form.agenda_jadwal_karya_akhir} onChange={(v) => handleChange("agenda_jadwal_karya_akhir", v)} options={options.agenda} displayKey="agenda_karya_akhir" />
-          <TimeFields form={form} onChange={handleChange} />
-        </Modal>
-      )}
+    <TableWrapper title="Jadwal Karya Akhir">
+      {filteredJadwal.length === 0 
+        ? <EmptyState text={`Tidak ada jadwal karya akhir pada ${formatDate(selectedDate)}.`} /> 
+        : <ViewDataTable data={filteredJadwal} columns={columns} />
+      }
     </TableWrapper>
   );
 }
 
 // ================================================================================
-// SECTION: JADWAL LAIN-LAIN (dengan Realtime Subscription)
+// SECTION: JADWAL LAIN-LAIN (VIEW ONLY dengan Realtime)
 // ================================================================================
 function useJadwalLainLain() {
   const [state, setState] = useState(INITIAL_STATE);
@@ -903,13 +372,17 @@ function useJadwalLainLain() {
   const fetchJadwal = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
-      const { data: jadwalData, error } = await supabase.from("jadwal_lain_lain").select("*").order("mulai_jadwal");
-      if (error) throw error;
+      
+      const [jadwalRes, ruanganRes] = await Promise.all([
+        supabase.from("jadwal_lain_lain").select("*").order("mulai_jadwal"),
+        supabase.from("ruangan").select("id, nama_ruangan"),
+      ]);
 
-      const { data: ruangan } = await supabase.from("ruangan").select("id, nama_ruangan");
-      const ruanganMap = createMap(ruangan, 'nama_ruangan');
+      if (jadwalRes.error) throw jadwalRes.error;
 
-      const merged = (jadwalData || []).map((j) => ({
+      const ruanganMap = Object.fromEntries((ruanganRes.data || []).map(r => [r.id, r.nama_ruangan]));
+
+      const merged = (jadwalRes.data || []).map((j) => ({
         ...j,
         ruangan_display: ruanganMap[j.nama_ruangan] || "-",
         user_display: j.nama_user || "-",
@@ -928,7 +401,7 @@ function useJadwalLainLain() {
     
     // Realtime subscription
     const channel = supabase
-      .channel('jadwal_lain_lain_changes')
+      .channel('jadwal_lain_lain_view')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jadwal_lain_lain' }, () => {
         fetchJadwal();
       })
@@ -937,11 +410,11 @@ function useJadwalLainLain() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchJadwal]);
 
-  return { ...state, refetch: fetchJadwal };
+  return state;
 }
 
 function JadwalLainLainTable({ selectedDate }) {
-  const { jadwal, loading, error, refetch } = useJadwalLainLain();
+  const { jadwal, loading, error } = useJadwalLainLain();
   
   // Filter jadwal berdasarkan tanggal yang dipilih
   const filteredJadwal = jadwal.filter(j => {
@@ -949,58 +422,6 @@ function JadwalLainLainTable({ selectedDate }) {
     const jadwalDate = new Date(j.mulai_jadwal);
     return isSameDate(jadwalDate, selectedDate);
   });
-  
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState("add");
-  const [form, setForm] = useState({ id: null, nama_ruangan: "", nama_user: "", mulai_jadwal: "", akhir_jadwal: "", agenda: "" });
-  const [ruanganOptions, setRuanganOptions] = useState([]);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    supabase.from("ruangan").select("id, nama_ruangan").then(({ data }) => setRuanganOptions(data || []));
-  }, []);
-
-  const resetForm = () => setForm({ id: null, nama_ruangan: "", nama_user: "", mulai_jadwal: "", akhir_jadwal: "", agenda: "" });
-  const openAdd = () => { setModalMode("add"); resetForm(); setModalOpen(true); };
-  const openEdit = (row) => { setModalMode("edit"); setForm({ id: row.id, nama_ruangan: row.nama_ruangan || "", nama_user: row.nama_user || "", mulai_jadwal: toDatetimeLocal(row.mulai_jadwal), akhir_jadwal: toDatetimeLocal(row.akhir_jadwal), agenda: row.agenda || "" }); setModalOpen(true); };
-  const closeModal = () => { setModalOpen(false); resetForm(); };
-  const handleChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
-
-  // Cek konflik RUANGAN di semua tabel jadwal (cross-table)
-  const checkConflict = async () => {
-    const ruanganMap = Object.fromEntries(ruanganOptions.map(r => [r.id, r.nama_ruangan]));
-    
-    return await checkRuanganConflict({
-      mulai: form.mulai_jadwal,
-      akhir: form.akhir_jadwal,
-      ruanganId: form.nama_ruangan,
-      excludeId: form.id,
-      excludeTable: "jadwal_lain_lain",
-      ruanganMap
-    });
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    const conflict = await checkConflict();
-    if (conflict) { alert(`⚠️ Bentrok!\n\n${conflict}`); setSaving(false); return; }
-
-    const payload = { nama_ruangan: form.nama_ruangan ? parseInt(form.nama_ruangan) : null, nama_user: form.nama_user || null, mulai_jadwal: form.mulai_jadwal || null, akhir_jadwal: form.akhir_jadwal || null, agenda: form.agenda || null };
-    const { error } = modalMode === "add"
-      ? await supabase.from("jadwal_lain_lain").insert(payload)
-      : await supabase.from("jadwal_lain_lain").update(payload).eq("id", form.id);
-
-    setSaving(false);
-    if (error) { alert("Gagal menyimpan: " + error.message); return; }
-    closeModal(); refetch();
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm("Hapus jadwal ini?")) return;
-    const { error } = await supabase.from("jadwal_lain_lain").delete().eq("id", id);
-    if (error) alert("Gagal menghapus: " + error.message);
-    else refetch();
-  };
 
   const columns = [
     { label: "Nama User", render: (r) => <span className="font-semibold text-slate-800">{r.user_display}</span> },
@@ -1014,16 +435,11 @@ function JadwalLainLainTable({ selectedDate }) {
   if (error) return <ErrorState message={error} />;
 
   return (
-    <TableWrapper title="Jadwal Lain-lain" onAdd={openAdd}>
-      {filteredJadwal.length === 0 ? <EmptyState text={`Tidak ada jadwal lain-lain pada ${formatDate(selectedDate)}.`} /> : <GenericDataTable data={filteredJadwal} columns={columns} onEdit={openEdit} onDelete={handleDelete} />}
-      {modalOpen && (
-        <Modal title={modalMode === "add" ? "Tambah Jadwal Lain-lain" : "Edit Jadwal Lain-lain"} saving={saving} onSave={handleSave} onClose={closeModal}>
-          <InputField label="Nama User" value={form.nama_user} onChange={(v) => handleChange("nama_user", v)} placeholder="Masukkan nama user" />
-          <SelectField label="Ruangan" value={form.nama_ruangan} onChange={(v) => handleChange("nama_ruangan", v)} options={ruanganOptions} displayKey="nama_ruangan" />
-          <InputField label="Agenda" value={form.agenda} onChange={(v) => handleChange("agenda", v)} placeholder="Masukkan agenda" />
-          <TimeFields form={form} onChange={handleChange} />
-        </Modal>
-      )}
+    <TableWrapper title="Jadwal Lain-lain">
+      {filteredJadwal.length === 0 
+        ? <EmptyState text={`Tidak ada jadwal lain-lain pada ${formatDate(selectedDate)}.`} /> 
+        : <ViewDataTable data={filteredJadwal} columns={columns} />
+      }
     </TableWrapper>
   );
 }
