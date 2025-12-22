@@ -446,19 +446,34 @@ function RuanganCard({ ruangan, selectedDate }) {
       </div>
 
       {/* Sedang digunakan (hanya tampil jika hari ini) */}
-      {ruangan.currentBooking && isToday && (
-        <div className="bg-red-100/50 rounded-lg p-3 mb-3">
+      {ruangan.currentBooking && isToday && (() => {
+        const now = new Date();
+        const isFinished = now >= ruangan.currentBooking.akhir;
+        const timeUntilEnd = Math.max(0, Math.floor((ruangan.currentBooking.akhir - now) / 60000)); // minutes
+        
+        return (
+        <div className={`${isFinished ? 'bg-slate-100/50' : 'bg-red-100/50'} rounded-lg p-3 mb-3`}>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-red-600">🔴 SEDANG BERLANGSUNG</span>
+            {isFinished ? (
+              <span className="text-xs font-medium text-slate-600">✓ SELESAI</span>
+            ) : (
+              <span className="text-xs font-medium text-red-600">🔴 SEDANG BERLANGSUNG</span>
+            )}
             <span className={`${sourceColors[ruangan.currentBooking.sourceColor]} text-xs px-2 py-0.5 rounded-full`}>
               {ruangan.currentBooking.source}
             </span>
           </div>
-          <p className="text-sm font-semibold text-slate-800">{ruangan.currentBooking.description}</p>
-          {ruangan.currentBooking.detail && <p className="text-xs text-slate-500">{ruangan.currentBooking.detail}</p>}
-          <p className="text-xs text-slate-600 mt-1">⏰ {formatTime(ruangan.currentBooking.mulai)} - {formatTime(ruangan.currentBooking.akhir)}</p>
+          <p className={`text-sm font-semibold ${isFinished ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{ruangan.currentBooking.description}</p>
+          {ruangan.currentBooking.detail && <p className={`text-xs ${isFinished ? 'text-slate-400' : 'text-slate-500'}`}>{ruangan.currentBooking.detail}</p>}
+          <p className={`text-xs ${isFinished ? 'text-slate-500' : 'text-slate-600'} mt-1`}>
+            ⏰ {formatTime(ruangan.currentBooking.mulai)} - {formatTime(ruangan.currentBooking.akhir)}
+            {!isFinished && timeUntilEnd > 0 && (
+              <span className="ml-2 text-red-600 font-medium">({timeUntilEnd} menit lagi)</span>
+            )}
+          </p>
         </div>
-      )}
+        );
+      })()}
 
       {/* Jadwal lain di hari ini */}
       {ruangan.scheduledBookings.length > 0 && (
@@ -467,16 +482,24 @@ function RuanganCard({ ruangan, selectedDate }) {
             {isToday ? "Jadwal Hari Ini:" : `Jadwal ${formatDateShort(selectedDate)}:`}
           </p>
           
-          {(expanded ? ruangan.scheduledBookings : ruangan.scheduledBookings.slice(0, 2)).map((booking) => (
-            <div key={booking.id} className="bg-white/60 rounded-lg p-2.5 border border-slate-100">
+          {(expanded ? ruangan.scheduledBookings : ruangan.scheduledBookings.slice(0, 2)).map((booking) => {
+            const now = new Date();
+            const isFinished = now >= booking.akhir;
+            
+            return (
+            <div key={booking.id} className={`bg-white/60 rounded-lg p-2.5 border border-slate-100 ${isFinished ? 'opacity-60' : ''}`}>
               <div className="flex items-center gap-2 mb-1">
                 <span className={`${sourceColors[booking.sourceColor]} text-xs px-2 py-0.5 rounded-full`}>{booking.source}</span>
                 <span className="text-xs text-slate-400">{formatTime(booking.mulai)} - {formatTime(booking.akhir)}</span>
+                {isFinished && (
+                  <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">✓ Selesai</span>
+                )}
               </div>
-              <p className="text-sm font-medium text-slate-800">{booking.description}</p>
-              {booking.detail && <p className="text-xs text-slate-500">{booking.detail}</p>}
+              <p className={`text-sm font-medium ${isFinished ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{booking.description}</p>
+              {booking.detail && <p className={`text-xs ${isFinished ? 'text-slate-400' : 'text-slate-500'}`}>{booking.detail}</p>}
             </div>
-          ))}
+            );
+          })}
 
           {ruangan.scheduledBookings.length > 2 && (
             <button onClick={() => setExpanded(!expanded)} className="w-full text-xs text-indigo-600 hover:text-indigo-800 font-medium py-1">
