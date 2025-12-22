@@ -693,7 +693,7 @@ export default function JadwalPageAdmin() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                Semua Jadwal <span className="text-sm font-normal text-slate-500">({allJadwal.length} data)</span>
+                Semua Jadwal
               </h2>
               {searchQuery && (
                 <p className="text-sm text-slate-600 mt-1">
