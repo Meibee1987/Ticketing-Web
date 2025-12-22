@@ -246,10 +246,14 @@ function RuanganStats({ selectedDate, currentTime }) {
     const ruanganAdaJadwal = new Set();
 
     filteredBookings.forEach(b => {
+      // Skip booking yang sudah selesai
+      if (now >= b.akhir) return;
+      
       // Hanya cek "sedang digunakan" jika hari ini
       if (isToday && now >= b.mulai && now < b.akhir) {
         ruanganSedangDigunakan.add(b.ruangan_id);
       } else {
+        // Booking yang belum dimulai atau belum selesai
         ruanganAdaJadwal.add(b.ruangan_id);
       }
     });
@@ -257,7 +261,8 @@ function RuanganStats({ selectedDate, currentTime }) {
     // Ruangan yang sedang digunakan jangan dihitung sebagai "ada jadwal"
     ruanganSedangDigunakan.forEach(id => ruanganAdaJadwal.delete(id));
 
-    // TERSEDIA = Total - Sedang Digunakan (ada jadwal TIDAK mengurangi ketersediaan)
+    // TERSEDIA = Total - Sedang Digunakan
+    // Ruangan dengan jadwal tapi belum digunakan masih dihitung tersedia
     return {
       total: ruangan.length,
       sedangDigunakan: ruanganSedangDigunakan.size,
@@ -321,26 +326,36 @@ function RuanganList({ selectedDate, currentTime }) {
       // Sedang digunakan (hanya jika hari ini)
       const currentBooking = isToday ? bookingsForRoom.find(b => now >= b.mulai && now < b.akhir) : null;
       
-      // Jadwal yang akan datang atau sudah lewat di hari itu
+      // Jadwal yang belum selesai (exclude yang sudah lewat waktu akhirnya)
       const scheduledBookings = bookingsForRoom.filter(b => {
+        // Skip booking yang sudah selesai
+        if (now >= b.akhir) return false;
+        // Skip current booking
         if (currentBooking && b.id === currentBooking.id) return false;
         return true;
       }).sort((a, b) => a.mulai - b.mulai);
 
       // Tentukan status
+      // Ruangan hanya "tidak tersedia" jika sedang digunakan
+      // Ruangan dengan jadwal tetap dianggap tersedia
       let status = "tersedia";
+      let hasSchedule = scheduledBookings.length > 0;
+      
       if (currentBooking) {
         status = "sedang_digunakan";
-      } else if (scheduledBookings.length > 0) {
-        status = "ada_jadwal";
       }
 
-      return { ...r, status, currentBooking, scheduledBookings, totalBookings: bookingsForRoom.length };
+      return { ...r, status, currentBooking, scheduledBookings, totalBookings: bookingsForRoom.length, hasSchedule };
     }).sort((a, b) => {
-      // Sort by status priority first
-      const order = { sedang_digunakan: 0, ada_jadwal: 1, tersedia: 2 };
+      // Sort by status priority first (sedang_digunakan di atas, tersedia di bawah)
+      const order = { sedang_digunakan: 0, tersedia: 1 };
       const statusDiff = order[a.status] - order[b.status];
       if (statusDiff !== 0) return statusDiff;
+      
+      // For rooms with the same status, sort rooms with schedule first
+      if (a.hasSchedule !== b.hasSchedule) {
+        return b.hasSchedule ? 1 : -1;
+      }
       
       // For rooms with the same status, sort by nearest start time
       const getNextStartTime = (room) => {
@@ -360,6 +375,9 @@ function RuanganList({ selectedDate, currentTime }) {
 
   const filteredRuangan = useMemo(() => {
     if (filter === "all") return enhancedRuangan;
+    if (filter === "ada_jadwal") {
+      return enhancedRuangan.filter(r => r.hasSchedule && r.status === "tersedia");
+    }
     return enhancedRuangan.filter(r => r.status === filter);
   }, [enhancedRuangan, filter]);
 
@@ -388,7 +406,7 @@ function RuanganList({ selectedDate, currentTime }) {
     { key: "all", label: "Semua", count: enhancedRuangan.length },
     { key: "tersedia", label: "Tersedia", count: enhancedRuangan.filter(r => r.status === "tersedia").length },
     { key: "sedang_digunakan", label: "Sedang Digunakan", count: enhancedRuangan.filter(r => r.status === "sedang_digunakan").length },
-    { key: "ada_jadwal", label: "Ada Jadwal", count: enhancedRuangan.filter(r => r.status === "ada_jadwal").length },
+    { key: "ada_jadwal", label: "Ada Jadwal", count: enhancedRuangan.filter(r => r.hasSchedule && r.status === "tersedia").length },
   ];
 
   return (
@@ -445,29 +463,29 @@ function RuanganCard({ ruangan, selectedDate }) {
         )}
       </div>
 
-      {/* Sedang digunakan (hanya tampil jika hari ini) */}
+      {/* Sedang digunakan (hanya tampil jika hari ini dan belum selesai) */}
       {ruangan.currentBooking && isToday && (() => {
         const now = new Date();
         const isFinished = now >= ruangan.currentBooking.akhir;
+        
+        // Jangan tampilkan jika sudah selesai
+        if (isFinished) return null;
+        
         const timeUntilEnd = Math.max(0, Math.floor((ruangan.currentBooking.akhir - now) / 60000)); // minutes
         
         return (
-        <div className={`${isFinished ? 'bg-slate-100/50' : 'bg-red-100/50'} rounded-lg p-3 mb-3`}>
+        <div className="bg-red-100/50 rounded-lg p-3 mb-3">
           <div className="flex items-center gap-2 mb-1">
-            {isFinished ? (
-              <span className="text-xs font-medium text-slate-600">✓ SELESAI</span>
-            ) : (
-              <span className="text-xs font-medium text-red-600">🔴 SEDANG BERLANGSUNG</span>
-            )}
+            <span className="text-xs font-medium text-red-600">🔴 SEDANG BERLANGSUNG</span>
             <span className={`${sourceColors[ruangan.currentBooking.sourceColor]} text-xs px-2 py-0.5 rounded-full`}>
               {ruangan.currentBooking.source}
             </span>
           </div>
-          <p className={`text-sm font-semibold ${isFinished ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{ruangan.currentBooking.description}</p>
-          {ruangan.currentBooking.detail && <p className={`text-xs ${isFinished ? 'text-slate-400' : 'text-slate-500'}`}>{ruangan.currentBooking.detail}</p>}
-          <p className={`text-xs ${isFinished ? 'text-slate-500' : 'text-slate-600'} mt-1`}>
+          <p className="text-sm font-semibold text-slate-800">{ruangan.currentBooking.description}</p>
+          {ruangan.currentBooking.detail && <p className="text-xs text-slate-500">{ruangan.currentBooking.detail}</p>}
+          <p className="text-xs text-slate-600 mt-1">
             ⏰ {formatTime(ruangan.currentBooking.mulai)} - {formatTime(ruangan.currentBooking.akhir)}
-            {!isFinished && timeUntilEnd > 0 && (
+            {timeUntilEnd > 0 && (
               <span className="ml-2 text-red-600 font-medium">({timeUntilEnd} menit lagi)</span>
             )}
           </p>
@@ -475,39 +493,39 @@ function RuanganCard({ ruangan, selectedDate }) {
         );
       })()}
 
-      {/* Jadwal lain di hari ini */}
-      {ruangan.scheduledBookings.length > 0 && (
+      {/* Jadwal lain di hari ini (hanya yang belum selesai) */}
+      {ruangan.scheduledBookings.length > 0 && (() => {
+        const now = new Date();
+        // Filter hanya booking yang belum selesai
+        const activeBookings = ruangan.scheduledBookings.filter(b => now < b.akhir);
+        
+        if (activeBookings.length === 0) return null;
+        
+        return (
         <div className="space-y-2">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
             {isToday ? "Jadwal Hari Ini:" : `Jadwal ${formatDateShort(selectedDate)}:`}
           </p>
           
-          {(expanded ? ruangan.scheduledBookings : ruangan.scheduledBookings.slice(0, 2)).map((booking) => {
-            const now = new Date();
-            const isFinished = now >= booking.akhir;
-            
-            return (
-            <div key={booking.id} className={`bg-white/60 rounded-lg p-2.5 border border-slate-100 ${isFinished ? 'opacity-60' : ''}`}>
+          {(expanded ? activeBookings : activeBookings.slice(0, 2)).map((booking) => (
+            <div key={booking.id} className="bg-white/60 rounded-lg p-2.5 border border-slate-100">
               <div className="flex items-center gap-2 mb-1">
                 <span className={`${sourceColors[booking.sourceColor]} text-xs px-2 py-0.5 rounded-full`}>{booking.source}</span>
                 <span className="text-xs text-slate-400">{formatTime(booking.mulai)} - {formatTime(booking.akhir)}</span>
-                {isFinished && (
-                  <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">✓ Selesai</span>
-                )}
               </div>
-              <p className={`text-sm font-medium ${isFinished ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{booking.description}</p>
-              {booking.detail && <p className={`text-xs ${isFinished ? 'text-slate-400' : 'text-slate-500'}`}>{booking.detail}</p>}
+              <p className="text-sm font-medium text-slate-800">{booking.description}</p>
+              {booking.detail && <p className="text-xs text-slate-500">{booking.detail}</p>}
             </div>
-            );
-          })}
+          ))}
 
-          {ruangan.scheduledBookings.length > 2 && (
+          {activeBookings.length > 2 && (
             <button onClick={() => setExpanded(!expanded)} className="w-full text-xs text-indigo-600 hover:text-indigo-800 font-medium py-1">
-              {expanded ? "⬆️ Tutup" : `⬇️ Lihat ${ruangan.scheduledBookings.length - 2} jadwal lainnya`}
+              {expanded ? "⬆️ Tutup" : `⬇️ Lihat ${activeBookings.length - 2} jadwal lainnya`}
             </button>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Jika tidak ada jadwal sama sekali */}
       {ruangan.status === "tersedia" && ruangan.scheduledBookings.length === 0 && (

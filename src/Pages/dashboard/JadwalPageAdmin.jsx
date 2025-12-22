@@ -1,7 +1,7 @@
 /**
  * ================================================================================
  * FILE: JadwalPageAdmin.jsx
- * DESKRIPSI: Halaman manajemen jadwal dengan tabel gabungan dan pagination
+ * DESKRIPSI: Halaman manajemen jadwal dengan 3 tab terpisah dan filter tanggal
  * ================================================================================
  */
 
@@ -85,46 +85,31 @@ const JenisBadge = ({ jenis }) => {
   );
 };
 
-// ================================================================================
-// FUNGSI CEK KONFLIK RUANGAN (CROSS-TABLE)
-// ================================================================================
+// Cek konflik ruangan via view_jadwal_union
+const JENIS_MAP = { jadwal_perkuliahan: "PERKULIAHAN", jadwal_karya_akhir: "KARYA_AKHIR", jadwal_lain_lain: "LAIN_LAIN" };
+const JENIS_LABEL = { PERKULIAHAN: "Perkuliahan", KARYA_AKHIR: "Karya Akhir", LAIN_LAIN: "Lain-lain" };
+
 const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, excludeTable, ruanganMap }) => {
   if (!mulai || !akhir) return "• Waktu mulai dan selesai harus diisi";
-  
-  const formStart = new Date(mulai), formEnd = new Date(akhir);
+  const [formStart, formEnd] = [new Date(mulai), new Date(akhir)];
   if (formStart >= formEnd) return "• Waktu mulai harus lebih awal dari waktu selesai";
   if (!ruanganId) return null;
 
-  const namaRuangan = ruanganMap?.[ruanganId] || `Ruangan ${ruanganId}`;
-
-  const excludeJenis = {
-    "jadwal_perkuliahan": "PERKULIAHAN",
-    "jadwal_karya_akhir": "KARYA_AKHIR",
-    "jadwal_lain_lain": "LAIN_LAIN"
-  }[excludeTable];
-
   const { data, error } = await supabase
     .from("view_jadwal_union")
-    .select("jenis_jadwal, id_asli, ruangan_id, mulai_jadwal, akhir_jadwal")
-    .eq("ruangan_id", ruanganId)
-    .order("mulai_jadwal");
+    .select("jenis_jadwal, id_asli, mulai_jadwal, akhir_jadwal")
+    .eq("ruangan_id", ruanganId);
 
-  if (error) {
-    console.error("Error checking conflict:", error);
-    return null;
-  }
+  if (error) return console.error("Error checking conflict:", error), null;
 
-  const conflicts = (data || [])
-    .filter(j => {
-      if (j.jenis_jadwal === excludeJenis && j.id_asli === excludeId) return false;
-      if (!j.mulai_jadwal || !j.akhir_jadwal) return false;
-      const start = new Date(j.mulai_jadwal), end = new Date(j.akhir_jadwal);
-      return formStart < end && formEnd > start;
-    })
-    .map(j => {
-      const jenisLabel = { "PERKULIAHAN": "Perkuliahan", "KARYA_AKHIR": "Karya Akhir", "LAIN_LAIN": "Lain-lain" }[j.jenis_jadwal];
-      return `• [${jenisLabel}] Ruangan "${namaRuangan}" sudah dipakai ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`;
-    });
+  const namaRuangan = ruanganMap?.[ruanganId] || `Ruangan ${ruanganId}`;
+  const excludeJenis = JENIS_MAP[excludeTable];
+
+  const conflicts = (data || []).filter(j => {
+    if (j.jenis_jadwal === excludeJenis && j.id_asli === excludeId) return false;
+    const [s, e] = [new Date(j.mulai_jadwal), new Date(j.akhir_jadwal)];
+    return j.mulai_jadwal && j.akhir_jadwal && formStart < e && formEnd > s;
+  }).map(j => `• [${JENIS_LABEL[j.jenis_jadwal]}] "${namaRuangan}" dipakai ${formatTimestampShort(j.mulai_jadwal)} - ${formatTimestampShort(j.akhir_jadwal)}`);
 
   return conflicts.length ? conflicts.join('\n') : null;
 };
@@ -133,8 +118,6 @@ const checkRuanganConflict = async ({ mulai, akhir, ruanganId, excludeId, exclud
 // KOMPONEN UTAMA: JadwalPageAdmin
 // ================================================================================
 export default function JadwalPageAdmin() {
-  const [currentPage, setCurrentPage] = useState(1);
-  
   // Data states
   const [jadwalPerkuliahan, setJadwalPerkuliahan] = useState([]);
   const [jadwalKaryaAkhir, setJadwalKaryaAkhir] = useState([]);
@@ -142,9 +125,8 @@ export default function JadwalPageAdmin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Search states
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  // Tab state
+  const [activeTab, setActiveTab] = useState("perkuliahan");
   
   // Options for forms
   const [options, setOptions] = useState({
@@ -153,8 +135,8 @@ export default function JadwalPageAdmin() {
   
   // Modal states
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState("add"); // add | edit
-  const [modalType, setModalType] = useState("perkuliahan"); // perkuliahan | karya_akhir | lain_lain
+  const [modalMode, setModalMode] = useState("add");
+  const [modalType, setModalType] = useState("perkuliahan");
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   
@@ -279,63 +261,6 @@ export default function JadwalPageAdmin() {
     };
   }, [fetchAllData]);
 
-  // Gabungkan semua jadwal, filter search, dan urutkan berdasarkan update terbaru
-  const allJadwal = useMemo(() => {
-    const combined = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain];
-    
-    // Filter berdasarkan search query
-    let filtered = combined;
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = combined.filter(j => {
-        const agenda = (j.agenda_display || "").toLowerCase();
-        const ruangan = (j.nama_ruangan || "").toLowerCase();
-        const keterangan = (j.keterangan || "").toLowerCase();
-        const jenis = (j.jenis || "").toLowerCase();
-        const mulaiFormatted = (j.mulai_formatted || "").toLowerCase();
-        const akhirFormatted = (j.akhir_formatted || "").toLowerCase();
-        
-        return agenda.includes(query) || 
-               ruangan.includes(query) || 
-               keterangan.includes(query) ||
-               jenis.includes(query) ||
-               mulaiFormatted.includes(query) ||
-               akhirFormatted.includes(query);
-      });
-    }
-    
-    // Sort berdasarkan terakhir diupdate/dibuat (descending)
-    return filtered.sort((a, b) => new Date(b.last_modified) - new Date(a.last_modified));
-  }, [jadwalPerkuliahan, jadwalKaryaAkhir, jadwalLainLain, searchQuery]);
-
-  // Pagination
-  const totalPages = Math.ceil(allJadwal.length / ITEMS_PER_PAGE);
-  const paginatedJadwal = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return allJadwal.slice(start, start + ITEMS_PER_PAGE);
-  }, [allJadwal, currentPage]);
-
-  // Reset ke halaman 1 saat search berubah
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
-
-  // Search handlers
-  const handleSearch = () => {
-    setSearchQuery(searchInput);
-  };
-
-  const handleSearchKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
-
-  const handleClearSearch = () => {
-    setSearchInput("");
-    setSearchQuery("");
-  };
-
   // Modal handlers
   const resetForm = (type) => {
     if (type === "perkuliahan") {
@@ -398,225 +323,174 @@ export default function JadwalPageAdmin() {
   const handleChange = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
   // Check conflict
-  const checkConflict = async () => {
-    const ruanganMap = Object.fromEntries(options.ruangan.map(r => [r.id, r.nama_ruangan]));
-    const ruanganId = modalType === "perkuliahan" ? form.ruangan_id : form.nama_ruangan;
-    const tableName = modalType === "perkuliahan" ? "jadwal_perkuliahan" : modalType === "karya_akhir" ? "jadwal_karya_akhir" : "jadwal_lain_lain";
+  const handleCheckConflict = async () => {
+    if (modalType === "perkuliahan") {
+      return await checkRuanganConflict({
+        mulai: form.mulai_jadwal,
+        akhir: form.akhir_jadwal,
+        ruanganId: form.ruangan_id,
+        excludeId: form.id,
+        excludeTable: modalMode === 'edit' ? 'jadwal_perkuliahan' : null,
+        ruanganMap: createMap(options.ruangan, 'nama_ruangan')
+      });
+    } else if (modalType === "karya_akhir") {
+      return await checkRuanganConflict({
+        mulai: form.mulai_jadwal,
+        akhir: form.akhir_jadwal,
+        ruanganId: form.nama_ruangan,
+        excludeId: form.id,
+        excludeTable: modalMode === 'edit' ? 'jadwal_karya_akhir' : null,
+        ruanganMap: createMap(options.ruangan, 'nama_ruangan')
+      });
+    } else {
+      return await checkRuanganConflict({
+        mulai: form.mulai_jadwal,
+        akhir: form.akhir_jadwal,
+        ruanganId: form.nama_ruangan,
+        excludeId: form.id,
+        excludeTable: modalMode === 'edit' ? 'jadwal_lain_lain' : null,
+        ruanganMap: createMap(options.ruangan, 'nama_ruangan')
+      });
+    }
+  };
 
-    const ruanganConflict = await checkRuanganConflict({
-      mulai: form.mulai_jadwal,
-      akhir: form.akhir_jadwal,
-      ruanganId,
-      excludeId: form.id,
-      excludeTable: tableName,
-      ruanganMap
-    });
+  // Submit handler
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
 
-    if (ruanganConflict?.startsWith("•")) return ruanganConflict;
+    try {
+      const conflictMsg = await handleCheckConflict();
+      if (conflictMsg) {
+        alert(conflictMsg);
+        setSaving(false);
+        return;
+      }
 
-    // Cek konflik dosen (hanya untuk perkuliahan)
-    if (modalType === "perkuliahan" && form.dosen_id) {
-      const { data: jadwalDosen } = await supabase
-        .from("jadwal_perkuliahan")
-        .select("*")
-        .eq("dosen_id", form.dosen_id)
-        .neq("id", form.id || 0);
-
-      const formStart = new Date(form.mulai_jadwal), formEnd = new Date(form.akhir_jadwal);
-      const dosenConflicts = [];
-
-      for (const j of (jadwalDosen || [])) {
-        if (!j.mulai_jadwal || !j.akhir_jadwal) continue;
-        const isOverlap = formStart < new Date(j.akhir_jadwal) && formEnd > new Date(j.mulai_jadwal);
-        if (isOverlap) {
-          const d = options.dosen.find(x => String(x.id) === String(form.dosen_id));
-          dosenConflicts.push(`• [Perkuliahan] Dosen "${d?.nama_dosen || form.dosen_id}" sudah mengajar ${formatTimestampShort(j.mulai_jadwal)} s/d ${formatTimestampShort(j.akhir_jadwal)}`);
+      let result;
+      if (modalType === "perkuliahan") {
+        const table = "jadwal_perkuliahan";
+        if (modalMode === "add") {
+          const { id, ...dataToInsert } = form; // Hapus id untuk insert
+          result = await supabase.from(table).insert([dataToInsert]);
+        } else {
+          result = await supabase.from(table).update(form).eq("id", form.id);
+        }
+      } else if (modalType === "karya_akhir") {
+        const table = "jadwal_karya_akhir";
+        if (modalMode === "add") {
+          const { id, ...dataToInsert } = form; // Hapus id untuk insert
+          result = await supabase.from(table).insert([dataToInsert]);
+        } else {
+          result = await supabase.from(table).update(form).eq("id", form.id);
+        }
+      } else {
+        const table = "jadwal_lain_lain";
+        if (modalMode === "add") {
+          const { id, ...dataToInsert } = form; // Hapus id untuk insert
+          result = await supabase.from(table).insert([dataToInsert]);
+        } else {
+          result = await supabase.from(table).update(form).eq("id", form.id);
         }
       }
 
-      if (dosenConflicts.length) {
-        return [ruanganConflict, ...dosenConflicts].filter(Boolean).join('\n');
-      }
-    }
-
-    return ruanganConflict;
-  };
-
-  // Save handler
-  const handleSave = async () => {
-    setSaving(true);
-    const conflict = await checkConflict();
-    if (conflict) {
-      alert(`⚠️ Bentrok!\n\n${conflict}`);
+      if (result.error) throw result.error;
+      alert(`Data berhasil ${modalMode === "add" ? "ditambahkan" : "diupdate"}!`);
+      closeModal();
+      fetchAllData();
+    } catch (err) {
+      console.error("Error saving:", err);
+      alert(`Gagal menyimpan: ${err.message}`);
+    } finally {
       setSaving(false);
-      return;
     }
-
-    let payload, tableName;
-
-    if (modalType === "perkuliahan") {
-      tableName = "jadwal_perkuliahan";
-      payload = {
-        dosen_id: form.dosen_id || null,
-        ruangan_id: form.ruangan_id || null,
-        id_angkatan: form.id_angkatan || null,
-        id_mata_kuliah: form.id_mata_kuliah || null,
-        mulai_jadwal: form.mulai_jadwal || null,
-        akhir_jadwal: form.akhir_jadwal || null
-      };
-    } else if (modalType === "karya_akhir") {
-      tableName = "jadwal_karya_akhir";
-      payload = {
-        nama_ruangan: form.nama_ruangan || null,
-        nama_angkatan: form.nama_angkatan || null,
-        agenda_jadwal_karya_akhir: form.agenda_jadwal_karya_akhir || null,
-        mulai_jadwal: form.mulai_jadwal || null,
-        akhir_jadwal: form.akhir_jadwal || null
-      };
-    } else {
-      tableName = "jadwal_lain_lain";
-      payload = {
-        nama_ruangan: form.nama_ruangan ? parseInt(form.nama_ruangan) : null,
-        nama_user: form.nama_user || null,
-        agenda: form.agenda || null,
-        mulai_jadwal: form.mulai_jadwal || null,
-        akhir_jadwal: form.akhir_jadwal || null
-      };
-    }
-
-    const { error } = modalMode === "add"
-      ? await supabase.from(tableName).insert(payload)
-      : await supabase.from(tableName).update(payload).eq("id", form.id);
-
-    setSaving(false);
-    if (error) {
-      alert("Gagal menyimpan: " + error.message);
-      return;
-    }
-    closeModal();
-    fetchAllData();
   };
 
   // Delete handler
-  const handleDelete = async (row) => {
-    if (!confirm(`Hapus jadwal ${row.jenis === "perkuliahan" ? "perkuliahan" : row.jenis === "karya_akhir" ? "karya akhir" : "lain-lain"} ini?`)) return;
-    
-    const tableName = row.jenis === "perkuliahan" ? "jadwal_perkuliahan" : row.jenis === "karya_akhir" ? "jadwal_karya_akhir" : "jadwal_lain_lain";
-    const { error } = await supabase.from(tableName).delete().eq("id", row.id);
-    
-    if (error) alert("Gagal menghapus: " + error.message);
-    else fetchAllData();
+  const handleDelete = async (id, jenis) => {
+    if (!confirm("Yakin ingin menghapus jadwal ini?")) return;
+
+    try {
+      const tableMap = {
+        perkuliahan: "jadwal_perkuliahan",
+        karya_akhir: "jadwal_karya_akhir",
+        lain_lain: "jadwal_lain_lain"
+      };
+
+      const { error } = await supabase.from(tableMap[jenis]).delete().eq("id", id);
+      if (error) throw error;
+
+      alert("Data berhasil dihapus!");
+      fetchAllData();
+    } catch (err) {
+      console.error("Error deleting:", err);
+      alert(`Gagal menghapus: ${err.message}`);
+    }
   };
 
   // Download handler
   const handleDownload = async () => {
     try {
-      let startDate, endDate;
+      let data = [];
       
-      if (downloadType === "date") {
+      if (downloadType === "all") {
+        data = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain];
+      } else if (downloadType === "date") {
         if (!downloadStartDate || !downloadEndDate) {
-          alert("Pilih tanggal mulai dan selesai");
+          alert("Mohon pilih tanggal mulai dan akhir");
           return;
         }
-        startDate = new Date(downloadStartDate + 'T00:00:00');
-        endDate = new Date(downloadEndDate + 'T23:59:59');
-      } else {
+        const start = new Date(downloadStartDate);
+        const end = new Date(downloadEndDate);
+        end.setHours(23, 59, 59);
+        
+        data = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain].filter(j => {
+          const mulai = new Date(j.mulai_jadwal);
+          return mulai >= start && mulai <= end;
+        });
+      } else if (downloadType === "month") {
         if (!downloadMonth) {
-          alert("Pilih bulan");
+          alert("Mohon pilih bulan");
           return;
         }
         const [year, month] = downloadMonth.split('-');
-        startDate = new Date(year, month - 1, 1);
-        endDate = new Date(year, month, 0, 23, 59, 59);
+        
+        data = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain].filter(j => {
+          const mulai = new Date(j.mulai_jadwal);
+          return mulai.getFullYear() === parseInt(year) && mulai.getMonth() === parseInt(month) - 1;
+        });
       }
 
-      // Fetch all data for download
-      const [perkuliahanRes, karyaAkhirRes, lainLainRes] = await Promise.all([
-        supabase.from("jadwal_perkuliahan")
-          .select("*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)")
-          .gte("mulai_jadwal", startDate.toISOString())
-          .lte("mulai_jadwal", endDate.toISOString())
-          .order("mulai_jadwal"),
-        supabase.from("jadwal_karya_akhir")
-          .select("*")
-          .gte("mulai_jadwal", startDate.toISOString())
-          .lte("mulai_jadwal", endDate.toISOString())
-          .order("mulai_jadwal"),
-        supabase.from("jadwal_lain_lain")
-          .select("*")
-          .gte("mulai_jadwal", startDate.toISOString())
-          .lte("mulai_jadwal", endDate.toISOString())
-          .order("mulai_jadwal")
-      ]);
-
-      const ruanganMap = createMap(options.ruangan, 'nama_ruangan');
-      const angkatanMap = createMap(options.angkatan, 'nama_angkatan');
-      const agendaMap = createMap(options.agenda, 'agenda_karya_akhir');
-
-      const data = [
-        ...(perkuliahanRes.data || []).map(r => ({
-          'Jenis': 'Perkuliahan',
-          'Angkatan/User': r.angkatan?.nama_angkatan || '-',
-          'Agenda': r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',
-          'Keterangan': r.dosen?.nama_dosen || '-',
-          'Ruangan': r.ruangan?.nama_ruangan || '-',
-          'Waktu Mulai': formatTimestamp(r.mulai_jadwal),
-          'Waktu Selesai': formatTimestamp(r.akhir_jadwal)
-        })),
-        ...(karyaAkhirRes.data || []).map(r => ({
-          'Jenis': 'Karya Akhir',
-          'Angkatan/User': angkatanMap[r.nama_angkatan] || '-',
-          'Agenda': agendaMap[r.agenda_jadwal_karya_akhir] || '-',
-          'Keterangan': '-',
-          'Ruangan': ruanganMap[r.nama_ruangan] || '-',
-          'Waktu Mulai': formatTimestamp(r.mulai_jadwal),
-          'Waktu Selesai': formatTimestamp(r.akhir_jadwal)
-        })),
-        ...(lainLainRes.data || []).map(r => ({
-          'Jenis': 'Lain-lain',
-          'Angkatan/User': r.nama_user || '-',
-          'Agenda': r.agenda || '-',
-          'Keterangan': '-',
-          'Ruangan': ruanganMap[r.nama_ruangan] || '-',
-          'Waktu Mulai': formatTimestamp(r.mulai_jadwal),
-          'Waktu Selesai': formatTimestamp(r.akhir_jadwal)
-        }))
-      ];
-
-      // Sort by waktu mulai
-      data.sort((a, b) => new Date(a['Waktu Mulai']) - new Date(b['Waktu Mulai']));
-
       if (data.length === 0) {
-        alert("Tidak ada data untuk periode yang dipilih");
+        alert("Tidak ada data untuk didownload");
         return;
       }
 
-      // Generate CSV
-      const headers = Object.keys(data[0]);
-      const csvContent = [
-        headers.join(','),
-        ...data.map(row => headers.map(h => `"${row[h]}"`).join(','))
-      ].join('\n');
+      // Convert to CSV
+      const headers = ["Jenis", "Agenda", "Ruangan", "Waktu Mulai", "Waktu Selesai", "Keterangan"];
+      const rows = data.map(d => [
+        d.jenis,
+        d.agenda_display || "-",
+        d.nama_ruangan || "-",
+        d.mulai_formatted || "-",
+        d.akhir_formatted || "-",
+        d.keterangan || "-"
+      ]);
 
-      // Download file
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
+      const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
+      const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
-      const dateStr = downloadType === "date" 
-        ? `${downloadStartDate}_${downloadEndDate}`
-        : downloadMonth;
-      link.setAttribute('href', url);
-      link.setAttribute('download', `jadwal_semua_${dateStr}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `jadwal_${downloadType}_${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
-      document.body.removeChild(link);
-      
-      setDownloadModalOpen(false);
+      URL.revokeObjectURL(url);
+
       alert(`Data berhasil didownload (${data.length} data)`);
-    } catch (error) {
-      console.error('Error downloading:', error);
-      alert('Gagal mendownload data: ' + error.message);
+      setDownloadModalOpen(false);
+    } catch (err) {
+      console.error("Error downloading:", err);
+      alert(`Gagal download: ${err.message}`);
     }
   };
 
@@ -687,83 +561,365 @@ export default function JadwalPageAdmin() {
         </div>
       </div>
 
-      {/* Combined Table */}
+      {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="border-b border-slate-200">
+          <div className="flex gap-1 p-2">
+            <button
+              onClick={() => setActiveTab("perkuliahan")}
+              className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === "perkuliahan"
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              📚 Perkuliahan
+            </button>
+            <button
+              onClick={() => setActiveTab("karya_akhir")}
+              className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === "karya_akhir"
+                  ? "bg-purple-600 text-white shadow-md"
+                  : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              🎓 Karya Akhir
+            </button>
+            <button
+              onClick={() => setActiveTab("lain_lain")}
+              className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === "lain_lain"
+                  ? "bg-green-600 text-white shadow-md"
+                  : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              📋 Lain-lain
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content */}
         <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Semua Jadwal
-              </h2>
-              {searchQuery && (
-                <p className="text-sm text-slate-600 mt-1">
-                  Hasil pencarian: <span className="font-medium text-indigo-600">"{searchQuery}"</span>
-                </p>
-              )}
-            </div>
-          </div>
+          {activeTab === "perkuliahan" && (
+            <JadwalTab
+              data={jadwalPerkuliahan}
+              loading={loading}
+              error={error}
+              jenis="perkuliahan"
+              onEdit={openEditModal}
+              onDelete={handleDelete}
+            />
+          )}
+          {activeTab === "karya_akhir" && (
+            <JadwalTab
+              data={jadwalKaryaAkhir}
+              loading={loading}
+              error={error}
+              jenis="karya_akhir"
+              onEdit={openEditModal}
+              onDelete={handleDelete}
+            />
+          )}
+          {activeTab === "lain_lain" && (
+            <JadwalTab
+              data={jadwalLainLain}
+              loading={loading}
+              error={error}
+              jenis="lain_lain"
+              onEdit={openEditModal}
+              onDelete={handleDelete}
+            />
+          )}
+        </div>
+      </div>
 
-          {/* Search Box */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyPress={handleSearchKeyPress}
-                  placeholder="Cari agenda, ruangan, keterangan, atau jenis... (tekan Enter)"
-                  className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
-              <button 
-                onClick={handleSearch}
-                className="px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors whitespace-nowrap"
+      {/* Modal Form */}
+      {modalOpen && (
+        <Modal onClose={closeModal}>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">
+              {modalTitles[modalType][modalMode]}
+            </h3>
+            
+            {renderFormFields()}
+            
+            <DateTimeField
+              label="Waktu Mulai"
+              value={form.mulai_jadwal}
+              onChange={(v) => handleChange("mulai_jadwal", v)}
+            />
+            <DateTimeField
+              label="Waktu Selesai"
+              value={form.akhir_jadwal}
+              onChange={(v) => handleChange("akhir_jadwal", v)}
+            />
+
+            <div className="flex gap-2 pt-4">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
               >
-                Cari
+                Batal
               </button>
-              {searchQuery && (
-                <button 
-                  onClick={handleClearSearch}
-                  className="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors whitespace-nowrap"
-                >
-                  Reset
-                </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? "Menyimpan..." : "Simpan"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Download Modal */}
+      {downloadModalOpen && (
+        <Modal onClose={() => setDownloadModalOpen(false)}>
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-slate-900">Download Jadwal</h3>
+            
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="all"
+                  checked={downloadType === "all"}
+                  onChange={(e) => setDownloadType(e.target.value)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm text-slate-700">Semua Data</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="date"
+                  checked={downloadType === "date"}
+                  onChange={(e) => setDownloadType(e.target.value)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm text-slate-700">Berdasarkan Tanggal</span>
+              </label>
+              {downloadType === "date" && (
+                <div className="ml-6 space-y-2">
+                  <input
+                    type="date"
+                    value={downloadStartDate}
+                    onChange={(e) => setDownloadStartDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    placeholder="Tanggal Mulai"
+                  />
+                  <input
+                    type="date"
+                    value={downloadEndDate}
+                    onChange={(e) => setDownloadEndDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    placeholder="Tanggal Akhir"
+                  />
+                </div>
+              )}
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="month"
+                  checked={downloadType === "month"}
+                  onChange={(e) => setDownloadType(e.target.value)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm text-slate-700">Berdasarkan Bulan</span>
+              </label>
+              {downloadType === "month" && (
+                <div className="ml-6">
+                  <input
+                    type="month"
+                    value={downloadMonth}
+                    onChange={(e) => setDownloadMonth(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                  />
+                </div>
               )}
             </div>
-          </div>
 
-          {loading ? (
-            <LoadingState />
-          ) : error ? (
-            <ErrorState message={error} />
-          ) : allJadwal.length === 0 ? (
-            <EmptyState text="Belum ada data jadwal." />
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white">
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Jenis</th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Waktu Mulai</th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Waktu Selesai</th>
+            <div className="flex gap-2 pt-4">
+              <button
+                onClick={() => setDownloadModalOpen(false)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDownload}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg"
+              >
+                Download
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ================================================================================
+// TAB COMPONENT
+// ================================================================================
+function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter berdasarkan search saja (tanpa filter tanggal)
+  const filteredData = useMemo(() => {
+    let filtered = data;
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(d => {
+        const agenda = (d.agenda_display || "").toLowerCase();
+        const ruangan = (d.nama_ruangan || "").toLowerCase();
+        const keterangan = (d.keterangan || "").toLowerCase();
+        const mulaiFormatted = (d.mulai_formatted || "").toLowerCase();
+        const akhirFormatted = (d.akhir_formatted || "").toLowerCase();
+        const angkatan = (d.nama_angkatan || "").toLowerCase();
+        const namaUser = (d.nama_user || "").toLowerCase();
+        
+        return agenda.includes(query) || 
+               ruangan.includes(query) || 
+               keterangan.includes(query) ||
+               mulaiFormatted.includes(query) ||
+               akhirFormatted.includes(query) ||
+               angkatan.includes(query) ||
+               namaUser.includes(query);
+      });
+    }
+
+    return filtered.sort((a, b) => new Date(b.last_modified) - new Date(a.last_modified));
+  }, [data, searchQuery]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredData.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredData, currentPage]);
+
+  // Reset ke halaman 1 saat search berubah
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  // Search handlers
+  const handleSearch = () => {
+    setSearchQuery(searchInput);
+  };
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput("");
+    setSearchQuery("");
+  };
+
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+
+  return (
+    <div className="space-y-4">
+      {/* Search Box */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyPress={handleSearchKeyPress}
+            placeholder="Cari berdasarkan tanggal, agenda, ruangan, angkatan... (tekan Enter)"
+            className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+        <button 
+          onClick={handleSearch}
+          className="px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors whitespace-nowrap"
+        >
+          Cari
+        </button>
+        {searchQuery && (
+          <button 
+            onClick={handleClearSearch}
+            className="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors whitespace-nowrap"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+
+      {/* Info hasil search */}
+      {searchQuery && (
+        <div className="text-sm text-slate-600">
+          Hasil pencarian: <span className="font-medium text-indigo-600">"{searchQuery}"</span>
+        </div>
+      )}
+
+      {filteredData.length === 0 ? (
+        <EmptyState text={searchQuery ? "Tidak ada hasil pencarian." : "Belum ada data jadwal."} />
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                  {jenis === "perkuliahan" && (
+                    <>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Angkatan</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Mulai</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Selesai</th>
                       <th className="py-3 px-4 font-semibold text-left border border-slate-300">Agenda</th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Keterangan</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Tempat</th>
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">Aksi</th>
+                    </>
+                  )}
+                  {jenis === "karya_akhir" && (
+                    <>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Angkatan</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Mulai</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Selesai</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Agenda</th>
                       <th className="py-3 px-4 font-semibold text-left border border-slate-300">Ruangan</th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedJadwal.map((row) => (
-                      <tr key={`${row.jenis}-${row.id}`} className="border-b border-slate-200 hover:bg-indigo-50 transition-colors">
+                    </>
+                  )}
+                  {jenis === "lain_lain" && (
+                    <>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Nama User</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Mulai</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Selesai</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Agenda</th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">Tempat</th>
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">Aksi</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedData.map((row, idx) => (
+                  <tr key={idx} className="border-b border-slate-200 hover:bg-blue-50 transition-colors">
+                    {jenis === "perkuliahan" && (
+                      <>
                         <td className="py-3 px-4 border border-slate-200">
-                          <JenisBadge jenis={row.jenis} />
+                          <span className="font-semibold text-slate-800">{row.nama_angkatan}</span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="font-medium text-slate-800 text-xs">{row.mulai_formatted}</span>
@@ -772,240 +928,206 @@ export default function JadwalPageAdmin() {
                           <span className="font-medium text-slate-800 text-xs">{row.akhir_formatted}</span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
-                          <span className="font-semibold text-slate-900">{row.agenda_display}</span>
-                        </td>
-                        <td className="py-3 px-4 border border-slate-200">
-                          <span className="text-slate-600 text-xs">{row.keterangan}</span>
+                          <div className="font-semibold text-slate-900">{row.nama_matkul || row.agenda_display}</div>
+                          <div className="text-xs text-slate-600">{row.nama_dosen || row.keterangan}</div>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="text-slate-800">{row.nama_ruangan}</span>
                         </td>
-                        <td className="py-3 px-4 border border-slate-200 text-center">
-                          <button onClick={() => openEditModal(row)} className="text-indigo-600 hover:text-indigo-800 mr-3 font-medium text-xs">Edit</button>
-                          <button onClick={() => handleDelete(row)} className="text-red-600 hover:text-red-800 font-medium text-xs">Hapus</button>
+                      </>
+                    )}
+                    {jenis === "karya_akhir" && (
+                      <>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="font-semibold text-slate-800">{row.nama_angkatan}</span>
                         </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
-                  <div className="text-sm text-slate-600">
-                    Halaman {currentPage} dari {totalPages} ({allJadwal.length} data)
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1 text-sm font-medium rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      ← Prev
-                    </button>
-                    <div className="flex gap-1">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        let pageNum;
-                        if (totalPages <= 5) {
-                          pageNum = i + 1;
-                        } else if (currentPage <= 3) {
-                          pageNum = i + 1;
-                        } else if (currentPage >= totalPages - 2) {
-                          pageNum = totalPages - 4 + i;
-                        } else {
-                          pageNum = currentPage - 2 + i;
-                        }
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => setCurrentPage(pageNum)}
-                            className={`w-8 h-8 text-sm font-medium rounded-lg transition-colors ${
-                              currentPage === pageNum
-                                ? 'bg-indigo-600 text-white'
-                                : 'border border-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-1 text-sm font-medium rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Next →
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Add/Edit Modal */}
-      {modalOpen && (
-        <Modal 
-          title={modalTitles[modalType]?.[modalMode] || "Jadwal"} 
-          saving={saving} 
-          onSave={handleSave} 
-          onClose={closeModal}
-        >
-          {renderFormFields()}
-          <TimeFields form={form} onChange={handleChange} />
-        </Modal>
-      )}
-
-      {/* Download Modal */}
-      {downloadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Download Semua Jadwal</h3>
-              <button onClick={() => setDownloadModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Pilih Tipe Download</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center">
-                    <input type="radio" value="date" checked={downloadType === "date"} onChange={(e) => setDownloadType(e.target.value)} className="mr-2" />
-                    <span className="text-sm">Range Tanggal</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input type="radio" value="month" checked={downloadType === "month"} onChange={(e) => setDownloadType(e.target.value)} className="mr-2" />
-                    <span className="text-sm">Per Bulan</span>
-                  </label>
-                </div>
-              </div>
-
-              {downloadType === "date" ? (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Tanggal Mulai</label>
-                    <input type="date" value={downloadStartDate} onChange={(e) => setDownloadStartDate(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Tanggal Selesai</label>
-                    <input type="date" value={downloadEndDate} onChange={(e) => setDownloadEndDate(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Pilih Bulan</label>
-                  <input type="month" value={downloadMonth} onChange={(e) => setDownloadMonth(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
-                </div>
-              )}
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs text-blue-800">
-                  <strong>Info:</strong> Semua jenis jadwal (Perkuliahan, Karya Akhir, Lain-lain) akan didownload dalam satu file CSV.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200">
-              <button onClick={() => setDownloadModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
-                Batal
-              </button>
-              <button onClick={handleDownload} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors">
-                Download
-              </button>
-            </div>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="font-medium text-slate-800 text-xs">{row.mulai_formatted}</span>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="font-medium text-slate-800 text-xs">{row.akhir_formatted}</span>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <div className="font-semibold text-slate-900">{row.agenda_display}</div>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="text-slate-800">{row.nama_ruangan}</span>
+                        </td>
+                      </>
+                    )}
+                    {jenis === "lain_lain" && (
+                      <>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="font-semibold text-slate-800">{row.nama_user || row.keterangan}</span>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="font-medium text-slate-800 text-xs">{row.mulai_formatted}</span>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="font-medium text-slate-800 text-xs">{row.akhir_formatted}</span>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <div className="font-semibold text-slate-900">{row.agenda || row.agenda_display}</div>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="text-slate-800">{row.nama_ruangan}</span>
+                        </td>
+                      </>
+                    )}
+                    <td className="py-3 px-4 border border-slate-200 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => onEdit(row)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Edit">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button onClick={() => onDelete(row.id, row.jenis)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Hapus">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4">
+              <div className="text-sm text-slate-500">
+                Halaman {currentPage} dari {totalPages}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Prev
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                      currentPage === page
+                        ? "bg-indigo-600 text-white"
+                        : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
 
 // ================================================================================
-// KOMPONEN UI SHARED
+// UI COMPONENTS
 // ================================================================================
-
 function PageHeader({ title }) {
   return (
-    <header className="text-center">
+    <header>
       <h1 className="text-2xl font-semibold text-slate-800">{title}</h1>
     </header>
   );
 }
 
-const LoadingState = () => (
-  <div className="flex items-center justify-center py-8">
-    <div className="text-center">
-      <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent" />
-      <p className="text-sm text-slate-500 mt-2">Memuat jadwal...</p>
-    </div>
-  </div>
-);
-
-const ErrorState = ({ message }) => (
-  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-    <p className="text-sm text-red-600">⚠️ {message}</p>
-  </div>
-);
-
-const EmptyState = ({ text = "Belum ada data jadwal." }) => (
-  <div className="text-center py-12">
-    <svg className="mx-auto h-12 w-12 text-slate-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-    </svg>
-    <p className="text-sm text-slate-500">{text}</p>
-  </div>
-);
-
-function Modal({ title, saving, onSave, onClose, children }) {
+function LoadingState() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-6 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">{children}</div>
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200">
-          <button onClick={onClose} disabled={saving} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50">Batal</button>
-          <button onClick={onSave} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
-            {saving ? "Menyimpan..." : "Simpan"}
-          </button>
-        </div>
+    <div className="flex items-center justify-center py-12">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      <span className="ml-3 text-sm text-slate-600">Memuat data...</span>
+    </div>
+  );
+}
+
+function ErrorState({ message }) {
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+      <p className="text-sm text-red-600">⚠️ {message}</p>
+    </div>
+  );
+}
+
+function EmptyState({ text }) {
+  return (
+    <div className="bg-slate-50 rounded-xl p-8 text-center">
+      <p className="text-slate-500">{text}</p>
+    </div>
+  );
+}
+
+function Modal({ children, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        {children}
       </div>
     </div>
   );
 }
 
-const SelectField = ({ label, value, onChange, options, displayKey, placeholder }) => (
-  <div>
-    <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-      <option value="">{placeholder || `-- Pilih ${label} --`}</option>
-      {options.map((item) => <option key={item.id} value={item.id}>{typeof displayKey === "function" ? displayKey(item) : item[displayKey]}</option>)}
-    </select>
-  </div>
-);
+function InputField({ label, value, onChange, placeholder, type = "text" }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      />
+    </div>
+  );
+}
 
-const InputField = ({ label, value, onChange, type = "text", placeholder }) => (
-  <div>
-    <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-    <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
-  </div>
-);
+function SelectField({ label, value, onChange, options, displayKey }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      >
+        <option value="">Pilih {label}</option>
+        {options.map((opt) => (
+          <option key={opt.id} value={opt.id}>
+            {typeof displayKey === 'function' ? displayKey(opt) : opt[displayKey]}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
-const TimeFields = ({ form, onChange }) => (
-  <>
-    <InputField label="Waktu Mulai" type="datetime-local" value={form.mulai_jadwal || ""} onChange={(v) => onChange("mulai_jadwal", v)} />
-    <InputField label="Waktu Selesai" type="datetime-local" value={form.akhir_jadwal || ""} onChange={(v) => onChange("akhir_jadwal", v)} />
-  </>
-);
+function DateTimeField({ label, value, onChange }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      <input
+        type="datetime-local"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      />
+    </div>
+  );
+}
