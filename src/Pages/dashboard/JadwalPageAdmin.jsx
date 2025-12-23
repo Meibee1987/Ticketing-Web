@@ -281,25 +281,24 @@ export default function JadwalPageAdmin() {
     setModalOpen(true);
   };
 
-  // Expose openDownloadModal ke window agar bisa dipanggil dari JadwalTab
-  const openDownloadModal = (jenis) => {
-    console.log("[openDownloadModal] Jenis:", jenis, "Type:", typeof jenis);
-    setDownloadJenisTab(jenis);
-    setDownloadType("all"); // default ke semua saat modal dibuka
-    setDownloadStartDate("");
-    setDownloadEndDate("");
-    setDownloadMonth("");
-    setDownloadModalOpen(true);
-  };
-
+  // Expose handleDownload ke window agar bisa dipanggil dari JadwalTab
   useEffect(() => {
-    window.openDownloadModal = openDownloadModal;
-    window.openAddModal = openAddModal;
-    return () => {
-      delete window.openDownloadModal;
-      delete window.openAddModal;
+    window.handleDownloadJadwal = handleDownload;
+    window.openDownloadModal = (jenis) => {
+      console.log("[openDownloadModal] Jenis:", jenis, "Type:", typeof jenis);
+      setDownloadJenisTab(jenis);
+      setDownloadType("all"); // default ke semua saat modal dibuka
+      setDownloadStartDate("");
+      setDownloadEndDate("");
+      setDownloadMonth("");
+      setDownloadModalOpen(true);
     };
-  }, []);
+    return () => {
+      delete window.handleDownloadJadwal;
+      delete window.openDownloadModal;
+    };
+  }, [jadwalPerkuliahan, jadwalKaryaAkhir, jadwalLainLain, downloadType, downloadStartDate, downloadEndDate, downloadMonth]);
+  window.openAddModal = openAddModal;
 
   const openEditModal = (row) => {
     setModalMode("edit");
@@ -450,70 +449,87 @@ export default function JadwalPageAdmin() {
     }
   };
 
-  // Fungsi untuk mendapatkan data berdasarkan jenis tab
-  const getDataByJenis = (jenis) => {
-    if (jenis === "perkuliahan") return jadwalPerkuliahan;
-    if (jenis === "karya_akhir") return jadwalKaryaAkhir;
-    if (jenis === "lain_lain") return jadwalLainLain;
-    return [];
-  };
-
-  // Download handler - dipanggil dari modal
-  const handleDownload = () => {
+  // Download handler - dengan parameter jenis untuk download per tab
+  const handleDownload = async (jenisTab = null) => {
     try {
       let data = [];
-      const targetJenis = downloadJenisTab;
       
-      // Ambil data dari state berdasarkan jenis tab
-      let allTabData = getDataByJenis(targetJenis);
-      
-      console.log(`[Download] Tab: ${targetJenis}, Total data: ${allTabData.length}, Filter: ${downloadType}`);
-      console.log(`[Download] Sample data:`, allTabData.length > 0 ? allTabData[0] : "No data");
-      
-      // Jika ada filter tanggal atau bulan
-      if (downloadType === "all") {
-        data = [...allTabData]; // copy array
-      } else if (downloadType === "date") {
-        if (!downloadStartDate || !downloadEndDate) {
-          alert("Mohon pilih tanggal mulai dan akhir");
-          return;
+      // Jika dipanggil dari tab tertentu, download data tab tersebut dengan filter
+      if (jenisTab || downloadJenisTab) {
+        const targetJenis = jenisTab || downloadJenisTab;
+        let allTabData = [];
+        
+        if (targetJenis === "perkuliahan") {
+          allTabData = jadwalPerkuliahan;
+        } else if (targetJenis === "karya_akhir") {
+          allTabData = jadwalKaryaAkhir;
+        } else if (targetJenis === "lain_lain") {
+          allTabData = jadwalLainLain;
         }
-        const start = new Date(downloadStartDate);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(downloadEndDate);
-        end.setHours(23, 59, 59, 999);
         
-        console.log(`[Download] Date range: ${start.toISOString()} - ${end.toISOString()}`);
+        console.log(`[Download] Tab: ${targetJenis}, Total data: ${allTabData.length}, Filter: ${downloadType}`);
         
-        data = allTabData.filter(j => {
-          if (!j.mulai_jadwal) {
-            console.log(`[Download] Skip - no mulai_jadwal:`, j);
-            return false;
+        // Jika ada filter tanggal atau bulan
+        if (downloadType === "all") {
+          data = allTabData;
+        } else if (downloadType === "date") {
+          if (!downloadStartDate || !downloadEndDate) {
+            alert("Mohon pilih tanggal mulai dan akhir");
+            return;
           }
-          const mulai = new Date(j.mulai_jadwal);
-          if (isNaN(mulai.getTime())) {
-            console.log(`[Download] Skip - invalid date:`, j.mulai_jadwal);
-            return false;
+          const start = new Date(downloadStartDate);
+          const end = new Date(downloadEndDate);
+          end.setHours(23, 59, 59);
+          
+          data = allTabData.filter(j => {
+            if (!j.mulai_jadwal) return false;
+            const mulai = new Date(j.mulai_jadwal);
+            if (isNaN(mulai.getTime())) return false;
+            return mulai >= start && mulai <= end;
+          });
+        } else if (downloadType === "month") {
+          if (!downloadMonth) {
+            alert("Mohon pilih bulan");
+            return;
           }
-          const isInRange = mulai >= start && mulai <= end;
-          console.log(`[Download] Check: ${j.mulai_jadwal} => ${mulai.toISOString()}, in range: ${isInRange}`);
-          return isInRange;
-        });
-      } else if (downloadType === "month") {
-        if (!downloadMonth) {
-          alert("Mohon pilih bulan");
-          return;
+          const [year, month] = downloadMonth.split('-');
+          
+          data = allTabData.filter(j => {
+            if (!j.mulai_jadwal) return false;
+            const mulai = new Date(j.mulai_jadwal);
+            if (isNaN(mulai.getTime())) return false;
+            return mulai.getFullYear() === parseInt(year) && mulai.getMonth() === parseInt(month) - 1;
+          });
         }
-        const [year, month] = downloadMonth.split('-');
-        console.log(`[Download] Month filter: year=${year}, month=${month}`);
-        
-        data = allTabData.filter(j => {
-          if (!j.mulai_jadwal) return false;
-          const mulai = new Date(j.mulai_jadwal);
-          if (isNaN(mulai.getTime())) return false;
-          const isMatch = mulai.getFullYear() === parseInt(year) && mulai.getMonth() === parseInt(month) - 1;
-          return isMatch;
-        });
+      } else {
+        // Untuk modal download semua data (semua/date/month)
+        if (downloadType === "all") {
+          data = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain];
+        } else if (downloadType === "date") {
+          if (!downloadStartDate || !downloadEndDate) {
+            alert("Mohon pilih tanggal mulai dan akhir");
+            return;
+          }
+          const start = new Date(downloadStartDate);
+          const end = new Date(downloadEndDate);
+          end.setHours(23, 59, 59);
+          
+          data = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain].filter(j => {
+            const mulai = new Date(j.mulai_jadwal);
+            return mulai >= start && mulai <= end;
+          });
+        } else if (downloadType === "month") {
+          if (!downloadMonth) {
+            alert("Mohon pilih bulan");
+            return;
+          }
+          const [year, month] = downloadMonth.split('-');
+          
+          data = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain].filter(j => {
+            const mulai = new Date(j.mulai_jadwal);
+            return mulai.getFullYear() === parseInt(year) && mulai.getMonth() === parseInt(month) - 1;
+          });
+        }
       }
 
       console.log(`[Download] Hasil filter: ${data.length} data`);
@@ -539,6 +555,7 @@ export default function JadwalPageAdmin() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
+      const targetJenis = jenisTab || downloadJenisTab || downloadType;
       const filename = `jadwal_${targetJenis}_${new Date().toISOString().slice(0, 10)}.csv`;
       link.download = filename;
       link.click();
@@ -904,7 +921,7 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
         {jenis === "perkuliahan" && (
           <button
             onClick={() => window.openAddModal ? window.openAddModal("perkuliahan") : null}
-            className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            className="px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
             type="button"
           >
             <span role="img" aria-label="Perkuliahan">📚</span> + Perkuliahan
@@ -913,7 +930,7 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
         {jenis === "karya_akhir" && (
           <button
             onClick={() => window.openAddModal ? window.openAddModal("karya_akhir") : null}
-            className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+            className="px-4 py-2.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
             type="button"
           >
             <span role="img" aria-label="Karya Akhir">🎓</span> + Karya Akhir
@@ -922,7 +939,7 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
         {jenis === "lain_lain" && (
           <button
             onClick={() => window.openAddModal ? window.openAddModal("lain_lain") : null}
-            className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+            className="px-4 py-2.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
             type="button"
           >
             <span role="img" aria-label="Lain-lain">📋</span> + Lain-lain
@@ -931,7 +948,7 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
         {/* Download paling kanan, setelah CRUD - download sesuai tab aktif */}
         <button
           onClick={() => window.openDownloadModal ? window.openDownloadModal(jenis) : null}
-          className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors ml-2"
+          className="px-4 py-2.5 text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 rounded-lg transition-colors"
         >
           <svg className="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
