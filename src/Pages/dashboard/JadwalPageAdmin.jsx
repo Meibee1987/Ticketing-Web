@@ -7,6 +7,10 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+// 🎯 Import komponen reusable dari folder components/
+import SearchBar from "../../components/SearchBar";
+import ActionButtons from "../../components/ActionButtons";
+import Pagination from "../../components/Pagination";
 
 // ================================================================================
 // HELPER FUNCTIONS & CONSTANTS
@@ -375,7 +379,7 @@ export default function JadwalPageAdmin() {
     }
   };
 
-  // Submit handler
+  // Submit handler - REFACTORED (lebih simple!)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -388,31 +392,22 @@ export default function JadwalPageAdmin() {
         return;
       }
 
+      // 🎯 Object mapping: modalType → table name
+      const tableMap = {
+        perkuliahan: "jadwal_perkuliahan",
+        karya_akhir: "jadwal_karya_akhir",
+        lain_lain: "jadwal_lain_lain"
+      };
+
+      const table = tableMap[modalType];
+
+      // 🎯 Logic insert/update disatukan (tidak ada duplikasi!)
       let result;
-      if (modalType === "perkuliahan") {
-        const table = "jadwal_perkuliahan";
-        if (modalMode === "add") {
-          const { id, ...dataToInsert } = form; // Hapus id untuk insert
-          result = await supabase.from(table).insert([dataToInsert]);
-        } else {
-          result = await supabase.from(table).update(form).eq("id", form.id);
-        }
-      } else if (modalType === "karya_akhir") {
-        const table = "jadwal_karya_akhir";
-        if (modalMode === "add") {
-          const { id, ...dataToInsert } = form; // Hapus id untuk insert
-          result = await supabase.from(table).insert([dataToInsert]);
-        } else {
-          result = await supabase.from(table).update(form).eq("id", form.id);
-        }
+      if (modalMode === "add") {
+        const { id, ...dataToInsert } = form; // Hapus id untuk insert
+        result = await supabase.from(table).insert([dataToInsert]);
       } else {
-        const table = "jadwal_lain_lain";
-        if (modalMode === "add") {
-          const { id, ...dataToInsert } = form; // Hapus id untuk insert
-          result = await supabase.from(table).insert([dataToInsert]);
-        } else {
-          result = await supabase.from(table).update(form).eq("id", form.id);
-        }
+        result = await supabase.from(table).update(form).eq("id", form.id);
       }
 
       if (result.error) throw result.error;
@@ -887,36 +882,15 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
     <div className="space-y-4">
       {/* Search Box & CRUD Add Button */}
       <div className="flex items-center gap-2 w-full">
-        {/* Search kiri */}
-        <div className="relative flex-1 min-w-[200px]">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyPress={handleSearchKeyPress}
-            placeholder="Cari berdasarkan tanggal, agenda, ruangan, angkatan... (tekan Enter)"
-            className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          />
-        </div>
-        <button 
-          onClick={handleSearch}
-          className="px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors whitespace-nowrap"
-        >
-          Cari
-        </button>
-        {searchQuery && (
-          <button 
-            onClick={handleClearSearch}
-            className="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors whitespace-nowrap"
-          >
-            Reset
-          </button>
-        )}
+        {/* 🎯 Menggunakan komponen SearchBar yang reusable */}
+        <SearchBar
+          value={searchInput}
+          onChange={setSearchInput}
+          onSearch={handleSearch}
+          onClear={handleClearSearch}
+          placeholder="Cari berdasarkan tanggal, agenda, ruangan, angkatan... (tekan Enter)"
+          showClear={!!searchQuery}
+        />
         {/* CRUD Add Button sesuai tab */}
         {jenis === "perkuliahan" && (
           <button
@@ -1066,18 +1040,8 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                       </>
                     )}
                     <td className="py-3 px-4 border border-slate-200 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => onEdit(row)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Edit">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button onClick={() => onDelete(row.id, row.jenis)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Hapus">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
+                      {/* 🎯 Menggunakan komponen ActionButtons yang reusable */}
+                      <ActionButtons onEdit={onEdit} onDelete={onDelete} row={row} />
                     </td>
                   </tr>
                 ))}
@@ -1085,43 +1049,12 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
             </table>
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4">
-              <div className="text-sm text-slate-500">
-                Halaman {currentPage} dari {totalPages}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Prev
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                      currentPage === page
-                        ? "bg-indigo-600 text-white"
-                        : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
+          {/* 🎯 Menggunakan komponen Pagination yang reusable */}
+          <Pagination 
+            currentPage={currentPage} 
+            totalPages={totalPages} 
+            onPageChange={setCurrentPage} 
+          />
         </>
       )}
     </div>
