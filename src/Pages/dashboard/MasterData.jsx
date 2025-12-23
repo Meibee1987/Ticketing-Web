@@ -31,30 +31,28 @@ export default function MasterData() {
         case "dosen":
           const { data: dosenData, error: dosenError } = await supabase.from("dosen").select("*").order("id", { ascending: true });
           if (dosenError) throw dosenError;
-          console.log("✅ Dosen loaded:", dosenData);
           setDosen(dosenData || []);
           break;
         case "angkatan":
           const { data: angkatanData, error: angkatanError } = await supabase.from("angkatan").select("*").order("id", { ascending: true });
           if (angkatanError) throw angkatanError;
-          console.log("✅ Angkatan loaded:", angkatanData);
           setAngkatan(angkatanData || []);
           break;
         case "matakuliah":
           const { data: mkData, error: mkError } = await supabase.from("mata_kuliah").select("*").order("id", { ascending: true });
           if (mkError) throw mkError;
-          console.log("✅ Mata Kuliah loaded:", mkData);
           setMataKuliah(mkData || []);
           break;
         case "ruangan":
           const { data: ruanganData, error: ruanganError } = await supabase.from("ruangan").select("*").order("id", { ascending: true });
           if (ruanganError) throw ruanganError;
-          console.log("✅ Ruangan loaded:", ruanganData);
           setRuangan(ruanganData || []);
+          break;
+        default:
           break;
       }
     } catch (error) {
-      console.error("❌ Fetch error:", error);
+      console.error("Fetch error:", error);
       alert("Gagal mengambil data: " + error.message);
     } finally {
       setLoading(false);
@@ -129,41 +127,42 @@ export default function MasterData() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Master Data</h1>
-          <p className="text-slate-600">Kelola data master: Dosen, Angkatan, Mata Kuliah, dan Ruangan</p>
-        </div>
-        <button
-          onClick={handleCreate}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Tambah {tabs.find(t => t.id === activeTab)?.label}
-        </button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-900">Master Data</h1>
+        <p className="text-slate-600">Kelola data master: Dosen, Angkatan, Mata Kuliah, dan Ruangan</p>
       </div>
 
       {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="border-b border-slate-200">
-          <nav className="flex -mb-px overflow-x-auto">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setSearchInput(""); setSearchQuery(""); }}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? "border-blue-600 text-blue-600 bg-blue-50/50"
-                    : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
-                }`}
-              >
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
-              </button>
-            ))}
-          </nav>
+          <div className="flex items-center justify-between px-4">
+            <nav className="flex -mb-px overflow-x-auto">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => { setActiveTab(tab.id); setSearchInput(""); setSearchQuery(""); }}
+                  className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? "border-blue-600 text-blue-600 bg-blue-50/50"
+                      : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                  }`}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </nav>
+            {/* Tombol CRUD di kanan sejajar tab */}
+            <button
+              onClick={() => { setShowModal(true); setModalMode('create'); setSelectedItem(null); }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+               Tambah {tabs.find(t => t.id === activeTab)?.label}
+            </button>
+          </div>
         </div>
 
         {/* Search */}
@@ -370,30 +369,35 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
         return value !== "" && value !== null && value !== undefined;
       });
       
-      const insertData = Object.fromEntries(cleanData);
-      
-      // Debug log untuk memastikan id tidak ada
-      console.log(`📝 ${mode.toUpperCase()} ${tableName}:`, insertData);
+      // Convert to object and handle type conversions
+      const insertData = Object.fromEntries(
+        cleanData.map(([key, value]) => {
+          // Convert number fields
+          if (key === "kapasitas_ruangan" || key === "jumlah_mahasiswa") {
+            const numValue = parseInt(value, 10);
+            // Validate to ensure it's a valid number
+            if (isNaN(numValue)) {
+              throw new Error(`${key === "kapasitas_ruangan" ? "Kapasitas" : "Jumlah Mahasiswa"} harus berupa angka yang valid`);
+            }
+            return [key, numValue];
+          }
+          return [key, value];
+        })
+      );
 
       if (mode === "create") {
-        const { data, error } = await supabase.from(tableName).insert([insertData]).select();
-        if (error) {
-          console.error("❌ Insert error:", error);
-          throw error;
-        }
-        console.log("✅ Insert success:", data);
-        alert("Data berhasil ditambahkan!");
+        const { error } = await supabase.from(tableName).insert([insertData]);
+        if (error) throw error;
       } else if (mode === "edit") {
         const { error } = await supabase.from(tableName).update(insertData).eq("id", item.id);
-        if (error) {
-          console.error("❌ Update error:", error);
-          throw error;
-        }
-        alert("Data berhasil diupdate!");
+        if (error) throw error;
       }
+      
+      // Close modal and refresh data
       onSuccess();
+      alert(`Data berhasil ${mode === "create" ? "ditambahkan" : "diupdate"}!`);
     } catch (error) {
-      console.error("💥 Save error:", error);
+      console.error("Save error:", error);
       alert("Gagal menyimpan: " + error.message);
     } finally {
       setSubmitting(false);
