@@ -142,6 +142,7 @@ export default function JadwalPageAdmin() {
   
   // Download states
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+  const [downloadJenisTab, setDownloadJenisTab] = useState(null); // untuk menyimpan jenis tab yang akan didownload
   const [downloadType, setDownloadType] = useState("date");
   const [downloadStartDate, setDownloadStartDate] = useState("");
   const [downloadEndDate, setDownloadEndDate] = useState("");
@@ -272,12 +273,33 @@ export default function JadwalPageAdmin() {
     }
   };
 
+  // Agar bisa dipanggil dari window (untuk dipakai di JadwalTab)
   const openAddModal = (type) => {
     setModalMode("add");
     setModalType(type);
     setForm(resetForm(type));
     setModalOpen(true);
   };
+
+  // Expose openDownloadModal ke window agar bisa dipanggil dari JadwalTab
+  const openDownloadModal = (jenis) => {
+    console.log("[openDownloadModal] Jenis:", jenis, "Type:", typeof jenis);
+    setDownloadJenisTab(jenis);
+    setDownloadType("all"); // default ke semua saat modal dibuka
+    setDownloadStartDate("");
+    setDownloadEndDate("");
+    setDownloadMonth("");
+    setDownloadModalOpen(true);
+  };
+
+  useEffect(() => {
+    window.openDownloadModal = openDownloadModal;
+    window.openAddModal = openAddModal;
+    return () => {
+      delete window.openDownloadModal;
+      delete window.openAddModal;
+    };
+  }, []);
 
   const openEditModal = (row) => {
     setModalMode("edit");
@@ -428,25 +450,54 @@ export default function JadwalPageAdmin() {
     }
   };
 
-  // Download handler
-  const handleDownload = async () => {
+  // Fungsi untuk mendapatkan data berdasarkan jenis tab
+  const getDataByJenis = (jenis) => {
+    if (jenis === "perkuliahan") return jadwalPerkuliahan;
+    if (jenis === "karya_akhir") return jadwalKaryaAkhir;
+    if (jenis === "lain_lain") return jadwalLainLain;
+    return [];
+  };
+
+  // Download handler - dipanggil dari modal
+  const handleDownload = () => {
     try {
       let data = [];
+      const targetJenis = downloadJenisTab;
       
+      // Ambil data dari state berdasarkan jenis tab
+      let allTabData = getDataByJenis(targetJenis);
+      
+      console.log(`[Download] Tab: ${targetJenis}, Total data: ${allTabData.length}, Filter: ${downloadType}`);
+      console.log(`[Download] Sample data:`, allTabData.length > 0 ? allTabData[0] : "No data");
+      
+      // Jika ada filter tanggal atau bulan
       if (downloadType === "all") {
-        data = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain];
+        data = [...allTabData]; // copy array
       } else if (downloadType === "date") {
         if (!downloadStartDate || !downloadEndDate) {
           alert("Mohon pilih tanggal mulai dan akhir");
           return;
         }
         const start = new Date(downloadStartDate);
+        start.setHours(0, 0, 0, 0);
         const end = new Date(downloadEndDate);
-        end.setHours(23, 59, 59);
+        end.setHours(23, 59, 59, 999);
         
-        data = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain].filter(j => {
+        console.log(`[Download] Date range: ${start.toISOString()} - ${end.toISOString()}`);
+        
+        data = allTabData.filter(j => {
+          if (!j.mulai_jadwal) {
+            console.log(`[Download] Skip - no mulai_jadwal:`, j);
+            return false;
+          }
           const mulai = new Date(j.mulai_jadwal);
-          return mulai >= start && mulai <= end;
+          if (isNaN(mulai.getTime())) {
+            console.log(`[Download] Skip - invalid date:`, j.mulai_jadwal);
+            return false;
+          }
+          const isInRange = mulai >= start && mulai <= end;
+          console.log(`[Download] Check: ${j.mulai_jadwal} => ${mulai.toISOString()}, in range: ${isInRange}`);
+          return isInRange;
         });
       } else if (downloadType === "month") {
         if (!downloadMonth) {
@@ -454,12 +505,18 @@ export default function JadwalPageAdmin() {
           return;
         }
         const [year, month] = downloadMonth.split('-');
+        console.log(`[Download] Month filter: year=${year}, month=${month}`);
         
-        data = [...jadwalPerkuliahan, ...jadwalKaryaAkhir, ...jadwalLainLain].filter(j => {
+        data = allTabData.filter(j => {
+          if (!j.mulai_jadwal) return false;
           const mulai = new Date(j.mulai_jadwal);
-          return mulai.getFullYear() === parseInt(year) && mulai.getMonth() === parseInt(month) - 1;
+          if (isNaN(mulai.getTime())) return false;
+          const isMatch = mulai.getFullYear() === parseInt(year) && mulai.getMonth() === parseInt(month) - 1;
+          return isMatch;
         });
       }
+
+      console.log(`[Download] Hasil filter: ${data.length} data`);
 
       if (data.length === 0) {
         alert("Tidak ada data untuk didownload");
@@ -482,12 +539,14 @@ export default function JadwalPageAdmin() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `jadwal_${downloadType}_${new Date().toISOString().slice(0, 10)}.csv`;
+      const filename = `jadwal_${targetJenis}_${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
 
       alert(`Data berhasil didownload (${data.length} data)`);
       setDownloadModalOpen(false);
+      setDownloadJenisTab(null); // reset
     } catch (err) {
       console.error("Error downloading:", err);
       alert(`Gagal download: ${err.message}`);
@@ -533,33 +592,7 @@ export default function JadwalPageAdmin() {
   return (
     <div className="space-y-6">
       <PageHeader title="Kelola Jadwal" />
-      
-      {/* Actions */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Add Buttons */}
-            <button onClick={() => openAddModal("perkuliahan")} className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
-              <span>📚</span> + Perkuliahan
-            </button>
-            <button onClick={() => openAddModal("karya_akhir")} className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
-              <span>🎓</span> + Karya Akhir
-            </button>
-            <button onClick={() => openAddModal("lain_lain")} className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
-              <span>📋</span> + Lain-lain
-            </button>
-          </div>
-          <button 
-            onClick={() => setDownloadModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Download
-          </button>
-        </div>
-      </div>
+      {/* Download Button dipindah ke baris search & CRUD (lihat JadwalTab) */}
 
       {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -676,9 +709,11 @@ export default function JadwalPageAdmin() {
 
       {/* Download Modal */}
       {downloadModalOpen && (
-        <Modal onClose={() => setDownloadModalOpen(false)}>
+        <Modal onClose={() => { setDownloadModalOpen(false); setDownloadJenisTab(null); }}>
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-slate-900">Download Jadwal</h3>
+            <h3 className="text-lg font-semibold text-slate-900">
+              Download Jadwal {downloadJenisTab ? `- ${downloadJenisTab === "perkuliahan" ? "Perkuliahan" : downloadJenisTab === "karya_akhir" ? "Karya Akhir" : "Lain-lain"}` : ""}
+            </h3>
             
             <div className="space-y-3">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -689,7 +724,7 @@ export default function JadwalPageAdmin() {
                   onChange={(e) => setDownloadType(e.target.value)}
                   className="w-4 h-4"
                 />
-                <span className="text-sm text-slate-700">Semua Data</span>
+                <span className="text-sm text-slate-700">{downloadJenisTab ? "Semua Data di Tab Ini" : "Semua Data"}</span>
               </label>
 
               <label className="flex items-center gap-2 cursor-pointer">
@@ -745,7 +780,7 @@ export default function JadwalPageAdmin() {
 
             <div className="flex gap-2 pt-4">
               <button
-                onClick={() => setDownloadModalOpen(false)}
+                onClick={() => { setDownloadModalOpen(false); setDownloadJenisTab(null); }}
                 className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
               >
                 Batal
@@ -833,9 +868,10 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
 
   return (
     <div className="space-y-4">
-      {/* Search Box */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      {/* Search Box & CRUD Add Button */}
+      <div className="flex items-center gap-2 w-full">
+        {/* Search kiri */}
+        <div className="relative flex-1 min-w-[200px]">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -864,6 +900,44 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
             Reset
           </button>
         )}
+        {/* CRUD Add Button sesuai tab */}
+        {jenis === "perkuliahan" && (
+          <button
+            onClick={() => window.openAddModal ? window.openAddModal("perkuliahan") : null}
+            className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            type="button"
+          >
+            <span role="img" aria-label="Perkuliahan">📚</span> + Perkuliahan
+          </button>
+        )}
+        {jenis === "karya_akhir" && (
+          <button
+            onClick={() => window.openAddModal ? window.openAddModal("karya_akhir") : null}
+            className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+            type="button"
+          >
+            <span role="img" aria-label="Karya Akhir">🎓</span> + Karya Akhir
+          </button>
+        )}
+        {jenis === "lain_lain" && (
+          <button
+            onClick={() => window.openAddModal ? window.openAddModal("lain_lain") : null}
+            className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+            type="button"
+          >
+            <span role="img" aria-label="Lain-lain">📋</span> + Lain-lain
+          </button>
+        )}
+        {/* Download paling kanan, setelah CRUD - download sesuai tab aktif */}
+        <button
+          onClick={() => window.openDownloadModal ? window.openDownloadModal(jenis) : null}
+          className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors ml-2"
+        >
+          <svg className="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Download
+        </button>
       </div>
 
       {/* Info hasil search */}
