@@ -2,6 +2,7 @@
 // KOMPONEN REUSABLE: SearchBar
 // ================================================================================
 // 🎯 Komponen ini menggabungkan input search, tombol Cari, dan tombol Reset
+// Search hanya trigger saat: 1) Tekan Enter, atau 2) Klik tombol Cari
 // Bisa dipakai di page mana saja (JadwalPageAdmin, MasterData, UsersPage, dll)
 
 export default function SearchBar({ 
@@ -12,8 +13,12 @@ export default function SearchBar({
   placeholder = "Cari...",
   showClear = false 
 }) {
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') onSearch();
+  // Handle Enter key press
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault(); // Prevent form submission
+      onSearch();
+    }
   };
 
   return (
@@ -28,10 +33,16 @@ export default function SearchBar({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         />
+        {/* Hint text */}
+        {value && !showClear && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">
+            Tekan Enter
+          </span>
+        )}
       </div>
       <button 
         onClick={onSearch}

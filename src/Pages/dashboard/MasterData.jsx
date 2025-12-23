@@ -16,6 +16,7 @@ export default function MasterData() {
   const [loading, setLoading] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all"); // all, aktif, nonaktif
   
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -112,8 +113,16 @@ export default function MasterData() {
     }
   };
 
-  // Filter data based on search
+  // Filter data based on search and status
   const filteredData = getCurrentData().filter((item) => {
+    // Filter by status (skip if column doesn't exist)
+    if (item.hasOwnProperty('aktif_nonaktif')) {
+      if (statusFilter === "aktif" && item.aktif_nonaktif !== true) return false;
+      if (statusFilter === "nonaktif" && item.aktif_nonaktif !== false) return false;
+    }
+    
+    // Filter by search
+    if (!searchQuery) return true;
     const searchLower = searchQuery.toLowerCase();
     return Object.values(item).some((val) => 
       val && val.toString().toLowerCase().includes(searchLower)
@@ -143,7 +152,7 @@ export default function MasterData() {
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => { setActiveTab(tab.id); setSearchInput(""); setSearchQuery(""); }}
+                  onClick={() => { setActiveTab(tab.id); setSearchInput(""); setSearchQuery(""); setStatusFilter("all"); }}
                   className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === tab.id
                       ? "border-blue-600 text-blue-600 bg-blue-50/50"
@@ -168,19 +177,31 @@ export default function MasterData() {
           </div>
         </div>
 
-        {/* 🎯 Search menggunakan komponen SearchBar yang reusable */}
+        {/* 🎯 Search dengan Dropdown Filter Status */}
         <div className="px-4 py-4 border-b border-slate-200 bg-slate-50">
           <div className="flex items-center gap-2">
+            {/* Dropdown Filter Status */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+            >
+              <option value="all">Semua Status</option>
+              <option value="aktif">✅ Aktif</option>
+              <option value="nonaktif">❌ Non-Aktif</option>
+            </select>
+            
+            {/* Search Bar */}
             <SearchBar
               value={searchInput}
               onChange={setSearchInput}
               onSearch={() => setSearchQuery(searchInput)}
               onClear={() => { setSearchInput(""); setSearchQuery(""); }}
               placeholder={
-                activeTab === "ruangan" ? "Masukan Kata kunci Nama Ruangan" :
-                activeTab === "dosen" ? "Masukan kata kunci Nama Dosen" :
-                activeTab === "angkatan" ? "Masukan kata kunci Nama Angkatan":
-                `Masukan kata kunci ${tabs.find(t => t.id === activeTab)?.label}`
+                activeTab === "ruangan" ? "Cari nama ruangan..." :
+                activeTab === "dosen" ? "Cari nama dosen..." :
+                activeTab === "angkatan" ? "Cari nama angkatan...":
+                `Cari ${tabs.find(t => t.id === activeTab)?.label}...`
               }
               showClear={!!searchInput}
             />
@@ -233,6 +254,9 @@ export default function MasterData() {
 // Data Table Component
 function DataTable({ activeTab, data, onEdit, onDelete }) {
   const getColumns = () => {
+    // Check if any data has aktif_nonaktif column
+    const hasStatusColumn = data.length > 0 && data[0].hasOwnProperty('aktif_nonaktif');
+    
     switch (activeTab) {
       case "dosen":
         return [
@@ -241,18 +265,21 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
           { key: "nip", label: "NIP" },
           { key: "email", label: "Email" },
           { key: "telepon", label: "Telepon" },
+          ...(hasStatusColumn ? [{ key: "aktif_nonaktif", label: "Status", type: "status" }] : []),
         ];
       case "angkatan":
         return [
           { key: "id", label: "ID" },
           { key: "nama_angkatan", label: "Nama Angkatan" },
           { key: "jumlah_mahasiswa", label: "Jumlah Mahasiswa" },
+          ...(hasStatusColumn ? [{ key: "aktif_nonaktif", label: "Status", type: "status" }] : []),
         ];
       case "matakuliah":
         return [
           { key: "id", label: "ID" },
           { key: "kode_mata_kuliah", label: "Kode Mata Kuliah" },
           { key: "mata_kuliah", label: "Mata Kuliah" },
+          ...(hasStatusColumn ? [{ key: "aktif_nonaktif", label: "Status", type: "status" }] : []),
         ];
       case "ruangan":
         return [
@@ -260,6 +287,7 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
           { key: "nama_ruangan", label: "Nama Ruangan" },
           { key: "kapasitas_ruangan", label: "Kapasitas" },
           { key: "gedung", label: "Gedung" },
+          ...(hasStatusColumn ? [{ key: "aktif_nonaktif", label: "Status", type: "status" }] : []),
         ];
       default:
         return [];
@@ -285,7 +313,19 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
           <tr key={item.id} className="hover:bg-slate-50">
             {columns.map((col) => (
               <td key={col.key} className="px-6 py-4 text-sm text-slate-700">
-                {item[col.key] || "-"}
+                {col.type === "status" ? (
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    item[col.key] === true 
+                      ? "bg-green-100 text-green-800" 
+                      : item[col.key] === false 
+                        ? "bg-red-100 text-red-800"
+                        : "bg-gray-100 text-gray-800"
+                  }`}>
+                    {item[col.key] === true ? "✅ Aktif" : item[col.key] === false ? "❌ Non-Aktif" : "⚪ Belum diset"}
+                  </span>
+                ) : (
+                  item[col.key] || "-"
+                )}
               </td>
             ))}
             <td className="px-6 py-4">
@@ -312,7 +352,7 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
     if (item) {
       setFormData(item);
     } else {
-      // Default form data based on active tab
+      // Default form data based on active tab (aktif_nonaktif only if supported)
       switch (activeTab) {
         case "dosen":
           setFormData({ nama_dosen: "", nip: "", email: "", telepon: "" });
@@ -366,6 +406,10 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
             }
             return [key, numValue];
           }
+          // Convert boolean fields (handle if column doesn't exist yet)
+          if (key === "aktif_nonaktif") {
+            return [key, value === true || value === "true"];
+          }
           return [key, value];
         })
       );
@@ -412,6 +456,9 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
             <FormField label="NIP" name="nip" value={formData.nip || ""} onChange={handleChange} disabled={isReadOnly} />
             <FormField label="Email" name="email" type="email" value={formData.email || ""} onChange={handleChange} disabled={isReadOnly} />
             <FormField label="Telepon" name="telepon" value={formData.telepon || ""} onChange={handleChange} disabled={isReadOnly} />
+            {(item?.hasOwnProperty('aktif_nonaktif') || formData.hasOwnProperty('aktif_nonaktif')) && (
+              <StatusToggle label="Status" checked={formData.aktif_nonaktif ?? true} onChange={(val) => setFormData(prev => ({ ...prev, aktif_nonaktif: val }))} disabled={isReadOnly} />
+            )}
           </>
         );
       case "angkatan":
@@ -419,6 +466,9 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
           <>
             <FormField label="Nama Angkatan" name="nama_angkatan" value={formData.nama_angkatan || ""} onChange={handleChange} disabled={isReadOnly} required />
             <FormField label="Jumlah Mahasiswa" name="jumlah_mahasiswa" type="number" value={formData.jumlah_mahasiswa || ""} onChange={handleChange} disabled={isReadOnly} required />
+            {(item?.hasOwnProperty('aktif_nonaktif') || formData.hasOwnProperty('aktif_nonaktif')) && (
+              <StatusToggle label="Status" checked={formData.aktif_nonaktif ?? true} onChange={(val) => setFormData(prev => ({ ...prev, aktif_nonaktif: val }))} disabled={isReadOnly} />
+            )}
           </>
         );
       case "matakuliah":
@@ -426,6 +476,9 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
           <>
             <FormField label="Kode Mata Kuliah" name="kode_mata_kuliah" value={formData.kode_mata_kuliah || ""} onChange={handleChange} disabled={isReadOnly} required />
             <FormField label="Mata Kuliah" name="mata_kuliah" value={formData.mata_kuliah || ""} onChange={handleChange} disabled={isReadOnly} required />
+            {(item?.hasOwnProperty('aktif_nonaktif') || formData.hasOwnProperty('aktif_nonaktif')) && (
+              <StatusToggle label="Status" checked={formData.aktif_nonaktif ?? true} onChange={(val) => setFormData(prev => ({ ...prev, aktif_nonaktif: val }))} disabled={isReadOnly} />
+            )}
           </>
         );
       case "ruangan":
@@ -434,6 +487,9 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
             <FormField label="Nama Ruangan" name="nama_ruangan" value={formData.nama_ruangan || ""} onChange={handleChange} disabled={isReadOnly} required />
             <FormField label="Kapasitas" name="kapasitas_ruangan" type="number" value={formData.kapasitas_ruangan || ""} onChange={handleChange} disabled={isReadOnly} required />
             <FormField label="Gedung" name="gedung" value={formData.gedung || ""} onChange={handleChange} disabled={isReadOnly} required />
+            {(item?.hasOwnProperty('aktif_nonaktif') || formData.hasOwnProperty('aktif_nonaktif')) && (
+              <StatusToggle label="Status" checked={formData.aktif_nonaktif ?? true} onChange={(val) => setFormData(prev => ({ ...prev, aktif_nonaktif: val }))} disabled={isReadOnly} />
+            )}
           </>
         );
       default:
@@ -492,6 +548,32 @@ function FormField({ label, name, type = "text", value, onChange, disabled, requ
           name === "telepon" ? "Masukan Telepon" : 
           `Masukkan ${label.toLowerCase()}`}
       />
+    </div>
+  );
+}
+
+// Status Toggle Component
+function StatusToggle({ label, checked, onChange, disabled }) {
+  return (
+    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <button
+        type="button"
+        onClick={() => !disabled && onChange(!checked)}
+        disabled={disabled}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+          checked ? "bg-green-500" : "bg-gray-300"
+        } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            checked ? "translate-x-6" : "translate-x-1"
+          }`}
+        />
+      </button>
+      <span className={`text-sm font-medium ${checked ? "text-green-600" : "text-red-600"}`}>
+        {checked ? "✅ Aktif" : "❌ Non-Aktif"}
+      </span>
     </div>
   );
 }

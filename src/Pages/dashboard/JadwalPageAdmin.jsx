@@ -11,6 +11,7 @@ import { supabase } from "../../supabaseClient";
 import SearchBar from "../../components/SearchBar";
 import ActionButtons from "../../components/ActionButtons";
 import Pagination from "../../components/Pagination";
+import SearchableSelect from "../../components/SearchableSelect";
 
 // ================================================================================
 // HELPER FUNCTIONS & CONSTANTS
@@ -147,7 +148,7 @@ export default function JadwalPageAdmin() {
   // Download states
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [downloadJenisTab, setDownloadJenisTab] = useState(null); // untuk menyimpan jenis tab yang akan didownload
-  const [downloadType, setDownloadType] = useState("date");
+  const [downloadType, setDownloadType] = useState("all"); // Default: all (bukan date)
   const [downloadStartDate, setDownloadStartDate] = useState("");
   const [downloadEndDate, setDownloadEndDate] = useState("");
   const [downloadMonth, setDownloadMonth] = useState("");
@@ -158,12 +159,12 @@ export default function JadwalPageAdmin() {
       setLoading(true);
       setError(null);
 
-      // Fetch options
+      // Fetch options - hanya yang aktif (aktif_nonaktif = true)
       const [dosenRes, ruanganRes, angkatanRes, mataKuliahRes, agendaRes] = await Promise.all([
-        supabase.from("dosen").select("id, nama_dosen"),
-        supabase.from("ruangan").select("id, nama_ruangan"),
-        supabase.from("angkatan").select("id, nama_angkatan"),
-        supabase.from("mata_kuliah").select("*"),
+        supabase.from("dosen").select("id, nama_dosen, aktif_nonaktif").eq("aktif_nonaktif", true),
+        supabase.from("ruangan").select("id, nama_ruangan, aktif_nonaktif").eq("aktif_nonaktif", true),
+        supabase.from("angkatan").select("id, nama_angkatan, aktif_nonaktif").eq("aktif_nonaktif", true),
+        supabase.from("mata_kuliah").select("*, aktif_nonaktif").eq("aktif_nonaktif", true),
         supabase.from("agenda_karya_akhir").select("id, agenda_karya_akhir")
       ]);
 
@@ -570,25 +571,25 @@ export default function JadwalPageAdmin() {
     if (modalType === "perkuliahan") {
       return (
         <>
-          <SelectField label="Angkatan" value={form.id_angkatan} onChange={(v) => handleChange("id_angkatan", v)} options={options.angkatan} displayKey="nama_angkatan" />
-          <SelectField label="Mata Kuliah" value={form.id_mata_kuliah} onChange={(v) => handleChange("id_mata_kuliah", v)} options={options.mataKuliah} displayKey={(m) => m.mata_kuliah || m.nama_matkul || m.nama || `MK ${m.id}`} />
-          <SelectField label="Dosen" value={form.dosen_id} onChange={(v) => handleChange("dosen_id", v)} options={options.dosen} displayKey="nama_dosen" />
-          <SelectField label="Ruangan" value={form.ruangan_id} onChange={(v) => handleChange("ruangan_id", v)} options={options.ruangan} displayKey="nama_ruangan" />
+          <SearchableSelect label="Angkatan" value={form.id_angkatan} onChange={(v) => handleChange("id_angkatan", v)} options={options.angkatan} displayKey="nama_angkatan" required />
+          <SearchableSelect label="Mata Kuliah" value={form.id_mata_kuliah} onChange={(v) => handleChange("id_mata_kuliah", v)} options={options.mataKuliah} displayKey={(m) => m.mata_kuliah || m.nama_matkul || m.nama || `MK ${m.id}`} required />
+          <SearchableSelect label="Dosen" value={form.dosen_id} onChange={(v) => handleChange("dosen_id", v)} options={options.dosen} displayKey="nama_dosen" required />
+          <SearchableSelect label="Ruangan" value={form.ruangan_id} onChange={(v) => handleChange("ruangan_id", v)} options={options.ruangan} displayKey="nama_ruangan" required />
         </>
       );
     } else if (modalType === "karya_akhir") {
       return (
         <>
-          <SelectField label="Angkatan" value={form.nama_angkatan} onChange={(v) => handleChange("nama_angkatan", v)} options={options.angkatan} displayKey="nama_angkatan" />
-          <SelectField label="Ruangan" value={form.nama_ruangan} onChange={(v) => handleChange("nama_ruangan", v)} options={options.ruangan} displayKey="nama_ruangan" />
-          <SelectField label="Agenda" value={form.agenda_jadwal_karya_akhir} onChange={(v) => handleChange("agenda_jadwal_karya_akhir", v)} options={options.agenda} displayKey="agenda_karya_akhir" />
+          <SearchableSelect label="Angkatan" value={form.nama_angkatan} onChange={(v) => handleChange("nama_angkatan", v)} options={options.angkatan} displayKey="nama_angkatan" required />
+          <SearchableSelect label="Ruangan" value={form.nama_ruangan} onChange={(v) => handleChange("nama_ruangan", v)} options={options.ruangan} displayKey="nama_ruangan" required />
+          <SearchableSelect label="Agenda" value={form.agenda_jadwal_karya_akhir} onChange={(v) => handleChange("agenda_jadwal_karya_akhir", v)} options={options.agenda} displayKey="agenda_karya_akhir" required />
         </>
       );
     } else {
       return (
         <>
           <InputField label="Nama User" value={form.nama_user || ""} onChange={(v) => handleChange("nama_user", v)} placeholder="Masukkan nama user" />
-          <SelectField label="Ruangan" value={form.nama_ruangan} onChange={(v) => handleChange("nama_ruangan", v)} options={options.ruangan} displayKey="nama_ruangan" />
+          <SearchableSelect label="Ruangan" value={form.nama_ruangan} onChange={(v) => handleChange("nama_ruangan", v)} options={options.ruangan} displayKey="nama_ruangan" required />
           <InputField label="Agenda" value={form.agenda || ""} onChange={(v) => handleChange("agenda", v)} placeholder="Masukkan agenda" />
         </>
       );
@@ -798,7 +799,7 @@ export default function JadwalPageAdmin() {
                 Batal
               </button>
               <button
-                onClick={handleDownload}
+                onClick={() => handleDownload()}
                 className="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg"
               >
                 Download
