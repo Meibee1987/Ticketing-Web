@@ -948,7 +948,7 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
         {/* Download paling kanan, setelah CRUD - download sesuai tab aktif */}
         <button
           onClick={() => window.openDownloadModal ? window.openDownloadModal(jenis) : null}
-          className="px-4 py-2.5 text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 rounded-lg transition-colors"
+          className="px-4 py-2.5 text-sm font-medium text-white bg-yellow-600 hover:bg--700 rounded-lg transition-colors"
         >
           <svg className="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1006,7 +1006,7 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
               </thead>
               <tbody>
                 {paginatedData.map((row, idx) => (
-                  <tr key={idx} className="border-b border-slate-200 hover:bg-blue-50 transition-colors">
+                  <tr key={idx} className="border-b border-slate-200 hover:bg-blue-100 transition-colors">
                     {jenis === "perkuliahan" && (
                       <>
                         <td className="py-3 px-4 border border-slate-200">
