@@ -5,13 +5,13 @@
 // Search hanya trigger saat: 1) Tekan Enter, atau 2) Klik tombol Cari
 // Bisa dipakai di page mana saja (JadwalPageAdmin, MasterData, UsersPage, dll)
 
-export default function SearchBar({ 
-  value, 
-  onChange, 
-  onSearch, 
-  onClear, 
-  placeholder = "Cari...",
-  showClear = false 
+export default function SearchBar({
+  value,
+  onChange,
+  onSearch,
+  onClear,
+  placeholder = 'Cari...',
+  showClear = false,
 }) {
   // Handle Enter key press
   const handleKeyDown = (e) => {
@@ -25,8 +25,18 @@ export default function SearchBar({
     <>
       <div className="relative flex-1 min-w-[200px]">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <svg
+            className="h-5 w-5 text-slate-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
         </div>
         <input
@@ -44,14 +54,14 @@ export default function SearchBar({
           </span>
         )}
       </div>
-      <button 
+      <button
         onClick={onSearch}
         className="px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors whitespace-nowrap"
       >
         Cari
       </button>
       {showClear && (
-        <button 
+        <button
           onClick={onClear}
           className="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors whitespace-nowrap"
         >

@@ -3,30 +3,30 @@ import {
   createBrowserRouter,
   RouterProvider,
   Navigate,
-} from "react-router-dom";
+} from 'react-router-dom';
 
 // Import pages & layout
-import ProtectedRoute from "./components/ProtectedRoute";
-import LoginPage from "./Pages/LoginPage";
+import ProtectedRoute from './components/ProtectedRoute';
+import LoginPage from './Pages/LoginPage';
 
-import DashboardLayout from "./Pages/dashboard/DashboardLayout";
-import OverviewPage from "./Pages/dashboard/OverviewPage";
-import DashboardTicketPage from "./Pages/dashboard/DashboardTicketPage";
-import TicketingPage from "./Pages/dashboard/TicketingPage";
-import AllTicketsPage from "./Pages/dashboard/AllTicketsPage";
-import MyTicketsPage from "./Pages/dashboard/MyTicketsPage";
-import UsersPage from "./Pages/dashboard/UsersPage";
-import SettingsPage from "./Pages/dashboard/SettingsPage";
-import JadwalPage from "./Pages/dashboard/JadwalPage";
-import JadwalPageAdmin from "./Pages/dashboard/JadwalPageAdmin";
-import RuanganPage from "./Pages/dashboard/RuanganPage";
-import MasterData from "./Pages/dashboard/MasterData";
+import DashboardLayout from './Pages/dashboard/DashboardLayout';
+import OverviewPage from './Pages/dashboard/OverviewPage';
+import DashboardTicketPage from './Pages/dashboard/DashboardTicketPage';
+import TicketingPage from './Pages/dashboard/TicketingPage';
+import AllTicketsPage from './Pages/dashboard/AllTicketsPage';
+import MyTicketsPage from './Pages/dashboard/MyTicketsPage';
+import UsersPage from './Pages/dashboard/UsersPage';
+import SettingsPage from './Pages/dashboard/SettingsPage';
+import JadwalPage from './Pages/dashboard/JadwalPage';
+import JadwalPageAdmin from './Pages/dashboard/JadwalPageAdmin';
+import RuanganPage from './Pages/dashboard/RuanganPage';
+import MasterData from './Pages/dashboard/MasterData';
 
 // Router configuration
 const router = createBrowserRouter([
   // Public Route
   {
-    path: "/login",
+    path: '/login',
     element: <LoginPage />,
   },
 
@@ -35,21 +35,21 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       {
-        path: "/dashboard",
+        path: '/dashboard',
         element: <DashboardLayout />,
 
         // Nested routes di dalam dashboard
         children: [
-          { index: true, element: <DashboardTicketPage /> },      // /dashboard
-          { path: "ticketing", element: <TicketingPage /> }, // /dashboard/ticketing
-          { path: "tickets", element: <AllTicketsPage /> }, // /dashboard/tickets
-          { path: "my-tickets", element: <MyTicketsPage /> }, // /dashboard/my-tickets (includes create ticket)
-          { path: "users", element: <UsersPage /> },       // /dashboard/users
-          { path: "settings", element: <SettingsPage /> }, // /dashboard/settings
-          { path: "jadwal", element: <JadwalPage /> },     // /dashboard/jadwal
-          { path: "jadwal-admin", element: <JadwalPageAdmin /> }, // /dashboard/jadwal-admin
-          { path: "ruangan", element: <RuanganPage /> },   // /dashboard/ruangan
-          { path: "database", element: <MasterData /> }, // /dashboard/database
+          { index: true, element: <DashboardTicketPage /> }, // /dashboard
+          { path: 'ticketing', element: <TicketingPage /> }, // /dashboard/ticketing
+          { path: 'tickets', element: <AllTicketsPage /> }, // /dashboard/tickets
+          { path: 'my-tickets', element: <MyTicketsPage /> }, // /dashboard/my-tickets (includes create ticket)
+          { path: 'users', element: <UsersPage /> }, // /dashboard/users
+          { path: 'settings', element: <SettingsPage /> }, // /dashboard/settings
+          { path: 'jadwal', element: <JadwalPage /> }, // /dashboard/jadwal
+          { path: 'jadwal-admin', element: <JadwalPageAdmin /> }, // /dashboard/jadwal-admin
+          { path: 'ruangan', element: <RuanganPage /> }, // /dashboard/ruangan
+          { path: 'database', element: <MasterData /> }, // /dashboard/database
         ],
       },
     ],
@@ -57,7 +57,7 @@ const router = createBrowserRouter([
 
   // Redirect semua undefined routes
   {
-    path: "*",
+    path: '*',
     element: <Navigate to="/dashboard" replace />,
   },
 ]);

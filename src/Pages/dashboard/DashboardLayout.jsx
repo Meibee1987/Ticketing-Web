@@ -1,17 +1,17 @@
-import { NavLink, Outlet } from "react-router-dom";
-import { supabase, TOKEN_KEY } from "../../supabaseClient";
+import { NavLink, Outlet } from 'react-router-dom';
+import { supabase, TOKEN_KEY } from '../../supabaseClient';
 
 export default function DashboardLayout() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(TOKEN_KEY);
-    window.location.href = "/login";
+    window.location.href = '/login';
   };
 
   const menuItemClass = ({ isActive }) =>
     `w-full text-left px-4 py-2 text-sm rounded-r-full flex items-center gap-2 transition-all
-     ${isActive ? "bg-gradient-to-r from-[#e6c200] to-[#c9a900] text-[#5c0017] font-semibold shadow-md" : "hover:bg-[#7a1c2f]/80"}`;
+     ${isActive ? 'bg-gradient-to-r from-[#e6c200] to-[#c9a900] text-[#5c0017] font-semibold shadow-md' : 'hover:bg-[#7a1c2f]/80'}`;
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-blue-50 via-yellow-50 to-blue-100">
@@ -86,13 +86,15 @@ export default function DashboardLayout() {
       {/* Main Area dengan margin untuk sidebar */}
       <div className="flex-1 flex flex-col min-h-screen ml-64">
         {/* Header - Fixed */}
-        <header className="h-16 bg-gradient-to-r from-[#1e3a8a] via-[#2563eb] to-[#1e40af] border-b-2 border-[#fed80b]/50 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 z-40 shadow-xl" style={{ left: '16rem' }}>
-          <div className="flex items-center gap-3">
-          </div>
+        <header
+          className="h-16 bg-gradient-to-r from-[#1e3a8a] via-[#2563eb] to-[#1e40af] border-b-2 border-[#fed80b]/50 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 z-40 shadow-xl"
+          style={{ left: '16rem' }}
+        >
+          <div className="flex items-center gap-3"></div>
 
           <div className="flex items-center gap-4">
             <span className="hidden md:inline text-sm text-[#fed80b] font-medium">
-              Hi, Azka 
+              Hi, Azka
             </span>
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#fed80b] to-[#f5c400] ring-2 ring-white/50 shadow-lg" />
           </div>

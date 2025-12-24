@@ -1,6 +1,6 @@
 // src/Pages/dashboard/OverviewPage.jsx
-import { useState, useEffect } from "react";
-import { supabase } from "../../supabaseClient";
+import { useState, useEffect } from 'react';
+import { supabase } from '../../supabaseClient';
 
 export default function OverviewPage() {
   return (
@@ -64,7 +64,7 @@ function DashboardContent() {
 function JadwalPerkuliahanTable() {
   const [jadwal, setJadwal] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -72,22 +72,24 @@ function JadwalPerkuliahanTable() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        setError("");
+        setError('');
 
         // 1. Ambil jadwal_perkuliahan (ambil semua kolom untuk menghindari 400 jika nama kolom berbeda)
         const { data: jadwalData, error: jadwalError } = await supabase
-          .from("jadwal_perkuliahan")
-          .select("*,dosen(*),ruangan(*)")
-          .order("id", { ascending: true });
+          .from('jadwal_perkuliahan')
+          .select('*,dosen(*),ruangan(*)')
+          .order('id', { ascending: true });
 
         if (jadwalError) throw jadwalError;
 
         // 2. Ambil tabel dosen dan ruangan (nama kolom umum: id, nama_dosen / nama_ruangan)
-        const [{ data: dosenData, error: dosenError }, { data: ruanganData, error: ruanganError }] =
-          await Promise.all([
-            supabase.from("dosen").select("id, nama_dosen"),
-            supabase.from("ruangan").select("id, nama_ruangan"),
-          ]);
+        const [
+          { data: dosenData, error: dosenError },
+          { data: ruanganData, error: ruanganError },
+        ] = await Promise.all([
+          supabase.from('dosen').select('id, nama_dosen'),
+          supabase.from('ruangan').select('id, nama_ruangan'),
+        ]);
 
         if (dosenError) throw dosenError;
         if (ruanganError) throw ruanganError;
@@ -111,56 +113,75 @@ function JadwalPerkuliahanTable() {
 
         const findKey = (patterns) => {
           for (const p of patterns) {
-            const rx = new RegExp(p, "i");
+            const rx = new RegExp(p, 'i');
             const k = keys.find((kk) => rx.test(kk));
             if (k) return k;
           }
           return null;
         };
 
-        const dosenIdKey = findKey(["^dosen_id$", "dosen.*id", "id_dosen", "dosen"]) || "dosen_id";
-        const ruanganIdKey = findKey(["^ruangan_id$", "ruangan.*id", "id_ruangan", "ruangan"]) || "ruangan_id";
-        const startKey = findKey(["awal", "mulai", "start", "jam_mulai", "waktu_mulai"]) || "awal_jadwal";
-        const endKey = findKey(["akhir", "selesai", "end", "jam_selesai", "waktu_selesai"]) || "akhir_jadwal";
+        const dosenIdKey =
+          findKey(['^dosen_id$', 'dosen.*id', 'id_dosen', 'dosen']) ||
+          'dosen_id';
+        const ruanganIdKey =
+          findKey(['^ruangan_id$', 'ruangan.*id', 'id_ruangan', 'ruangan']) ||
+          'ruangan_id';
+        const startKey =
+          findKey(['awal', 'mulai', 'start', 'jam_mulai', 'waktu_mulai']) ||
+          'awal_jadwal';
+        const endKey =
+          findKey([
+            'akhir',
+            'selesai',
+            'end',
+            'jam_selesai',
+            'waktu_selesai',
+          ]) || 'akhir_jadwal';
 
         // 5. Gabungkan nama_dosen & nama_ruangan ke data jadwal menggunakan key yang terdeteksi
         let merged = (jadwalData || []).map((j) => ({
           ...j,
-          nama_dosen: dosenMap[j[dosenIdKey]] || "-",
-          nama_ruangan: ruanganMap[j[ruanganIdKey]] || "-",
+          nama_dosen: dosenMap[j[dosenIdKey]] || '-',
+          nama_ruangan: ruanganMap[j[ruanganIdKey]] || '-',
           _startKey: startKey,
           _endKey: endKey,
         }));
 
         // 6. Jika ada kolom id lain yang relevan (mis. jadwal_id), coba join nama_jadwal
-        const jadwalIdKeyAuto = keys.find((k) => /jadwal/i.test(k) && /id/i.test(k));
+        const jadwalIdKeyAuto = keys.find(
+          (k) => /jadwal/i.test(k) && /id/i.test(k)
+        );
         if (jadwalIdKeyAuto) {
-          const tableName = jadwalIdKeyAuto.replace(/(^id_|_id$)/i, "");
+          const tableName = jadwalIdKeyAuto.replace(/(^id_|_id$)/i, '');
           try {
             // Ambil sample dari tabel terkait untuk mendeteksi nama kolom
             const { data: sampleTbl, error: sampleErr } = await supabase
               .from(tableName)
-              .select("*")
+              .select('*')
               .limit(1)
               .maybeSingle();
 
             if (!sampleErr && sampleTbl) {
               const candidateNameKeys = [
-                "nama_jadwal",
-                "nama",
-                "name",
-                "title",
-                "judul",
-                "nama_mata_kuliah",
-                "nama_matkul",
+                'nama_jadwal',
+                'nama',
+                'name',
+                'title',
+                'judul',
+                'nama_mata_kuliah',
+                'nama_matkul',
               ];
 
-              const foundNameKey = candidateNameKeys.find((ck) => ck in sampleTbl) || Object.keys(sampleTbl).find((k) => /nama|name|title|judul/i.test(k));
+              const foundNameKey =
+                candidateNameKeys.find((ck) => ck in sampleTbl) ||
+                Object.keys(sampleTbl).find((k) =>
+                  /nama|name|title|judul/i.test(k)
+                );
 
               if (foundNameKey) {
                 const { data: namaTblData, error: namaTblErr } = await supabase
                   .from(tableName)
-                  .select("id, " + foundNameKey);
+                  .select('id, ' + foundNameKey);
 
                 if (!namaTblErr) {
                   const namaMap = {};
@@ -171,21 +192,21 @@ function JadwalPerkuliahanTable() {
                   // Tambahkan properti nama_jadwal ke setiap row jadwal
                   merged = merged.map((j) => ({
                     ...j,
-                    nama_jadwal: namaMap[j[jadwalIdKeyAuto]] || "-",
+                    nama_jadwal: namaMap[j[jadwalIdKeyAuto]] || '-',
                   }));
                 }
               }
             }
           } catch (e) {
-            console.warn("Tidak dapat join nama_jadwal:", e);
+            console.warn('Tidak dapat join nama_jadwal:', e);
           }
         }
 
         setJadwal(merged);
       } catch (err) {
-        console.error("Error mengambil data:", err);
+        console.error('Error mengambil data:', err);
         if (isMounted) {
-          setError("Gagal mengambil data jadwal: " + (err.message || ""));
+          setError('Gagal mengambil data jadwal: ' + (err.message || ''));
           setJadwal([]);
         }
       } finally {
@@ -206,9 +227,7 @@ function JadwalPerkuliahanTable() {
         Jadwal Perkuliahan
       </h2>
 
-      {loading && (
-        <p className="text-sm text-slate-500">Memuat jadwal...</p>
-      )}
+      {loading && <p className="text-sm text-slate-500">Memuat jadwal...</p>}
 
       {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
 
@@ -237,9 +256,11 @@ function JadwalPerkuliahanTable() {
                 <tr key={row.id} className="border-b last:border-0">
                   <td className="py-2 pr-2">{row.nama_dosen}</td>
                   <td className="py-2 pr-2">{row.nama_ruangan}</td>
-                  {row.nama_jadwal && <td className="py-2 pr-2">{row.nama_jadwal}</td>}
-                  <td className="py-2 pr-2">{row[row._startKey] ?? "-"}</td>
-                  <td className="py-2 pr-2">{row[row._endKey] ?? "-"}</td>
+                  {row.nama_jadwal && (
+                    <td className="py-2 pr-2">{row.nama_jadwal}</td>
+                  )}
+                  <td className="py-2 pr-2">{row[row._startKey] ?? '-'}</td>
+                  <td className="py-2 pr-2">{row[row._endKey] ?? '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -249,8 +270,6 @@ function JadwalPerkuliahanTable() {
     </div>
   );
 }
-
-
 
 /* ================== STAT CARD ================== */
 

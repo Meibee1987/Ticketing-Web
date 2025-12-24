@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { supabase } from "../../supabaseClient";
+import { useState } from 'react';
+import { supabase } from '../../supabaseClient';
 
 export default function CreateTicketPage() {
   return (
@@ -14,8 +14,12 @@ export default function CreateTicketPage() {
 function PageHeader() {
   return (
     <header className="text-center">
-      <h1 className="text-2xl font-semibold text-slate-800">Create New Ticket</h1>
-      <p className="text-sm text-slate-500 mt-1">Fill in the details to submit a new support ticket</p>
+      <h1 className="text-2xl font-semibold text-slate-800">
+        Create New Ticket
+      </h1>
+      <p className="text-sm text-slate-500 mt-1">
+        Fill in the details to submit a new support ticket
+      </p>
     </header>
   );
 }
@@ -23,16 +27,16 @@ function PageHeader() {
 // Create Ticket Form Component
 function CreateTicketForm() {
   const [formData, setFormData] = useState({
-    subject: "",
-    description: "",
-    category: "",
-    priority: "",
-    assignTo: ""
+    subject: '',
+    description: '',
+    category: '',
+    priority: '',
+    assignTo: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -40,45 +44,51 @@ function CreateTicketForm() {
     setIsSubmitting(true);
 
     // Validation
-    if (!formData.subject || !formData.description || !formData.category || !formData.priority || !formData.assignTo) {
-      alert("Please fill in all required fields");
+    if (
+      !formData.subject ||
+      !formData.description ||
+      !formData.category ||
+      !formData.priority ||
+      !formData.assignTo
+    ) {
+      alert('Please fill in all required fields');
       setIsSubmitting(false);
       return;
     }
 
     try {
       // TODO: Insert to Supabase database
-      console.log("Submitting ticket:", formData);
-      
+      console.log('Submitting ticket:', formData);
+
       // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      alert("Ticket created successfully!");
-      
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      alert('Ticket created successfully!');
+
       // Reset form
       setFormData({
-        subject: "",
-        description: "",
-        category: "",
-        priority: "",
-        assignTo: ""
+        subject: '',
+        description: '',
+        category: '',
+        priority: '',
+        assignTo: '',
       });
     } catch (error) {
-      console.error("Error creating ticket:", error);
-      alert("Failed to create ticket. Please try again.");
+      console.error('Error creating ticket:', error);
+      alert('Failed to create ticket. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleCancel = () => {
-    if (confirm("Are you sure you want to cancel? All data will be lost.")) {
+    if (confirm('Are you sure you want to cancel? All data will be lost.')) {
       setFormData({
-        subject: "",
-        description: "",
-        category: "",
-        priority: "",
-        assignTo: ""
+        subject: '',
+        description: '',
+        category: '',
+        priority: '',
+        assignTo: '',
       });
     }
   };
@@ -94,7 +104,7 @@ function CreateTicketForm() {
           <input
             type="text"
             value={formData.subject}
-            onChange={(e) => handleChange("subject", e.target.value)}
+            onChange={(e) => handleChange('subject', e.target.value)}
             placeholder="Brief description of your issue"
             className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             required
@@ -108,7 +118,7 @@ function CreateTicketForm() {
           </label>
           <textarea
             value={formData.description}
-            onChange={(e) => handleChange("description", e.target.value)}
+            onChange={(e) => handleChange('description', e.target.value)}
             placeholder="Provide detailed information about your issue..."
             rows={6}
             className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
@@ -125,7 +135,7 @@ function CreateTicketForm() {
             </label>
             <select
               value={formData.category}
-              onChange={(e) => handleChange("category", e.target.value)}
+              onChange={(e) => handleChange('category', e.target.value)}
               className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             >
@@ -146,7 +156,7 @@ function CreateTicketForm() {
             </label>
             <select
               value={formData.priority}
-              onChange={(e) => handleChange("priority", e.target.value)}
+              onChange={(e) => handleChange('priority', e.target.value)}
               className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             >
@@ -166,7 +176,7 @@ function CreateTicketForm() {
           </label>
           <select
             value={formData.assignTo}
-            onChange={(e) => handleChange("assignTo", e.target.value)}
+            onChange={(e) => handleChange('assignTo', e.target.value)}
             className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             required
           >
@@ -186,8 +196,18 @@ function CreateTicketForm() {
           </label>
           <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
             <div className="flex flex-col items-center justify-center">
-              <svg className="w-12 h-12 text-slate-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              <svg
+                className="w-12 h-12 text-slate-400 mb-3"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                />
               </svg>
               <p className="text-sm text-slate-600 mb-2">
                 Drag and drop files here, or click to browse
@@ -197,7 +217,7 @@ function CreateTicketForm() {
                 multiple
                 className="hidden"
                 id="file-upload"
-                onChange={(e) => console.log("Files:", e.target.files)}
+                onChange={(e) => console.log('Files:', e.target.files)}
               />
               <label
                 htmlFor="file-upload"
@@ -226,14 +246,29 @@ function CreateTicketForm() {
           >
             {isSubmitting ? (
               <>
-                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  className="animate-spin h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
                 Submitting...
               </>
             ) : (
-              "Submit Ticket"
+              'Submit Ticket'
             )}
           </button>
         </div>

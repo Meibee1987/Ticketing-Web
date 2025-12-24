@@ -1,18 +1,18 @@
-import { useState } from "react";
+import { useState } from 'react';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState('profile');
   const [profile, setProfile] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    role: "user",
+    name: '',
+    email: '',
+    phone: '',
+    role: 'user',
   });
   const [appSettings, setAppSettings] = useState({
-    language: "id",
-    timezone: "Asia/Jakarta",
-    dateFormat: "DD/MM/YYYY",
-    theme: "light",
+    language: 'id',
+    timezone: 'Asia/Jakarta',
+    dateFormat: 'DD/MM/YYYY',
+    theme: 'light',
   });
   const [notifications, setNotifications] = useState({
     emailNotif: true,
@@ -52,31 +52,31 @@ export default function SettingsPage() {
       <div className="border-b border-slate-200">
         <nav className="flex gap-6">
           <button
-            onClick={() => setActiveTab("profile")}
+            onClick={() => setActiveTab('profile')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "profile"
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-slate-600 hover:text-slate-800"
+              activeTab === 'profile'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-600 hover:text-slate-800'
             }`}
           >
             Profil
           </button>
           <button
-            onClick={() => setActiveTab("app")}
+            onClick={() => setActiveTab('app')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "app"
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-slate-600 hover:text-slate-800"
+              activeTab === 'app'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-600 hover:text-slate-800'
             }`}
           >
             Aplikasi
           </button>
           <button
-            onClick={() => setActiveTab("notifications")}
+            onClick={() => setActiveTab('notifications')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "notifications"
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-slate-600 hover:text-slate-800"
+              activeTab === 'notifications'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-600 hover:text-slate-800'
             }`}
           >
             Notifikasi
@@ -86,10 +86,12 @@ export default function SettingsPage() {
 
       {/* Content Area */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        {activeTab === "profile" && (
+        {activeTab === 'profile' && (
           <div className="space-y-5">
-            <h3 className="text-lg font-semibold text-slate-800">Profil Pengguna</h3>
-            
+            <h3 className="text-lg font-semibold text-slate-800">
+              Profil Pengguna
+            </h3>
+
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Nama Lengkap
@@ -97,7 +99,7 @@ export default function SettingsPage() {
               <input
                 type="text"
                 value={profile.name}
-                onChange={(e) => handleProfileChange("name", e.target.value)}
+                onChange={(e) => handleProfileChange('name', e.target.value)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="Masukkan nama lengkap"
               />
@@ -110,7 +112,7 @@ export default function SettingsPage() {
               <input
                 type="email"
                 value={profile.email}
-                onChange={(e) => handleProfileChange("email", e.target.value)}
+                onChange={(e) => handleProfileChange('email', e.target.value)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="email@example.com"
               />
@@ -123,7 +125,7 @@ export default function SettingsPage() {
               <input
                 type="tel"
                 value={profile.phone}
-                onChange={(e) => handleProfileChange("phone", e.target.value)}
+                onChange={(e) => handleProfileChange('phone', e.target.value)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="+62 812 3456 7890"
               />
@@ -135,7 +137,7 @@ export default function SettingsPage() {
               </label>
               <select
                 value={profile.role}
-                onChange={(e) => handleProfileChange("role", e.target.value)}
+                onChange={(e) => handleProfileChange('role', e.target.value)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="user">User</option>
@@ -147,9 +149,11 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {activeTab === "app" && (
+        {activeTab === 'app' && (
           <div className="space-y-5">
-            <h3 className="text-lg font-semibold text-slate-800">Pengaturan Aplikasi</h3>
+            <h3 className="text-lg font-semibold text-slate-800">
+              Pengaturan Aplikasi
+            </h3>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -157,7 +161,9 @@ export default function SettingsPage() {
               </label>
               <select
                 value={appSettings.language}
-                onChange={(e) => handleAppSettingChange("language", e.target.value)}
+                onChange={(e) =>
+                  handleAppSettingChange('language', e.target.value)
+                }
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="id">Bahasa Indonesia</option>
@@ -171,7 +177,9 @@ export default function SettingsPage() {
               </label>
               <select
                 value={appSettings.timezone}
-                onChange={(e) => handleAppSettingChange("timezone", e.target.value)}
+                onChange={(e) =>
+                  handleAppSettingChange('timezone', e.target.value)
+                }
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="Asia/Jakarta">WIB (Jakarta)</option>
@@ -186,7 +194,9 @@ export default function SettingsPage() {
               </label>
               <select
                 value={appSettings.dateFormat}
-                onChange={(e) => handleAppSettingChange("dateFormat", e.target.value)}
+                onChange={(e) =>
+                  handleAppSettingChange('dateFormat', e.target.value)
+                }
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="DD/MM/YYYY">DD/MM/YYYY</option>
@@ -201,7 +211,9 @@ export default function SettingsPage() {
               </label>
               <select
                 value={appSettings.theme}
-                onChange={(e) => handleAppSettingChange("theme", e.target.value)}
+                onChange={(e) =>
+                  handleAppSettingChange('theme', e.target.value)
+                }
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="light">Terang</option>
@@ -212,13 +224,17 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {activeTab === "notifications" && (
+        {activeTab === 'notifications' && (
           <div className="space-y-5">
-            <h3 className="text-lg font-semibold text-slate-800">Preferensi Notifikasi</h3>
+            <h3 className="text-lg font-semibold text-slate-800">
+              Preferensi Notifikasi
+            </h3>
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-700">Notifikasi Email</p>
+                <p className="text-sm font-medium text-slate-700">
+                  Notifikasi Email
+                </p>
                 <p className="text-xs text-slate-500">
                   Terima notifikasi via email untuk update penting
                 </p>
@@ -227,7 +243,9 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   checked={notifications.emailNotif}
-                  onChange={(e) => handleNotifChange("emailNotif", e.target.checked)}
+                  onChange={(e) =>
+                    handleNotifChange('emailNotif', e.target.checked)
+                  }
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -236,7 +254,9 @@ export default function SettingsPage() {
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-700">Notifikasi Push</p>
+                <p className="text-sm font-medium text-slate-700">
+                  Notifikasi Push
+                </p>
                 <p className="text-xs text-slate-500">
                   Terima notifikasi push di browser
                 </p>
@@ -245,7 +265,9 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   checked={notifications.pushNotif}
-                  onChange={(e) => handleNotifChange("pushNotif", e.target.checked)}
+                  onChange={(e) =>
+                    handleNotifChange('pushNotif', e.target.checked)
+                  }
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -254,7 +276,9 @@ export default function SettingsPage() {
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-700">Laporan Mingguan</p>
+                <p className="text-sm font-medium text-slate-700">
+                  Laporan Mingguan
+                </p>
                 <p className="text-xs text-slate-500">
                   Terima ringkasan aktivitas mingguan via email
                 </p>
@@ -263,7 +287,9 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   checked={notifications.weeklyReport}
-                  onChange={(e) => handleNotifChange("weeklyReport", e.target.checked)}
+                  onChange={(e) =>
+                    handleNotifChange('weeklyReport', e.target.checked)
+                  }
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>

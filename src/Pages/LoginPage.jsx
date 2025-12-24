@@ -1,13 +1,13 @@
 // src/pages/LoginPage.jsx
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase, TOKEN_KEY } from "../supabaseClient";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase, TOKEN_KEY } from '../supabaseClient';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   // Jika sudah login, lempar ke main page
@@ -17,13 +17,13 @@ export default function LoginPage() {
       JSON.parse(sessionStorage.getItem(TOKEN_KEY));
 
     if (session) {
-      navigate("/", { replace: true });
+      navigate('/', { replace: true });
     }
   }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
+    setError('');
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -31,7 +31,7 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError("Email atau password salah.");
+      setError('Email atau password salah.');
       return;
     }
 
@@ -45,7 +45,7 @@ export default function LoginPage() {
       localStorage.removeItem(TOKEN_KEY);
     }
 
-    navigate("/", { replace: true });
+    navigate('/', { replace: true });
   };
 
   return (

@@ -20,14 +20,14 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
         >
           Prev
         </button>
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
           <button
             key={page}
             onClick={() => onPageChange(page)}
             className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
               currentPage === page
-                ? "bg-indigo-600 text-white"
-                : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
             }`}
           >
             {page}

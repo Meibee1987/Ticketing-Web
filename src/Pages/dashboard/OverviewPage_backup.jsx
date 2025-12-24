@@ -1,6 +1,6 @@
 // src/Pages/dashboard/OverviewPage.jsx
-import { useState, useEffect } from "react";
-import { supabase } from "../../supabaseClient";
+import { useState, useEffect } from 'react';
+import { supabase } from '../../supabaseClient';
 
 export default function OverviewPage() {
   return (
@@ -22,11 +22,7 @@ function DashboardContent() {
           value="24"
           description="Jadwal perkuliahan aktif"
         />
-        <StatCard
-          title="Dosen"
-          value="12"
-          description="Dosen pengampu"
-        />
+        <StatCard title="Dosen" value="12" description="Dosen pengampu" />
         <StatCard
           title="Ruangan"
           value="8"
@@ -64,7 +60,7 @@ function DashboardContent() {
 function JadwalPerkuliahanTable() {
   const [jadwal, setJadwal] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -72,11 +68,12 @@ function JadwalPerkuliahanTable() {
     const fetchJadwal = async () => {
       try {
         setLoading(true);
-        setError("");
+        setError('');
 
         const { data, error } = await supabase
-          .from("jadwal_perkuliahan")
-          .select(`
+          .from('jadwal_perkuliahan')
+          .select(
+            `
             id,
             nama_jadwal,
             jam_mulai,
@@ -87,22 +84,23 @@ function JadwalPerkuliahanTable() {
             ruangan:id_ruangan (
               nama_ruangan
             )
-          `)
-          .order("id", { ascending: true });
+          `
+          )
+          .order('id', { ascending: true });
 
         if (!isMounted) return;
 
         if (error) {
-          console.error("Error fetching jadwal:", error);
-          setError("Gagal mengambil data jadwal: " + error.message);
+          console.error('Error fetching jadwal:', error);
+          setError('Gagal mengambil data jadwal: ' + error.message);
           setJadwal([]);
         } else {
           setJadwal(data || []);
         }
       } catch (err) {
-        console.error("Unexpected error:", err);
+        console.error('Unexpected error:', err);
         if (isMounted) {
-          setError("Terjadi kesalahan saat mengambil data jadwal.");
+          setError('Terjadi kesalahan saat mengambil data jadwal.');
           setJadwal([]);
         }
       } finally {
@@ -127,7 +125,9 @@ function JadwalPerkuliahanTable() {
       {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
 
       {!loading && !error && jadwal.length === 0 && (
-        <p className="text-sm text-slate-500">Belum ada data jadwal perkuliahan.</p>
+        <p className="text-sm text-slate-500">
+          Belum ada data jadwal perkuliahan.
+        </p>
       )}
 
       {!loading && !error && jadwal.length > 0 && (
@@ -146,8 +146,10 @@ function JadwalPerkuliahanTable() {
               {jadwal.map((row) => (
                 <tr key={row.id} className="border-b last:border-0">
                   <td className="py-2 pr-2">{row.nama_jadwal}</td>
-                  <td className="py-2 pr-2">{row.dosen?.nama_dosen || "-"}</td>
-                  <td className="py-2 pr-2">{row.ruangan?.nama_ruangan || "-"}</td>
+                  <td className="py-2 pr-2">{row.dosen?.nama_dosen || '-'}</td>
+                  <td className="py-2 pr-2">
+                    {row.ruangan?.nama_ruangan || '-'}
+                  </td>
                   <td className="py-2 pr-2">{row.jam_mulai}</td>
                   <td className="py-2 pr-2">{row.jam_selesai}</td>
                 </tr>

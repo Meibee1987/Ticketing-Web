@@ -1,5 +1,5 @@
-import { Navigate, Outlet } from "react-router-dom";
-import { TOKEN_KEY } from "../supabaseClient";
+import { Navigate, Outlet } from 'react-router-dom';
+import { TOKEN_KEY } from '../supabaseClient';
 
 export default function ProtectedRoute() {
   const session =
