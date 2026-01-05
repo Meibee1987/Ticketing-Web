@@ -14,15 +14,30 @@ export default function LoginPage() {
   // Cek session saat load
   useEffect(() => {
     const checkSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) {
-        navigate('/dashboard', { replace: true });
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        // If token error, clear everything
+        if (error?.message?.includes('Refresh Token')) {
+          console.log('🧹 Clearing corrupt session...');
+          await supabase.auth.signOut();
+          localStorage.clear();
+          sessionStorage.clear();
+          return;
+        }
+
+        if (session) {
+          window.location.href = '/dashboard';
+        }
+      } catch (err) {
+        console.error('Session check error:', err);
       }
     };
     checkSession();
-  }, [navigate]);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,21 +45,27 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error: loginError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-      if (error) {
+      if (loginError) {
         setError('Email atau password salah.');
         setIsLoading(false);
         return;
       }
 
-      // Supabase sudah otomatis menyimpan session
-      // Navigate ke dashboard setelah login berhasil
-      navigate('/dashboard', { replace: true });
+      if (data?.session) {
+        // Force reload ke dashboard
+        window.location.href = '/dashboard';
+      } else {
+        setError('Gagal membuat session. Coba lagi.');
+        setIsLoading(false);
+      }
     } catch (err) {
+      console.error('Unexpected error:', err);
       setError('Terjadi kesalahan. Silakan coba lagi.');
       setIsLoading(false);
     }
@@ -123,7 +144,20 @@ export default function LoginPage() {
           {/* ERROR */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-red-600 text-xs text-center">{error}</p>
+              <p className="text-red-600 text-xs text-center mb-2">{error}</p>
+              <button
+                type="button"
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  setError('');
+                  window.location.reload();
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800 underline"
+              >
+                Clear session & reload
+              </button>
             </div>
           )}
 

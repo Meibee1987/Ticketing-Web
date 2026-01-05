@@ -1,9 +1,5 @@
 // src/App.jsx
-import {
-  createBrowserRouter,
-  RouterProvider,
-  Navigate,
-} from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 // Import pages & layout
 import { AuthProvider } from './contexts/AuthContext';
@@ -24,78 +20,62 @@ import JadwalPageAdmin from './Pages/dashboard/JadwalPageAdmin';
 import RuanganPage from './Pages/dashboard/RuanganPage';
 import MasterData from './Pages/dashboard/MasterData';
 
-// Router configuration
-const router = createBrowserRouter([
-  // Public Route
-  {
-    path: '/login',
-    element: <LoginPage />,
-  },
-
-  // Protected Routes (harus login)
-  {
-    element: <ProtectedRoute />,
-    children: [
-      {
-        path: '/dashboard',
-        element: <DashboardLayout />,
-
-        // Nested routes di dalam dashboard
-        children: [
-          { index: true, element: <DashboardTicketPage /> }, // /dashboard
-          { path: 'ticketing', element: <TicketingPage /> }, // /dashboard/ticketing
-          { path: 'tickets', element: <AllTicketsPage /> }, // /dashboard/tickets
-          { path: 'my-tickets', element: <MyTicketsPage /> }, // /dashboard/my-tickets (includes create ticket)
-          {
-            path: 'users',
-            element: (
-              <RoleProtectedRoute allowedRoles={['super admin']}>
-                <UsersPage />
-              </RoleProtectedRoute>
-            ),
-          }, // Hanya super admin
-          {
-            path: 'settings',
-            element: (
-              <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
-                <SettingsPage />
-              </RoleProtectedRoute>
-            ),
-          }, // super admin & admin
-          { path: 'jadwal', element: <JadwalPage /> }, // Semua role bisa akses
-          {
-            path: 'jadwal-admin',
-            element: (
-              <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
-                <JadwalPageAdmin />
-              </RoleProtectedRoute>
-            ),
-          }, // Hanya super admin & admin
-          { path: 'ruangan', element: <RuanganPage /> }, // Semua role bisa akses
-          {
-            path: 'database',
-            element: (
-              <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
-                <MasterData />
-              </RoleProtectedRoute>
-            ),
-          }, // super admin & admin
-        ],
-      },
-    ],
-  },
-
-  // Redirect semua undefined routes
-  {
-    path: '*',
-    element: <Navigate to="/dashboard" replace />,
-  },
-]);
-
 export default function App() {
   return (
-    <AuthProvider>
-      <RouterProvider router={router} />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          {/* Public Route */}
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<DashboardLayout />}>
+              <Route index element={<DashboardTicketPage />} />
+              <Route path="ticketing" element={<TicketingPage />} />
+              <Route path="tickets" element={<AllTicketsPage />} />
+              <Route path="my-tickets" element={<MyTicketsPage />} />
+              <Route
+                path="users"
+                element={
+                  <RoleProtectedRoute allowedRoles={['super admin']}>
+                    <UsersPage />
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="settings"
+                element={
+                  <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
+                    <SettingsPage />
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route path="jadwal" element={<JadwalPage />} />
+              <Route
+                path="jadwal-admin"
+                element={
+                  <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
+                    <JadwalPageAdmin />
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route path="ruangan" element={<RuanganPage />} />
+              <Route
+                path="database"
+                element={
+                  <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
+                    <MasterData />
+                  </RoleProtectedRoute>
+                }
+              />
+            </Route>
+          </Route>
+
+          {/* Redirect semua undefined routes */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
