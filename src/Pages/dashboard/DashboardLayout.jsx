@@ -1,11 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { supabase, TOKEN_KEY } from '../../supabaseClient';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function DashboardLayout() {
+  const { userRole, signOut } = useAuth();
+
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    localStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
+    await signOut();
     window.location.href = '/login';
   };
 
@@ -24,52 +25,65 @@ export default function DashboardLayout() {
           </span>
         </div>
 
+        {/* User Info */}
+        <div className="px-4 py-3 bg-[#e6c200]/10 border-b border-[#e6c200]/20">
+          <p className="text-xs text-[#e6c200]/70">Logged in as</p>
+          <p className="text-sm font-semibold truncate">
+            {userRole?.name || 'User'}
+          </p>
+          <span className="inline-block mt-1 px-2 py-0.5 bg-[#e6c200]/20 text-[#e6c200] text-xs rounded-full">
+            {userRole?.roleName || 'user'}
+          </span>
+        </div>
+
         {/* Menu */}
         <nav className="flex-1 mt-4 space-y-1 overflow-y-auto">
-          {/* <NavLink to="/dashboard" end className={menuItemClass}>
-            <span>📊</span>
-            <span>Dashboard</span>
-          </NavLink>
-
-          <NavLink to="/dashboard/tickets" className={menuItemClass}>
-            <span>🎫</span>
-            <span>Tickets</span>
-          </NavLink>
-
-          <NavLink to="/dashboard/my-tickets" className={menuItemClass}>
-            <span>📋</span>
-            <span>My Tickets</span>
-          </NavLink> */}
-
+          {/* Semua role bisa akses Jadwal */}
           <NavLink to="/dashboard/jadwal" className={menuItemClass}>
             <span>📅</span>
             <span>Jadwal</span>
           </NavLink>
 
-          <NavLink to="/dashboard/jadwal-admin" className={menuItemClass}>
-            <span>🔐</span>
-            <span>Jadwal Admin</span>
-          </NavLink>
+          {/* Admin dan Super Admin */}
+          {(userRole?.roleName === 'admin' ||
+            userRole?.roleName === 'super admin') && (
+            <NavLink to="/dashboard/jadwal-admin" className={menuItemClass}>
+              <span>🔐</span>
+              <span>Jadwal Admin</span>
+            </NavLink>
+          )}
 
+          {/* Semua role bisa akses Ruangan */}
           <NavLink to="/dashboard/ruangan" className={menuItemClass}>
             <span>🏢</span>
             <span>Ruangan</span>
           </NavLink>
 
-          <NavLink to="/dashboard/database" className={menuItemClass}>
-            <span>🗄️</span>
-            <span>Master Data</span>
-          </NavLink>
+          {/* Admin dan Super Admin bisa akses Master Data */}
+          {(userRole?.roleName === 'admin' ||
+            userRole?.roleName === 'super admin') && (
+            <NavLink to="/dashboard/database" className={menuItemClass}>
+              <span>🗄️</span>
+              <span>Master Data</span>
+            </NavLink>
+          )}
 
-          <NavLink to="/dashboard/users" className={menuItemClass}>
-            <span>👥</span>
-            <span>Users</span>
-          </NavLink>
+          {/* Hanya Super Admin bisa akses Users */}
+          {userRole?.roleName === 'super admin' && (
+            <NavLink to="/dashboard/users" className={menuItemClass}>
+              <span>👥</span>
+              <span>Users</span>
+            </NavLink>
+          )}
 
-          <NavLink to="/dashboard/settings" className={menuItemClass}>
-            <span>⚙️</span>
-            <span>Settings</span>
-          </NavLink>
+          {/* Admin dan Super Admin bisa akses Settings */}
+          {(userRole?.roleName === 'admin' ||
+            userRole?.roleName === 'super admin') && (
+            <NavLink to="/dashboard/settings" className={menuItemClass}>
+              <span>⚙️</span>
+              <span>Settings</span>
+            </NavLink>
+          )}
         </nav>
 
         {/* Logout di bawah */}
@@ -94,9 +108,11 @@ export default function DashboardLayout() {
 
           <div className="flex items-center gap-4">
             <span className="hidden md:inline text-sm text-[#fed80b] font-medium">
-              Hi, Azka
+              Hi, {userRole?.name || 'User'}
             </span>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#fed80b] to-[#f5c400] ring-2 ring-white/50 shadow-lg" />
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#fed80b] to-[#f5c400] ring-2 ring-white/50 shadow-lg flex items-center justify-center text-xs font-bold text-[#5c0017]">
+              {userRole?.name?.[0]?.toUpperCase() || 'U'}
+            </div>
           </div>
         </header>
 

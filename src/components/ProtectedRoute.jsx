@@ -1,12 +1,18 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { TOKEN_KEY } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ProtectedRoute() {
-  const session =
-    JSON.parse(localStorage.getItem(TOKEN_KEY)) ||
-    JSON.parse(sessionStorage.getItem(TOKEN_KEY));
+  const { user, loading } = useAuth();
 
-  if (!session) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 

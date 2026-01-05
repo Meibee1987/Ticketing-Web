@@ -79,11 +79,17 @@ export default function UsersPage() {
 
     try {
       if (modalMode === 'add') {
-        // Step 1: Create user dengan auth.signUp
+        // Step 1: Create user dengan auth.signUp (auto confirm, no email verification)
         const { data: authData, error: authError } = await supabase.auth.signUp(
           {
             email: form.email,
             password: form.password,
+            options: {
+              emailRedirectTo: undefined,
+              data: {
+                email_confirmed: true,
+              },
+            },
           }
         );
 

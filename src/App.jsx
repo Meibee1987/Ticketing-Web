@@ -6,7 +6,9 @@ import {
 } from 'react-router-dom';
 
 // Import pages & layout
+import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import RoleProtectedRoute from './components/RoleProtectedRoute';
 import LoginPage from './Pages/LoginPage';
 
 import DashboardLayout from './Pages/dashboard/DashboardLayout';
@@ -44,12 +46,40 @@ const router = createBrowserRouter([
           { path: 'ticketing', element: <TicketingPage /> }, // /dashboard/ticketing
           { path: 'tickets', element: <AllTicketsPage /> }, // /dashboard/tickets
           { path: 'my-tickets', element: <MyTicketsPage /> }, // /dashboard/my-tickets (includes create ticket)
-          { path: 'users', element: <UsersPage /> }, // /dashboard/users
-          { path: 'settings', element: <SettingsPage /> }, // /dashboard/settings
-          { path: 'jadwal', element: <JadwalPage /> }, // /dashboard/jadwal
-          { path: 'jadwal-admin', element: <JadwalPageAdmin /> }, // /dashboard/jadwal-admin
-          { path: 'ruangan', element: <RuanganPage /> }, // /dashboard/ruangan
-          { path: 'database', element: <MasterData /> }, // /dashboard/database
+          {
+            path: 'users',
+            element: (
+              <RoleProtectedRoute allowedRoles={['super admin']}>
+                <UsersPage />
+              </RoleProtectedRoute>
+            ),
+          }, // Hanya super admin
+          {
+            path: 'settings',
+            element: (
+              <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
+                <SettingsPage />
+              </RoleProtectedRoute>
+            ),
+          }, // super admin & admin
+          { path: 'jadwal', element: <JadwalPage /> }, // Semua role bisa akses
+          {
+            path: 'jadwal-admin',
+            element: (
+              <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
+                <JadwalPageAdmin />
+              </RoleProtectedRoute>
+            ),
+          }, // Hanya super admin & admin
+          { path: 'ruangan', element: <RuanganPage /> }, // Semua role bisa akses
+          {
+            path: 'database',
+            element: (
+              <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
+                <MasterData />
+              </RoleProtectedRoute>
+            ),
+          }, // super admin & admin
         ],
       },
     ],
@@ -63,5 +93,9 @@ const router = createBrowserRouter([
 ]);
 
 export default function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
+  );
 }

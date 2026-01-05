@@ -1,51 +1,53 @@
 // src/pages/LoginPage.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, TOKEN_KEY } from '../supabaseClient';
+import { supabase } from '../supabaseClient';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Jika sudah login, lempar ke main page
+  // Cek session saat load
   useEffect(() => {
-    const session =
-      JSON.parse(localStorage.getItem(TOKEN_KEY)) ||
-      JSON.parse(sessionStorage.getItem(TOKEN_KEY));
-
-    if (session) {
-      navigate('/', { replace: true });
-    }
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) {
+        navigate('/dashboard', { replace: true });
+      }
+    };
+    checkSession();
   }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
-      setError('Email atau password salah.');
-      return;
+      if (error) {
+        setError('Email atau password salah.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Supabase sudah otomatis menyimpan session
+      // Navigate ke dashboard setelah login berhasil
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      setError('Terjadi kesalahan. Silakan coba lagi.');
+      setIsLoading(false);
     }
-
-    const session = data.session;
-
-    if (rememberMe) {
-      localStorage.setItem(TOKEN_KEY, JSON.stringify(session));
-      sessionStorage.removeItem(TOKEN_KEY);
-    } else {
-      sessionStorage.setItem(TOKEN_KEY, JSON.stringify(session));
-      localStorage.removeItem(TOKEN_KEY);
-    }
-
-    navigate('/', { replace: true });
   };
 
   return (
@@ -128,9 +130,10 @@ export default function LoginPage() {
           {/* BUTTON */}
           <button
             type="submit"
-            className="w-full py-3.5 rounded-lg bg-gradient-to-r from-red-700 to-red-600 hover:from-red-800 hover:to-red-700 text-white text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
+            disabled={isLoading}
+            className="w-full py-3.5 rounded-lg bg-gradient-to-r from-red-700 to-red-600 hover:from-red-800 hover:to-red-700 text-white text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Sign In
+            {isLoading ? 'Signing In...' : 'Sign In'}
           </button>
         </form>
       </div>
