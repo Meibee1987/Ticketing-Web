@@ -313,10 +313,10 @@ function RuanganStats({ selectedDate, currentTime }) {
     const [sedangDigunakan, adaJadwal] = [new Set(), new Set()];
 
     filteredBookings.forEach((b) => {
-      if (now >= b.akhir) return; // Skip selesai
+      // Tampilkan semua jadwal, tapi hitung hanya yang aktif untuk statistik
       if (isToday && now >= b.mulai && now < b.akhir)
         sedangDigunakan.add(b.ruangan_id);
-      else adaJadwal.add(b.ruangan_id);
+      else if (now < b.akhir) adaJadwal.add(b.ruangan_id);
     });
 
     sedangDigunakan.forEach((id) => adaJadwal.delete(id));
@@ -418,12 +418,14 @@ function RuanganList({ selectedDate, currentTime }) {
         const currentBooking = isToday
           ? roomBookings.find((b) => now >= b.mulai && now < b.akhir)
           : null;
+
+        // Tampilkan semua jadwal (aktif dan selesai), tandai yang sudah selesai
         const scheduledBookings = roomBookings
-          .filter(
-            (b) =>
-              now < b.akhir && (!currentBooking || b.id !== currentBooking.id)
-          )
+          .filter((b) => !currentBooking || b.id !== currentBooking.id)
+          .map((b) => ({ ...b, isFinished: now >= b.akhir }))
           .sort((a, b) => a.mulai - b.mulai);
+
+        const activeBookings = scheduledBookings.filter((b) => !b.isFinished);
 
         return {
           ...r,
@@ -431,7 +433,7 @@ function RuanganList({ selectedDate, currentTime }) {
           currentBooking,
           scheduledBookings,
           totalBookings: roomBookings.length,
-          hasSchedule: scheduledBookings.length > 0,
+          hasSchedule: activeBookings.length > 0,
         };
       })
       .sort((a, b) => {
@@ -539,8 +541,8 @@ function RuanganCard({ ruangan, selectedDate }) {
   const now = new Date();
   const cfg = STATUS_CONFIG[ruangan.status];
 
-  // Filter active bookings
-  const activeBookings = ruangan.scheduledBookings.filter((b) => now < b.akhir);
+  // Pisahkan jadwal aktif dan selesai
+  const allBookings = ruangan.scheduledBookings;
   const showCurrent =
     ruangan.currentBooking && isToday && now < ruangan.currentBooking.akhir;
   const timeLeft = showCurrent
@@ -604,17 +606,21 @@ function RuanganCard({ ruangan, selectedDate }) {
       )}
 
       {/* Scheduled Bookings */}
-      {activeBookings.length > 0 && (
+      {allBookings.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
             {isToday
               ? 'Jadwal Hari Ini:'
               : `Jadwal ${formatDateShort(selectedDate)}:`}
           </p>
-          {(expanded ? activeBookings : activeBookings.slice(0, 2)).map((b) => (
+          {(expanded ? allBookings : allBookings.slice(0, 2)).map((b) => (
             <div
               key={b.id}
-              className="bg-white/60 rounded-lg p-2.5 border border-slate-100"
+              className={`rounded-lg p-2.5 border transition-all ${
+                b.isFinished
+                  ? 'bg-slate-50/80 border-slate-200 opacity-60'
+                  : 'bg-white/60 border-slate-100'
+              }`}
             >
               <div className="flex items-center gap-2 mb-1">
                 <span
@@ -622,31 +628,50 @@ function RuanganCard({ ruangan, selectedDate }) {
                 >
                   {b.source}
                 </span>
+                {b.isFinished && (
+                  <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">
+                    ✓ Selesai
+                  </span>
+                )}
                 <span className="text-xs text-slate-400">
                   {formatTime(b.mulai)} - {formatTime(b.akhir)}
                 </span>
               </div>
-              <p className="text-sm font-medium text-slate-800">
+              <p
+                className={`text-sm font-medium ${
+                  b.isFinished
+                    ? 'text-slate-500 line-through'
+                    : 'text-slate-800'
+                }`}
+              >
                 {b.description}
               </p>
-              {b.detail && <p className="text-xs text-slate-500">{b.detail}</p>}
+              {b.detail && (
+                <p
+                  className={`text-xs ${
+                    b.isFinished ? 'text-slate-400' : 'text-slate-500'
+                  }`}
+                >
+                  {b.detail}
+                </p>
+              )}
             </div>
           ))}
-          {activeBookings.length > 2 && (
+          {allBookings.length > 2 && (
             <button
               onClick={() => setExpanded(!expanded)}
               className="w-full text-xs text-indigo-600 hover:text-indigo-800 font-medium py-1"
             >
               {expanded
                 ? '⬆️ Tutup'
-                : `⬇️ Lihat ${activeBookings.length - 2} jadwal lainnya`}
+                : `⬇️ Lihat ${allBookings.length - 2} jadwal lainnya`}
             </button>
           )}
         </div>
       )}
 
       {/* No Schedule */}
-      {ruangan.status === 'tersedia' && !activeBookings.length && (
+      {ruangan.status === 'tersedia' && !allBookings.length && (
         <p className="text-sm text-green-600 font-medium">
           ✨ Tidak ada jadwal pada tanggal ini
         </p>

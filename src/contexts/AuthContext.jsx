@@ -1,216 +1,164 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import { supabase, supabaseUrl } from '../supabaseClient';
 
 const AuthContext = createContext({});
-
 export const useAuth = () => useContext(AuthContext);
+
+const DEFAULT_ROLE = {
+  userId: null,
+  name: 'User',
+  roleId: 3,
+  roleName: 'user',
+  roleDesc: '',
+};
+const STORAGE_KEY = `sb-${supabaseUrl?.split('//')[1]?.split('.')[0] || 'app'}-auth-token`;
+const USER_ROLE_KEY = 'userRole';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const fetchRoleRef = useRef(null); // Prevent duplicate fetch
 
-  useEffect(() => {
-    // Check active session
-    checkUser();
-
-    // Listen for auth changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log(
-          '🔔 Auth event:',
-          event,
-          'Session:',
-          session ? 'exists' : 'null'
-        );
-
-        try {
-          // Handle token refresh errors
-          if (event === 'TOKEN_REFRESHED' && !session) {
-            console.log('⚠️ Token refresh failed, clearing session');
-            await clearSession();
-            return;
-          }
-
-          if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-            await clearSession();
-            return;
-          }
-
-          if (event === 'TOKEN_REFRESHED') {
-            console.log('✅ Token refreshed successfully');
-          }
-
-          if (session?.user) {
-            setUser(session.user);
-            await fetchUserRole(session.user.id);
-          } else {
-            setUser(null);
-            setUserRole(null);
-          }
-        } catch (error) {
-          console.error('❌ Error in auth state change:', error);
-          // If any error, clear session
-          if (error.message?.includes('Refresh Token')) {
-            await clearSession();
-          }
-        } finally {
-          setLoading(false);
-          console.log('⏹️ Loading set to false');
-        }
-      }
-    );
-
-    return () => {
-      authListener?.subscription?.unsubscribe();
-    };
-  }, []);
-
-  const clearSession = async () => {
-    console.log('🧹 Clearing all session data...');
+  const clearSession = useCallback(() => {
     setUser(null);
     setUserRole(null);
-    localStorage.removeItem('userRole');
-    localStorage.removeItem(
-      'sb-' + supabaseUrl.split('//')[1].split('.')[0] + '-auth-token'
-    );
+    localStorage.removeItem(USER_ROLE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     setLoading(false);
-  };
+  }, []);
 
-  const checkUser = async () => {
+  const fetchUserRole = useCallback(async (authId) => {
+    // Prevent multiple simultaneous fetches
+    if (fetchRoleRef.current === authId) return;
+    fetchRoleRef.current = authId;
+
     try {
-      console.log('🔍 Checking user session...');
+      const { data, error } = await Promise.race([
+        supabase
+          .from('Teknisi')
+          .select(
+            'id, nama_teknisi, roles_id, roles:roles_id(id, role, deskripsi)'
+          )
+          .eq('auth_id', authId)
+          .single(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 5000)
+        ),
+      ]);
+
+      if (error || !data) {
+        // Fallback ke localStorage jika ada error
+        const savedRole = localStorage.getItem(USER_ROLE_KEY);
+        const roleData = savedRole ? JSON.parse(savedRole) : DEFAULT_ROLE;
+        setUserRole(roleData);
+        return;
+      }
+
+      const roleData = {
+        userId: data.id,
+        name: data.nama_teknisi,
+        roleId: data.roles_id,
+        roleName: data.roles?.role || 'user',
+        roleDesc: data.roles?.deskripsi || '',
+      };
+      setUserRole(roleData);
+      localStorage.setItem(USER_ROLE_KEY, JSON.stringify(roleData));
+    } catch (err) {
+      console.error('Error fetching role:', err);
+      // Fallback ke localStorage
+      const savedRole = localStorage.getItem(USER_ROLE_KEY);
+      const roleData = savedRole ? JSON.parse(savedRole) : DEFAULT_ROLE;
+      setUserRole(roleData);
+    } finally {
+      fetchRoleRef.current = null;
+    }
+  }, []);
+
+  const checkUser = useCallback(async () => {
+    try {
       const {
         data: { session },
         error,
       } = await supabase.auth.getSession();
 
-      console.log('📋 Session check result:', {
-        hasSession: !!session,
-        hasUser: !!session?.user,
-        error: error?.message,
-        expiresAt: session?.expires_at
-          ? new Date(session.expires_at * 1000).toLocaleString()
-          : 'N/A',
-      });
-
-      if (error) {
-        console.error('❌ Session error:', error);
-        // If token error, clear everything
-        if (
-          error.message?.includes('Refresh Token') ||
-          error.message?.includes('refresh_token')
-        ) {
-          console.log('🧹 Invalid token detected, clearing...');
-          await supabase.auth.signOut();
-          await clearSession();
-        }
+      if (
+        error?.message?.includes('Refresh Token') ||
+        error?.message?.includes('refresh_token')
+      ) {
+        await supabase.auth.signOut();
+        clearSession();
         return;
       }
 
       if (session?.user) {
-        console.log('✅ User found, fetching role...');
-        await fetchUserRole(session.user.id);
         setUser(session.user);
+        await fetchUserRole(session.user.id);
       } else {
-        console.log('⚠️ No session found');
         setUser(null);
         setUserRole(null);
       }
-    } catch (error) {
-      console.error('❌ Error checking user:', error);
-      await clearSession();
+    } catch {
+      clearSession();
     } finally {
       setLoading(false);
     }
-  };
+  }, [clearSession, fetchUserRole]);
 
-  const fetchUserRole = async (authId) => {
-    try {
-      console.log('🔍 Fetching role for auth_id:', authId);
+  useEffect(() => {
+    checkUser();
 
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout fetching role')), 5000)
-      );
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        // Jangan fetch role jika belum ada user
+        if (!session?.user) {
+          if (['SIGNED_OUT', 'USER_DELETED'].includes(event)) {
+            clearSession();
+          } else {
+            setUser(null);
+            setUserRole(null);
+          }
+          setLoading(false);
+          return;
+        }
 
-      const fetchPromise = supabase
-        .from('Teknisi')
-        .select(
-          'id, nama_teknisi, roles_id, roles:roles_id(id, role, deskripsi)'
-        )
-        .eq('auth_id', authId)
-        .single();
-
-      const { data, error } = await Promise.race([
-        fetchPromise,
-        timeoutPromise,
-      ]);
-
-      if (error) {
-        console.error('❌ Error fetching role:', error);
-        // Set default user role if fetch fails
-        setUserRole({
-          userId: null,
-          name: 'User',
-          roleId: 3,
-          roleName: 'user',
-          roleDesc: '',
-        });
-        return;
+        // Hanya fetch role jika ada session valid
+        if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+          setUser(session.user);
+          await fetchUserRole(session.user.id);
+          setLoading(false);
+        }
       }
+    );
 
-      if (data) {
-        console.log('✅ Role fetched:', data.roles?.role);
-        setUserRole({
-          userId: data.id,
-          name: data.nama_teknisi,
-          roleId: data.roles_id,
-          roleName: data.roles?.role || 'user',
-          roleDesc: data.roles?.deskripsi || '',
-        });
+    return () => authListener?.subscription?.unsubscribe();
+  }, [checkUser, clearSession, fetchUserRole]);
 
-        // Simpan ke localStorage untuk quick access
-        localStorage.setItem(
-          'userRole',
-          JSON.stringify({
-            userId: data.id,
-            name: data.nama_teknisi,
-            roleId: data.roles_id,
-            roleName: data.roles?.role || 'user',
-          })
-        );
-      }
-    } catch (error) {
-      console.error('❌ Error fetching user role:', error);
-      // Set default user role on error
-      setUserRole({
-        userId: null,
-        name: 'User',
-        roleId: 3,
-        roleName: 'user',
-        roleDesc: '',
-      });
-    }
-  };
-
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setUserRole(null);
-    localStorage.removeItem('userRole');
-  };
+    clearSession();
+  }, [clearSession]);
 
-  const value = {
-    user,
-    userRole,
-    loading,
-    signOut,
-    isAdmin:
-      userRole?.roleName === 'admin' || userRole?.roleName === 'super admin',
-    isSuperAdmin: userRole?.roleName === 'super admin',
-    isUser: userRole?.roleName === 'user',
-  };
+  const value = useMemo(
+    () => ({
+      user,
+      userRole,
+      loading,
+      signOut,
+      isAdmin: ['admin', 'super admin'].includes(userRole?.roleName),
+      isSuperAdmin: userRole?.roleName === 'super admin',
+      isUser: userRole?.roleName === 'user',
+    }),
+    [user, userRole, loading, signOut]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
