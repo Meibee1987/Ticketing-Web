@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
 import LoginPage from './Pages/LoginPage';
+import LoginPageOTP from './Pages/LoginPageOTP';
 
 import DashboardLayout from './Pages/dashboard/DashboardLayout';
 import OverviewPage from './Pages/dashboard/OverviewPage';
@@ -26,7 +27,8 @@ export default function App() {
       <AuthProvider>
         <Routes>
           {/* Public Route */}
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login" element={<LoginPageOTP />} />
+          <Route path="/login-password" element={<LoginPage />} />
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>

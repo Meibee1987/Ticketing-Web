@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import TwoFASetup from '../../components/TwoFASetup';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('profile');
@@ -70,6 +71,16 @@ export default function SettingsPage() {
             }`}
           >
             Aplikasi
+          </button>
+          <button
+            onClick={() => setActiveTab('security')}
+            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'security'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-600 hover:text-slate-800'
+            }`}
+          >
+            Keamanan
           </button>
           <button
             onClick={() => setActiveTab('notifications')}
@@ -295,6 +306,13 @@ export default function SettingsPage() {
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
               </label>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'security' && (
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-slate-800">Keamanan</h3>
+            <TwoFASetup />
           </div>
         )}
 

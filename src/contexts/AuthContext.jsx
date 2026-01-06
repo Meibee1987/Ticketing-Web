@@ -42,6 +42,17 @@ export const AuthProvider = ({ children }) => {
     fetchRoleRef.current = authId;
 
     try {
+      // Check localStorage first for faster loading
+      const savedRole = localStorage.getItem(USER_ROLE_KEY);
+      if (savedRole) {
+        try {
+          const parsed = JSON.parse(savedRole);
+          setUserRole(parsed);
+        } catch (e) {
+          console.warn('Invalid saved role, using default');
+        }
+      }
+
       const { data, error } = await Promise.race([
         supabase
           .from('Teknisi')
@@ -51,15 +62,15 @@ export const AuthProvider = ({ children }) => {
           .eq('auth_id', authId)
           .single(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 5000)
+          setTimeout(() => reject(new Error('Timeout')), 3000)
         ),
       ]);
 
       if (error || !data) {
-        // Fallback ke localStorage jika ada error
-        const savedRole = localStorage.getItem(USER_ROLE_KEY);
-        const roleData = savedRole ? JSON.parse(savedRole) : DEFAULT_ROLE;
-        setUserRole(roleData);
+        // Keep using localStorage data if fetch fails
+        if (!savedRole) {
+          setUserRole(DEFAULT_ROLE);
+        }
         return;
       }
 
@@ -73,11 +84,13 @@ export const AuthProvider = ({ children }) => {
       setUserRole(roleData);
       localStorage.setItem(USER_ROLE_KEY, JSON.stringify(roleData));
     } catch (err) {
-      console.error('Error fetching role:', err);
-      // Fallback ke localStorage
-      const savedRole = localStorage.getItem(USER_ROLE_KEY);
-      const roleData = savedRole ? JSON.parse(savedRole) : DEFAULT_ROLE;
-      setUserRole(roleData);
+      console.warn('Role fetch failed, using cached/default:', err.message);
+      // Keep existing userRole or use default
+      if (!userRole) {
+        const savedRole = localStorage.getItem(USER_ROLE_KEY);
+        const roleData = savedRole ? JSON.parse(savedRole) : DEFAULT_ROLE;
+        setUserRole(roleData);
+      }
     } finally {
       fetchRoleRef.current = null;
     }
