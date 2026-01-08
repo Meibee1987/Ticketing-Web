@@ -12,8 +12,8 @@ export default function UsersPage() {
   const [form, setForm] = useState({
     nama_teknisi: '',
     email: '',
-    password: '',
     roles_id: '',
+    auth_id: null, // Track if user has auth account
   });
   const [editId, setEditId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -23,7 +23,9 @@ export default function UsersPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from('Teknisi')
-      .select(`*, roles:roles_id(id, role)`)
+      .select(
+        `id, email, nama_teknisi, auth_id, roles_id, roles:roles_id(id, role)`
+      )
       .order('id', { ascending: true });
     if (!error && data) setTeknisiList(data);
     setLoading(false);
@@ -45,7 +47,7 @@ export default function UsersPage() {
   // === MODAL HANDLERS ===
   const openAddModal = () => {
     setModalMode('add');
-    setForm({ nama_teknisi: '', email: '', password: '', roles_id: '' });
+    setForm({ nama_teknisi: '', email: '', roles_id: '', auth_id: null });
     setEditId(null);
     setError(null);
     setModalOpen(true);
@@ -55,9 +57,9 @@ export default function UsersPage() {
     setModalMode('edit');
     setForm({
       nama_teknisi: teknisi.nama_teknisi || '',
-      email: '',
-      password: '',
+      email: teknisi.email || '',
       roles_id: teknisi.roles_id || '',
+      auth_id: teknisi.auth_id || null, // Store auth_id to check if user logged in
     });
     setEditId(teknisi.id);
     setError(null);
@@ -66,7 +68,7 @@ export default function UsersPage() {
 
   const closeModal = () => {
     setModalOpen(false);
-    setForm({ nama_teknisi: '', email: '', password: '', roles_id: '' });
+    setForm({ nama_teknisi: '', email: '', roles_id: '', auth_id: null });
     setEditId(null);
     setError(null);
   };
@@ -79,42 +81,68 @@ export default function UsersPage() {
 
     try {
       if (modalMode === 'add') {
-        // Step 1: Create user dengan auth.signUp (auto confirm, no email verification)
-        const { data: authData, error: authError } = await supabase.auth.signUp(
-          {
-            email: form.email,
-            password: form.password,
-            options: {
-              emailRedirectTo: undefined,
-              data: {
-                email_confirmed: true,
-              },
-            },
-          }
-        );
+        // Validasi email
+        if (!form.email || !form.email.includes('@')) {
+          throw new Error('Email tidak valid');
+        }
 
-        if (authError) throw authError;
+        // Cek email duplikat
+        const { data: existing } = await supabase
+          .from('Teknisi')
+          .select('id')
+          .eq('email', form.email)
+          .single();
 
-        // Step 2: Insert ke tabel Teknisi
-        const authId = authData.user?.id;
+        if (existing) {
+          throw new Error('Email sudah terdaftar');
+        }
+
+        // Insert ke tabel Teknisi dengan email
+        // User akan login menggunakan OTP (tidak perlu password)
         const { error: insertError } = await supabase.from('Teknisi').insert([
           {
             nama_teknisi: form.nama_teknisi,
-            auth_id: authId,
+            email: form.email,
             roles_id: form.roles_id ? parseInt(form.roles_id) : null,
           },
         ]);
 
         if (insertError) throw insertError;
-        alert('User berhasil ditambahkan!');
+        alert('User berhasil ditambahkan! User bisa login dengan OTP.');
       } else {
-        // Update teknisi (tanpa update auth)
+        // Update data sesuai dengan status auth_id
+        const updateData = {
+          nama_teknisi: form.nama_teknisi,
+          roles_id: form.roles_id ? parseInt(form.roles_id) : null,
+        };
+
+        // Jika user belum punya auth_id (belum pernah login), boleh ubah email
+        if (!form.auth_id) {
+          // Validasi email
+          if (!form.email || !form.email.includes('@')) {
+            throw new Error('Email tidak valid');
+          }
+
+          // Cek email duplikat
+          const { data: existing } = await supabase
+            .from('Teknisi')
+            .select('id')
+            .eq('email', form.email)
+            .neq('id', editId)
+            .single();
+
+          if (existing) {
+            throw new Error('Email sudah digunakan oleh user lain');
+          }
+
+          updateData.email = form.email;
+        }
+        // Jika sudah punya auth_id, email tidak bisa diubah (sudah terikat dengan Supabase Auth)
+
+        // Update teknisi
         const { error: updateError } = await supabase
           .from('Teknisi')
-          .update({
-            nama_teknisi: form.nama_teknisi,
-            roles_id: form.roles_id ? parseInt(form.roles_id) : null,
-          })
+          .update(updateData)
           .eq('id', editId);
 
         if (updateError) throw updateError;
@@ -134,8 +162,34 @@ export default function UsersPage() {
     if (!confirm('Yakin ingin menghapus user ini?')) return;
 
     try {
+      // Get user auth_id first
+      const { data: teknisi } = await supabase
+        .from('Teknisi')
+        .select('auth_id')
+        .eq('id', id)
+        .single();
+
+      // Delete from Teknisi table
       const { error } = await supabase.from('Teknisi').delete().eq('id', id);
       if (error) throw error;
+
+      // Delete from Supabase Auth if user has auth_id
+      if (teknisi?.auth_id) {
+        try {
+          const { error: authError } = await supabase.auth.admin.deleteUser(
+            teknisi.auth_id
+          );
+          if (authError) {
+            console.warn(
+              'Warning: Could not delete from Auth:',
+              authError.message
+            );
+          }
+        } catch (authErr) {
+          console.warn('Warning: Could not delete from Auth:', authErr);
+        }
+      }
+
       alert('User berhasil dihapus!');
       fetchTeknisi();
     } catch (err) {
@@ -173,6 +227,9 @@ export default function UsersPage() {
                     Nama
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
+                    Email
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
                     Role
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
@@ -187,7 +244,7 @@ export default function UsersPage() {
                 {teknisiList.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="5"
+                      colSpan="6"
                       className="px-6 py-4 text-center text-sm text-slate-500"
                     >
                       Belum ada data user
@@ -201,6 +258,9 @@ export default function UsersPage() {
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-slate-900">
                         {teknisi.nama_teknisi}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-700">
+                        {teknisi.email || '-'}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
@@ -266,41 +326,35 @@ export default function UsersPage() {
                 />
               </div>
 
-              {modalMode === 'add' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      value={form.email}
-                      onChange={(e) =>
-                        setForm({ ...form, email: e.target.value })
-                      }
-                      placeholder="email@example.com"
-                      required
-                      className="border border-slate-300 px-3 py-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Password <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      value={form.password}
-                      onChange={(e) =>
-                        setForm({ ...form, password: e.target.value })
-                      }
-                      placeholder="Minimal 6 karakter"
-                      required
-                      minLength={6}
-                      className="border border-slate-300 px-3 py-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </>
-              )}
+              {/* Email field - tampil untuk add dan edit */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="email@example.com"
+                  required
+                  disabled={modalMode === 'edit' && form.auth_id}
+                  className={`border border-slate-300 px-3 py-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    modalMode === 'edit' && form.auth_id
+                      ? 'bg-slate-100 cursor-not-allowed'
+                      : ''
+                  }`}
+                />
+                {modalMode === 'edit' && form.auth_id ? (
+                  <p className="text-xs text-amber-600 mt-1">
+                    ⚠️ Email tidak dapat diubah karena user sudah terdaftar di
+                    Supabase Auth
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-500 mt-1">
+                    User akan login menggunakan OTP (tidak perlu password)
+                  </p>
+                )}
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
