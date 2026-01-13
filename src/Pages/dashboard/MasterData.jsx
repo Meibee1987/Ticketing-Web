@@ -12,6 +12,7 @@ export default function MasterData() {
   const [angkatan, setAngkatan] = useState([]);
   const [mataKuliah, setMataKuliah] = useState([]);
   const [ruangan, setRuangan] = useState([]);
+  const [roles, setRoles] = useState([]); // Untuk dropdown role dosen
 
   const [loading, setLoading] = useState(false);
   const [searchInput, setSearchInput] = useState('');
@@ -28,17 +29,37 @@ export default function MasterData() {
     fetchData();
   }, [activeTab]);
 
+  // Fetch roles untuk dropdown (hanya sekali saat mount)
+  useEffect(() => {
+    const fetchRoles = async () => {
+      const { data, error } = await supabase
+        .from('roles')
+        .select('*')
+        .order('id', { ascending: true });
+      if (!error && data) {
+        setRoles(data);
+      }
+    };
+    fetchRoles();
+  }, []);
+
   const fetchData = async () => {
     setLoading(true);
     try {
       switch (activeTab) {
         case 'dosen':
+          // Join dengan tabel roles untuk mendapatkan nama role
           const { data: dosenData, error: dosenError } = await supabase
             .from('dosen')
-            .select('*')
+            .select('*, roles(role)')
             .order('id', { ascending: true });
           if (dosenError) throw dosenError;
-          setDosen(dosenData || []);
+          // Map data untuk menambahkan role_name dari join
+          const dosenWithRole = (dosenData || []).map((d) => ({
+            ...d,
+            role_name: d.roles?.role || null,
+          }));
+          setDosen(dosenWithRole);
           break;
         case 'angkatan':
           const { data: angkatanData, error: angkatanError } = await supabase
@@ -292,6 +313,7 @@ export default function MasterData() {
           item={selectedItem}
           onClose={handleModalClose}
           onSuccess={handleModalSuccess}
+          roles={roles}
         />
       )}
     </div>
@@ -313,6 +335,7 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
           { key: 'nip', label: 'NIP' },
           { key: 'email', label: 'Email' },
           { key: 'telepon', label: 'Telepon' },
+          { key: 'role_name', label: 'Role', type: 'role' },
           ...(hasStatusColumn
             ? [{ key: 'aktif_nonaktif', label: 'Status', type: 'status' }]
             : []),
@@ -390,6 +413,16 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
                         ? '❌ Non-Aktif'
                         : '⚪ Belum diset'}
                   </span>
+                ) : col.type === 'role' ? (
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      item[col.key]
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {item[col.key] || '⚪ Belum ada role'}
+                  </span>
                 ) : (
                   item[col.key] || '-'
                 )}
@@ -407,7 +440,7 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
 }
 
 // Modal Component
-function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
+function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
   const [formData, setFormData] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -418,7 +451,13 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
       // Default form data based on active tab (aktif_nonaktif only if supported)
       switch (activeTab) {
         case 'dosen':
-          setFormData({ nama_dosen: '', nip: '', email: '', telepon: '' });
+          setFormData({
+            nama_dosen: '',
+            nip: '',
+            email: '',
+            telepon: '',
+            roles_id: '',
+          });
           break;
         case 'angkatan':
           setFormData({ nama_angkatan: '', jumlah_mahasiswa: '' });
@@ -471,6 +510,10 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
             }
             return [key, numValue];
           }
+          // Convert roles_id to integer or null
+          if (key === 'roles_id') {
+            return [key, value ? parseInt(value, 10) : null];
+          }
           // Convert boolean fields (handle if column doesn't exist yet)
           if (key === 'aktif_nonaktif') {
             return [key, value === true || value === 'true'];
@@ -478,6 +521,10 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
           return [key, value];
         })
       );
+
+      // Hapus field 'roles' (hasil join) jika ada, karena bukan kolom asli
+      delete insertData.roles;
+      delete insertData.role_name;
 
       if (mode === 'create') {
         const { error } = await supabase.from(tableName).insert([insertData]);
@@ -550,6 +597,31 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess }) {
               onChange={handleChange}
               disabled={isReadOnly}
             />
+            {/* Dropdown Role */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Role (Akses Login)
+              </label>
+              <select
+                name="roles_id"
+                value={formData.roles_id || ''}
+                onChange={handleChange}
+                disabled={isReadOnly}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500"
+              >
+                <option value="">
+                  -- Tidak ada role (tidak bisa login) --
+                </option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.role}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Pilih role "dosen" agar dosen ini bisa login ke sistem
+              </p>
+            </div>
             {(item?.hasOwnProperty('aktif_nonaktif') ||
               formData.hasOwnProperty('aktif_nonaktif')) && (
               <StatusToggle

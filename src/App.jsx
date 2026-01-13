@@ -33,10 +33,47 @@ export default function App() {
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<DashboardLayout />}>
-              <Route index element={<DashboardTicketPage />} />
-              <Route path="ticketing" element={<TicketingPage />} />
-              <Route path="tickets" element={<AllTicketsPage />} />
-              <Route path="my-tickets" element={<MyTicketsPage />} />
+              {/* Default redirect ke jadwal untuk semua role */}
+              <Route
+                index
+                element={<Navigate to="/dashboard/jadwal" replace />}
+              />
+
+              {/* === HALAMAN UNTUK SEMUA ROLE (termasuk dosen) === */}
+              <Route path="jadwal" element={<JadwalPage />} />
+              <Route path="ruangan" element={<RuanganPage />} />
+
+              {/* === HALAMAN KHUSUS ADMIN (tidak untuk dosen) === */}
+              <Route
+                path="ticketing"
+                element={
+                  <RoleProtectedRoute
+                    allowedRoles={['super admin', 'admin', 'user']}
+                  >
+                    <TicketingPage />
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="tickets"
+                element={
+                  <RoleProtectedRoute
+                    allowedRoles={['super admin', 'admin', 'user']}
+                  >
+                    <AllTicketsPage />
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="my-tickets"
+                element={
+                  <RoleProtectedRoute
+                    allowedRoles={['super admin', 'admin', 'user']}
+                  >
+                    <MyTicketsPage />
+                  </RoleProtectedRoute>
+                }
+              />
               <Route
                 path="users"
                 element={
@@ -53,7 +90,6 @@ export default function App() {
                   </RoleProtectedRoute>
                 }
               />
-              <Route path="jadwal" element={<JadwalPage />} />
               <Route
                 path="jadwal-admin"
                 element={
@@ -62,7 +98,6 @@ export default function App() {
                   </RoleProtectedRoute>
                 }
               />
-              <Route path="ruangan" element={<RuanganPage />} />
               <Route
                 path="database"
                 element={

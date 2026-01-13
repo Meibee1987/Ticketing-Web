@@ -1,30 +1,45 @@
 import { supabase } from '../supabaseClient';
 
 /**
- * Cek apakah email sudah terdaftar di tabel Teknisi
+ * Cek apakah email sudah terdaftar di tabel Teknisi atau Dosen
  * @param {string} email - Email user
- * @returns {Promise<{isRegistered: boolean, userInfo: object|null}>}
+ * @returns {Promise<{isRegistered: boolean, userInfo: object|null, userType: string|null}>}
  */
 export async function checkEmailRegistration(email) {
   try {
-    const { data, error } = await supabase
+    // 1. Cek di tabel Teknisi dulu
+    const { data: teknisiData, error: teknisiError } = await supabase
       .from('Teknisi')
       .select('id, email, nama_teknisi, roles_id')
       .eq('email', email)
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        // No rows found - email belum terdaftar
-        return { isRegistered: false, userInfo: null };
-      }
-      throw error;
+    if (!teknisiError && teknisiData) {
+      return {
+        isRegistered: true,
+        userInfo: teknisiData,
+        userType: 'teknisi',
+      };
     }
 
-    return {
-      isRegistered: true,
-      userInfo: data,
-    };
+    // 2. Jika tidak ditemukan di Teknisi, cek di tabel dosen
+    const { data: dosenData, error: dosenError } = await supabase
+      .from('dosen')
+      .select('id, email, nama_dosen, roles_id')
+      .eq('email', email)
+      .not('roles_id', 'is', null) // Hanya dosen yang sudah punya role
+      .single();
+
+    if (!dosenError && dosenData) {
+      return {
+        isRegistered: true,
+        userInfo: dosenData,
+        userType: 'dosen',
+      };
+    }
+
+    // 3. Tidak ditemukan di kedua tabel
+    return { isRegistered: false, userInfo: null, userType: null };
   } catch (err) {
     console.error('Email registration check error:', err);
     throw new Error('Gagal memverifikasi email. Coba lagi.');
@@ -33,18 +48,19 @@ export async function checkEmailRegistration(email) {
 
 /**
  * Kirim OTP ke email user
- * Hanya email yang terdaftar di tabel Teknisi yang bisa menerima OTP
+ * Hanya email yang terdaftar di tabel Teknisi atau Dosen (dengan role) yang bisa menerima OTP
  * @param {string} email - Email user
  * @returns {Promise<{success: boolean, message: string}>}
  */
 export async function sendEmailOTP(email) {
   try {
     // Cek email terdaftar terlebih dahulu
-    const { isRegistered, userInfo } = await checkEmailRegistration(email);
+    const { isRegistered, userInfo, userType } =
+      await checkEmailRegistration(email);
 
     if (!isRegistered) {
       throw new Error(
-        'Email belum terdaftar. Hubungi admin untuk mendaftarkan email Anda.'
+        'Email belum terdaftar atau belum di-assign role. Hubungi admin untuk mendaftarkan email Anda.'
       );
     }
 
@@ -86,6 +102,7 @@ export async function sendEmailOTP(email) {
       message: 'OTP berhasil dikirim ke email Anda',
       data,
       userInfo,
+      userType,
     };
   } catch (err) {
     console.error('Unexpected error sending OTP:', err);
@@ -127,13 +144,25 @@ export async function verifyEmailOTP(email, token) {
       throw new Error(error.message);
     }
 
-    // Update auth_id di tabel Teknisi setelah login berhasil
+    // Update auth_id setelah login berhasil
     if (data.user && data.user.id) {
       try {
-        await supabase
-          .from('Teknisi')
-          .update({ auth_id: data.user.id })
-          .eq('email', email);
+        // Cek user type dulu
+        const { userType } = await checkEmailRegistration(email);
+
+        if (userType === 'teknisi') {
+          // Update auth_id di tabel Teknisi
+          await supabase
+            .from('Teknisi')
+            .update({ auth_id: data.user.id })
+            .eq('email', email);
+        } else if (userType === 'dosen') {
+          // Update auth_id di tabel dosen
+          await supabase
+            .from('dosen')
+            .update({ auth_id: data.user.id })
+            .eq('email', email);
+        }
       } catch (updateErr) {
         console.error('Error updating auth_id:', updateErr);
         // Continue anyway, jangan throw error

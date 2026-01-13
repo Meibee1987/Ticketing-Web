@@ -44,7 +44,7 @@ export default function DashboardLayout() {
             <span>Jadwal</span>
           </NavLink>
 
-          {/* Admin dan Super Admin */}
+          {/* Admin dan Super Admin - Jadwal Admin */}
           {(userRole?.roleName === 'admin' ||
             userRole?.roleName === 'super admin') && (
             <NavLink to="/dashboard/jadwal-admin" className={menuItemClass}>
@@ -58,6 +58,8 @@ export default function DashboardLayout() {
             <span>🏢</span>
             <span>Ruangan</span>
           </NavLink>
+
+          {/* === MENU KHUSUS ADMIN/SUPER ADMIN (Hidden untuk dosen & user) === */}
 
           {/* Admin dan Super Admin bisa akses Master Data */}
           {(userRole?.roleName === 'admin' ||

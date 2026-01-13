@@ -53,7 +53,8 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      const { data, error } = await Promise.race([
+      // 1. Coba cari di tabel Teknisi dulu
+      const { data: teknisiData, error: teknisiError } = await Promise.race([
         supabase
           .from('Teknisi')
           .select(
@@ -66,23 +67,52 @@ export const AuthProvider = ({ children }) => {
         ),
       ]);
 
-      if (error || !data) {
-        // Keep using localStorage data if fetch fails
-        if (!savedRole) {
-          setUserRole(DEFAULT_ROLE);
-        }
+      if (!teknisiError && teknisiData) {
+        const roleData = {
+          userId: teknisiData.id,
+          name: teknisiData.nama_teknisi,
+          roleId: teknisiData.roles_id,
+          roleName: teknisiData.roles?.role || 'user',
+          roleDesc: teknisiData.roles?.deskripsi || '',
+          userType: 'teknisi',
+        };
+        setUserRole(roleData);
+        localStorage.setItem(USER_ROLE_KEY, JSON.stringify(roleData));
         return;
       }
 
-      const roleData = {
-        userId: data.id,
-        name: data.nama_teknisi,
-        roleId: data.roles_id,
-        roleName: data.roles?.role || 'user',
-        roleDesc: data.roles?.deskripsi || '',
-      };
-      setUserRole(roleData);
-      localStorage.setItem(USER_ROLE_KEY, JSON.stringify(roleData));
+      // 2. Jika tidak ditemukan di Teknisi, cari di tabel dosen
+      const { data: dosenData, error: dosenError } = await Promise.race([
+        supabase
+          .from('dosen')
+          .select(
+            'id, nama_dosen, email, roles_id, roles:roles_id(id, role, deskripsi)'
+          )
+          .eq('auth_id', authId)
+          .single(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 3000)
+        ),
+      ]);
+
+      if (!dosenError && dosenData) {
+        const roleData = {
+          userId: dosenData.id,
+          name: dosenData.nama_dosen,
+          roleId: dosenData.roles_id,
+          roleName: dosenData.roles?.role || 'dosen',
+          roleDesc: dosenData.roles?.deskripsi || '',
+          userType: 'dosen',
+        };
+        setUserRole(roleData);
+        localStorage.setItem(USER_ROLE_KEY, JSON.stringify(roleData));
+        return;
+      }
+
+      // 3. Jika tidak ditemukan di kedua tabel, gunakan default
+      if (!savedRole) {
+        setUserRole(DEFAULT_ROLE);
+      }
     } catch (err) {
       console.warn('Role fetch failed, using cached/default:', err.message);
       // Keep existing userRole or use default
@@ -168,6 +198,7 @@ export const AuthProvider = ({ children }) => {
       signOut,
       isAdmin: ['admin', 'super admin'].includes(userRole?.roleName),
       isSuperAdmin: userRole?.roleName === 'super admin',
+      isDosen: userRole?.roleName === 'dosen' || userRole?.userType === 'dosen',
       isUser: userRole?.roleName === 'user',
     }),
     [user, userRole, loading, signOut]
