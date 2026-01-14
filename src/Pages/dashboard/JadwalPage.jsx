@@ -396,6 +396,23 @@ function JadwalTable({ selectedDate }) {
       label: 'Tempat',
       render: (r) => <span className="text-slate-800">{r.nama_ruangan}</span>,
     },
+    {
+      label: 'Jenis',
+      render: (r) => (
+        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+          r.jenis_pertemuan === 'daring'
+            ? 'bg-blue-100 text-blue-700'
+            : r.jenis_pertemuan === 'hybrid'
+            ? 'bg-purple-100 text-purple-700'
+            : 'bg-green-100 text-green-700'
+        }`}>
+          {r.jenis_pertemuan === 'daring' && '🌐 Daring'}
+          {r.jenis_pertemuan === 'luring' && '🏢 Luring'}
+          {r.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
+          {!r.jenis_pertemuan && '🏢 Luring'}
+        </span>
+      ),
+    },
   ];
 
   if (loading) return <LoadingState />;
@@ -424,22 +441,16 @@ function useJadwalKaryaAkhir() {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
 
-      const [jadwalRes, ruanganRes, angkatanRes, agendaRes] = await Promise.all(
-        [
-          supabase.from('jadwal_karya_akhir').select('*').order('mulai_jadwal'),
-          supabase.from('ruangan').select('id, nama_ruangan'),
-          supabase.from('angkatan').select('id, nama_angkatan'),
-          supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
-        ]
-      );
+      const [jadwalRes, ruanganRes, agendaRes] = await Promise.all([
+        supabase.from('jadwal_karya_akhir').select('*').order('mulai_jadwal'),
+        supabase.from('ruangan').select('id, nama_ruangan'),
+        supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
+      ]);
 
       if (jadwalRes.error) throw jadwalRes.error;
 
       const ruanganMap = Object.fromEntries(
         (ruanganRes.data || []).map((r) => [r.id, r.nama_ruangan])
-      );
-      const angkatanMap = Object.fromEntries(
-        (angkatanRes.data || []).map((a) => [a.id, a.nama_angkatan])
       );
       const agendaMap = Object.fromEntries(
         (agendaRes.data || []).map((a) => [a.id, a.agenda_karya_akhir])
@@ -448,7 +459,7 @@ function useJadwalKaryaAkhir() {
       const merged = (jadwalRes.data || []).map((j) => ({
         ...j,
         display_ruangan: ruanganMap[j.nama_ruangan] || '-',
-        display_angkatan: angkatanMap[j.nama_angkatan] || '-',
+        display_mahasiswa: j.nama_mahasiswa || '-',
         display_agenda: agendaMap[j.agenda_jadwal_karya_akhir] || '-',
         mulai_jadwal: j.mulai_jadwal || '-',
         akhir_jadwal: j.akhir_jadwal || '-',
@@ -499,10 +510,10 @@ function JadwalKaryaAkhirTable({ selectedDate }) {
 
   const columns = [
     {
-      label: 'Angkatan',
+      label: 'Nama Mahasiswa',
       render: (r) => (
         <span className="font-semibold text-slate-800">
-          {r.display_angkatan}
+          {r.display_mahasiswa}
         </span>
       ),
     },
@@ -532,6 +543,23 @@ function JadwalKaryaAkhirTable({ selectedDate }) {
       label: 'Ruangan',
       render: (r) => (
         <span className="text-slate-800">{r.display_ruangan}</span>
+      ),
+    },
+    {
+      label: 'Jenis',
+      render: (r) => (
+        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+          r.jenis_pertemuan === 'daring'
+            ? 'bg-blue-100 text-blue-700'
+            : r.jenis_pertemuan === 'hybrid'
+            ? 'bg-purple-100 text-purple-700'
+            : 'bg-green-100 text-green-700'
+        }`}>
+          {r.jenis_pertemuan === 'daring' && '🌐 Daring'}
+          {r.jenis_pertemuan === 'luring' && '🏢 Luring'}
+          {r.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
+          {!r.jenis_pertemuan && '🏢 Luring'}
+        </span>
       ),
     },
   ];
@@ -657,6 +685,23 @@ function JadwalLainLainTable({ selectedDate }) {
       label: 'Tempat',
       render: (r) => (
         <span className="text-slate-800">{r.ruangan_display}</span>
+      ),
+    },
+    {
+      label: 'Jenis',
+      render: (r) => (
+        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+          r.jenis_pertemuan === 'daring'
+            ? 'bg-blue-100 text-blue-700'
+            : r.jenis_pertemuan === 'hybrid'
+            ? 'bg-purple-100 text-purple-700'
+            : 'bg-green-100 text-green-700'
+        }`}>
+          {r.jenis_pertemuan === 'daring' && '🌐 Daring'}
+          {r.jenis_pertemuan === 'luring' && '🏢 Luring'}
+          {r.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
+          {!r.jenis_pertemuan && '🏢 Luring'}
+        </span>
       ),
     },
   ];

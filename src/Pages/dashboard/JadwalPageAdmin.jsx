@@ -462,11 +462,10 @@ export default function JadwalPageAdmin() {
           ...j,
           jenis: 'karya_akhir',
           nama_ruangan: ruanganMap[j.nama_ruangan] || '-',
-          nama_angkatan: angkatanMap[j.nama_angkatan] || '-',
+          nama_mahasiswa: j.nama_mahasiswa || '-',
           agenda_display: agendaMap[j.agenda_jadwal_karya_akhir] || '-',
-          keterangan: angkatanMap[j.nama_angkatan] || '-',
+          keterangan: j.nama_mahasiswa || '-',
           ruangan_id_raw: j.nama_ruangan,
-          angkatan_id_raw: j.nama_angkatan,
           agenda_id_raw: j.agenda_jadwal_karya_akhir,
           dosen_ids: dosenIds,
           dosen_names: dosenNames,
@@ -551,16 +550,18 @@ export default function JadwalPageAdmin() {
         id_mata_kuliah: '',
         mulai_jadwal: '',
         akhir_jadwal: '',
+        jenis_pertemuan: 'luring',
       };
     } else if (type === 'karya_akhir') {
       return {
         id: null,
         nama_ruangan: '',
-        nama_angkatan: '',
+        nama_mahasiswa: '',
         mulai_jadwal: '',
         akhir_jadwal: '',
         agenda_jadwal_karya_akhir: '',
         dosen_ids: [],
+        jenis_pertemuan: 'luring',
       };
     } else {
       return {
@@ -570,6 +571,7 @@ export default function JadwalPageAdmin() {
         mulai_jadwal: '',
         akhir_jadwal: '',
         agenda: '',
+        jenis_pertemuan: 'luring',
       };
     }
   };
@@ -622,16 +624,18 @@ export default function JadwalPageAdmin() {
         id_mata_kuliah: row.id_mata_kuliah || '',
         mulai_jadwal: toDatetimeLocal(row.mulai_jadwal),
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
+        jenis_pertemuan: row.jenis_pertemuan || 'luring',
       });
     } else if (row.jenis === 'karya_akhir') {
       setForm({
         id: row.id,
         nama_ruangan: row.ruangan_id_raw || '',
-        nama_angkatan: row.angkatan_id_raw || '',
+        nama_mahasiswa: row.nama_mahasiswa || '',
         agenda_jadwal_karya_akhir: row.agenda_id_raw || '',
         mulai_jadwal: toDatetimeLocal(row.mulai_jadwal),
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
         dosen_ids: row.dosen_ids || [],
+        jenis_pertemuan: row.jenis_pertemuan || 'luring',
       });
     } else {
       setForm({
@@ -641,6 +645,7 @@ export default function JadwalPageAdmin() {
         agenda: row.agenda || '',
         mulai_jadwal: toDatetimeLocal(row.mulai_jadwal),
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
+        jenis_pertemuan: row.jenis_pertemuan || 'luring',
       });
     }
     setModalOpen(true);
@@ -952,17 +957,27 @@ export default function JadwalPageAdmin() {
             displayKey="nama_ruangan"
             required
           />
+          <SelectField
+            label="Jenis Pertemuan"
+            value={form.jenis_pertemuan || 'luring'}
+            onChange={(v) => handleChange('jenis_pertemuan', v)}
+            options={[
+              { id: 'daring', label: '🌐 Daring (Online)' },
+              { id: 'luring', label: '🏢 Luring (Offline)' },
+              { id: 'hybrid', label: '🔄 Hybrid' },
+            ]}
+            displayKey="label"
+          />
         </>
       );
     } else if (modalType === 'karya_akhir') {
       return (
         <>
-          <SearchableSelect
-            label="Angkatan"
-            value={form.nama_angkatan}
-            onChange={(v) => handleChange('nama_angkatan', v)}
-            options={options.angkatan}
-            displayKey="nama_angkatan"
+          <InputField
+            label="Nama Mahasiswa"
+            value={form.nama_mahasiswa || ''}
+            onChange={(v) => handleChange('nama_mahasiswa', v)}
+            placeholder="Masukkan nama mahasiswa"
             required
           />
           <SearchableSelect
@@ -989,6 +1004,17 @@ export default function JadwalPageAdmin() {
             displayKey="nama_dosen"
             maxSelections={8}
           />
+          <SelectField
+            label="Jenis Pertemuan"
+            value={form.jenis_pertemuan || 'luring'}
+            onChange={(v) => handleChange('jenis_pertemuan', v)}
+            options={[
+              { id: 'daring', label: '🌐 Daring (Online)' },
+              { id: 'luring', label: '🏢 Luring (Offline)' },
+              { id: 'hybrid', label: '🔄 Hybrid' },
+            ]}
+            displayKey="label"
+          />
         </>
       );
     } else {
@@ -1013,6 +1039,17 @@ export default function JadwalPageAdmin() {
             value={form.agenda || ''}
             onChange={(v) => handleChange('agenda', v)}
             placeholder="Masukkan agenda"
+          />
+          <SelectField
+            label="Jenis Pertemuan"
+            value={form.jenis_pertemuan || 'luring'}
+            onChange={(v) => handleChange('jenis_pertemuan', v)}
+            options={[
+              { id: 'daring', label: '🌐 Daring (Online)' },
+              { id: 'luring', label: '🏢 Luring (Offline)' },
+              { id: 'hybrid', label: '🔄 Hybrid' },
+            ]}
+            displayKey="label"
           />
         </>
       );
@@ -1282,6 +1319,7 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
         const mulaiFormatted = (d.mulai_formatted || '').toLowerCase();
         const akhirFormatted = (d.akhir_formatted || '').toLowerCase();
         const angkatan = (d.nama_angkatan || '').toLowerCase();
+        const namaMahasiswa = (d.nama_mahasiswa || '').toLowerCase();
         const namaUser = (d.nama_user || '').toLowerCase();
 
         return (
@@ -1291,6 +1329,7 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
           mulaiFormatted.includes(query) ||
           akhirFormatted.includes(query) ||
           angkatan.includes(query) ||
+          namaMahasiswa.includes(query) ||
           namaUser.includes(query)
         );
       });
@@ -1451,6 +1490,9 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                       <th className="py-3 px-4 font-semibold text-left border border-slate-300">
                         Tempat
                       </th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                        Jenis
+                      </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Aksi
                       </th>
@@ -1459,7 +1501,7 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                   {jenis === 'karya_akhir' && (
                     <>
                       <th className="py-3 px-4 font-semibold text-left border border-slate-300">
-                        Angkatan
+                        Nama Mahasiswa
                       </th>
                       <th className="py-3 px-4 font-semibold text-left border border-slate-300">
                         Mulai
@@ -1475,6 +1517,9 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                       </th>
                       <th className="py-3 px-4 font-semibold text-left border border-slate-300">
                         Ruangan
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                        Jenis
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Aksi
@@ -1497,6 +1542,9 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                       </th>
                       <th className="py-3 px-4 font-semibold text-left border border-slate-300">
                         Tempat
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                        Jenis
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Aksi
@@ -1541,13 +1589,29 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                             {row.nama_ruangan}
                           </span>
                         </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span
+                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+                              row.jenis_pertemuan === 'daring'
+                                ? 'bg-blue-100 text-blue-700'
+                                : row.jenis_pertemuan === 'hybrid'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : 'bg-green-100 text-green-700'
+                            }`}
+                          >
+                            {row.jenis_pertemuan === 'daring' && '🌐 Daring'}
+                            {row.jenis_pertemuan === 'luring' && '🏢 Luring'}
+                            {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
+                            {!row.jenis_pertemuan && '🏢 Luring'}
+                          </span>
+                        </td>
                       </>
                     )}
                     {jenis === 'karya_akhir' && (
                       <>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="font-semibold text-slate-800">
-                            {row.nama_angkatan}
+                            {row.nama_mahasiswa}
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
@@ -1588,6 +1652,22 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                             {row.nama_ruangan}
                           </span>
                         </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span
+                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+                              row.jenis_pertemuan === 'daring'
+                                ? 'bg-blue-100 text-blue-700'
+                                : row.jenis_pertemuan === 'hybrid'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : 'bg-green-100 text-green-700'
+                            }`}
+                          >
+                            {row.jenis_pertemuan === 'daring' && '🌐 Daring'}
+                            {row.jenis_pertemuan === 'luring' && '🏢 Luring'}
+                            {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
+                            {!row.jenis_pertemuan && '🏢 Luring'}
+                          </span>
+                        </td>
                       </>
                     )}
                     {jenis === 'lain_lain' && (
@@ -1615,6 +1695,22 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="text-slate-800">
                             {row.nama_ruangan}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span
+                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+                              row.jenis_pertemuan === 'daring'
+                                ? 'bg-blue-100 text-blue-700'
+                                : row.jenis_pertemuan === 'hybrid'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : 'bg-green-100 text-green-700'
+                            }`}
+                          >
+                            {row.jenis_pertemuan === 'daring' && '🌐 Daring'}
+                            {row.jenis_pertemuan === 'luring' && '🏢 Luring'}
+                            {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
+                            {!row.jenis_pertemuan && '🏢 Luring'}
                           </span>
                         </td>
                       </>
@@ -1697,17 +1793,25 @@ function Modal({ children, onClose }) {
   );
 }
 
-function InputField({ label, value, onChange, placeholder, type = 'text' }) {
+function InputField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  required = false,
+}) {
   return (
     <div>
       <label className="block text-sm font-medium text-slate-700 mb-1">
-        {label}
+        {label} {required && <span className="text-red-500">*</span>}
       </label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        required={required}
         className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
       />
     </div>
