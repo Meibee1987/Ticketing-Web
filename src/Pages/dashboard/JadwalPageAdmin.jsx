@@ -5,13 +5,174 @@
  * ================================================================================
  */
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import { supabase } from '../../supabaseClient';
 // 🎯 Import komponen reusable dari folder components/
 import SearchBar from '../../components/SearchBar';
 import ActionButtons from '../../components/ActionButtons';
 import Pagination from '../../components/Pagination';
 import SearchableSelect from '../../components/SearchableSelect';
+
+// ================================================================================
+// KOMPONEN MULTI-DOSEN SELECT (max 8 dosen)
+// ================================================================================
+function MultiDosenSelect({
+  label,
+  values = [],
+  onChange,
+  options = [],
+  displayKey,
+  maxSelections = 8,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const dropdownRef = React.useRef(null);
+
+  const getDisplayText = (option) => {
+    if (!option) return '';
+    return typeof displayKey === 'function'
+      ? displayKey(option)
+      : option[displayKey];
+  };
+
+  // Get selected dosen names
+  const selectedDosen = values
+    .map((id) => options.find((opt) => opt.id === id))
+    .filter(Boolean);
+
+  // Filter options based on search (exclude already selected)
+  const filteredOptions = options.filter((opt) => {
+    const text = getDisplayText(opt).toLowerCase();
+    const matchesSearch = text.includes(searchQuery.toLowerCase());
+    const notSelected = !values.includes(opt.id);
+    return matchesSearch && notSelected;
+  });
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+        setSearchQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelect = (optionId) => {
+    if (values.length < maxSelections) {
+      onChange([...values, optionId]);
+    }
+    setSearchQuery('');
+  };
+
+  const handleRemove = (optionId) => {
+    onChange(values.filter((id) => id !== optionId));
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <label className="block text-sm font-medium text-slate-700 mb-1">
+        {label}{' '}
+        <span className="text-xs text-slate-500">
+          (max {maxSelections} dosen)
+        </span>
+      </label>
+
+      {/* Selected Dosen Tags */}
+      {selectedDosen.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {selectedDosen.map((dosen, idx) => (
+            <span
+              key={dosen.id}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full"
+            >
+              <span className="text-indigo-500">{idx + 1}.</span>
+              {getDisplayText(dosen)}
+              <button
+                type="button"
+                onClick={() => handleRemove(dosen.id)}
+                className="ml-1 text-indigo-400 hover:text-indigo-600"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Input Display */}
+      <div
+        onClick={() => values.length < maxSelections && setIsOpen(!isOpen)}
+        className={`w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white cursor-pointer hover:border-indigo-500 flex items-center justify-between ${
+          values.length >= maxSelections ? 'bg-slate-50 cursor-not-allowed' : ''
+        }`}
+      >
+        <span className="text-slate-400">
+          {values.length >= maxSelections
+            ? `Maksimal ${maxSelections} dosen dipilih`
+            : `Pilih dosen... (${values.length}/${maxSelections})`}
+        </span>
+        <svg
+          className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 9l-7 7-7-7"
+          />
+        </svg>
+      </div>
+
+      {/* Dropdown Menu */}
+      {isOpen && values.length < maxSelections && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
+          {/* Search Input */}
+          <div className="p-2 border-b border-slate-200">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari dosen..."
+              className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500"
+              autoFocus
+            />
+          </div>
+
+          {/* Options List */}
+          <div className="overflow-y-auto max-h-48">
+            {filteredOptions.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-slate-500 text-center">
+                Tidak ada hasil
+              </div>
+            ) : (
+              filteredOptions.map((option) => (
+                <div
+                  key={option.id}
+                  onClick={() => handleSelect(option.id)}
+                  className="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 text-slate-700"
+                >
+                  {getDisplayText(option)}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ================================================================================
 // HELPER FUNCTIONS & CONSTANTS
@@ -278,20 +439,44 @@ export default function JadwalPageAdmin() {
         .from('jadwal_karya_akhir')
         .select('*');
 
-      const mergedKaryaAkhir = (karyaAkhirData || []).map((j) => ({
-        ...j,
-        jenis: 'karya_akhir',
-        nama_ruangan: ruanganMap[j.nama_ruangan] || '-',
-        nama_angkatan: angkatanMap[j.nama_angkatan] || '-',
-        agenda_display: agendaMap[j.agenda_jadwal_karya_akhir] || '-',
-        keterangan: angkatanMap[j.nama_angkatan] || '-',
-        ruangan_id_raw: j.nama_ruangan,
-        angkatan_id_raw: j.nama_angkatan,
-        agenda_id_raw: j.agenda_jadwal_karya_akhir,
-        mulai_formatted: formatTimestamp(j.mulai_jadwal),
-        akhir_formatted: formatTimestamp(j.akhir_jadwal),
-        last_modified: j.updated_at || j.created_at || new Date().toISOString(),
-      }));
+      // Create dosen map for lookup
+      const dosenMap = createMap(dosenRes.data, 'nama_dosen');
+
+      const mergedKaryaAkhir = (karyaAkhirData || []).map((j) => {
+        // Parse dosen IDs (stored as JSON array or comma-separated)
+        let dosenIds = [];
+        if (j.dosen_ids) {
+          try {
+            dosenIds =
+              typeof j.dosen_ids === 'string'
+                ? JSON.parse(j.dosen_ids)
+                : j.dosen_ids;
+          } catch {
+            dosenIds = [];
+          }
+        }
+        // Map dosen IDs to names
+        const dosenNames = dosenIds.map((id) => dosenMap[id]).filter(Boolean);
+
+        return {
+          ...j,
+          jenis: 'karya_akhir',
+          nama_ruangan: ruanganMap[j.nama_ruangan] || '-',
+          nama_angkatan: angkatanMap[j.nama_angkatan] || '-',
+          agenda_display: agendaMap[j.agenda_jadwal_karya_akhir] || '-',
+          keterangan: angkatanMap[j.nama_angkatan] || '-',
+          ruangan_id_raw: j.nama_ruangan,
+          angkatan_id_raw: j.nama_angkatan,
+          agenda_id_raw: j.agenda_jadwal_karya_akhir,
+          dosen_ids: dosenIds,
+          dosen_names: dosenNames,
+          dosen_display: dosenNames.length > 0 ? dosenNames.join(', ') : '-',
+          mulai_formatted: formatTimestamp(j.mulai_jadwal),
+          akhir_formatted: formatTimestamp(j.akhir_jadwal),
+          last_modified:
+            j.updated_at || j.created_at || new Date().toISOString(),
+        };
+      });
       setJadwalKaryaAkhir(mergedKaryaAkhir);
 
       // Fetch jadwal lain-lain
@@ -375,6 +560,7 @@ export default function JadwalPageAdmin() {
         mulai_jadwal: '',
         akhir_jadwal: '',
         agenda_jadwal_karya_akhir: '',
+        dosen_ids: [],
       };
     } else {
       return {
@@ -445,6 +631,7 @@ export default function JadwalPageAdmin() {
         agenda_jadwal_karya_akhir: row.agenda_id_raw || '',
         mulai_jadwal: toDatetimeLocal(row.mulai_jadwal),
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
+        dosen_ids: row.dosen_ids || [],
       });
     } else {
       setForm({
@@ -523,11 +710,20 @@ export default function JadwalPageAdmin() {
 
       // 🎯 Logic insert/update disatukan (tidak ada duplikasi!)
       let result;
+      // Prepare form data - convert dosen_ids array to JSON string for karya_akhir
+      let formData = { ...form };
+      if (modalType === 'karya_akhir' && formData.dosen_ids) {
+        formData.dosen_ids = JSON.stringify(formData.dosen_ids);
+      }
+
       if (modalMode === 'add') {
-        const { id, ...dataToInsert } = form; // Hapus id untuk insert
+        const { id, ...dataToInsert } = formData; // Hapus id untuk insert
         result = await supabase.from(table).insert([dataToInsert]);
       } else {
-        result = await supabase.from(table).update(form).eq('id', form.id);
+        result = await supabase
+          .from(table)
+          .update(formData)
+          .eq('id', formData.id);
       }
 
       if (result.error) throw result.error;
@@ -784,6 +980,14 @@ export default function JadwalPageAdmin() {
             options={options.agenda}
             displayKey="agenda_karya_akhir"
             required
+          />
+          <MultiDosenSelect
+            label="Dosen Penguji"
+            values={form.dosen_ids || []}
+            onChange={(v) => handleChange('dosen_ids', v)}
+            options={options.dosen}
+            displayKey="nama_dosen"
+            maxSelections={8}
           />
         </>
       );
@@ -1267,6 +1471,9 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                         Agenda
                       </th>
                       <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                        Dosen Penguji
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
                         Ruangan
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
@@ -1356,6 +1563,24 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                         <td className="py-3 px-4 border border-slate-200">
                           <div className="font-semibold text-slate-900">
                             {row.agenda_display}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <div className="max-w-[200px]">
+                            {row.dosen_names && row.dosen_names.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {row.dosen_names.map((name, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full"
+                                  >
+                                    {idx + 1}. {name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-xs">-</span>
+                            )}
                           </div>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
