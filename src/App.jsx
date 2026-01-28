@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
 import LoginPage from './Pages/LoginPage';
 import LoginPageOTP from './Pages/LoginPageOTP';
+import JadwalMonitor from './Pages/JadwalMonitor';
 
 import DashboardLayout from './Pages/dashboard/DashboardLayout';
 import OverviewPage from './Pages/dashboard/OverviewPage';
@@ -26,9 +27,10 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          {/* Public Route */}
+          {/* Public Routes */}
           <Route path="/login" element={<LoginPageOTP />} />
           <Route path="/login-password" element={<LoginPage />} />
+          <Route path="/jadwal-monitor" element={<JadwalMonitor />} />
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
@@ -109,6 +111,8 @@ export default function App() {
             </Route>
           </Route>
 
+          {/* Root redirect ke login */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
           {/* Redirect semua undefined routes */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

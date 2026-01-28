@@ -19,7 +19,7 @@ export default function LoginPageOTP() {
         data: { session },
       } = await supabase.auth.getSession();
       if (session) {
-        window.location.href = '/dashboard';
+        window.location.href = '/dashboard/jadwal';
       }
     };
     checkSession();
@@ -78,7 +78,7 @@ export default function LoginPageOTP() {
       if (result.success && result.session) {
         setSuccess('Login berhasil! Mengalihkan...');
         setTimeout(() => {
-          window.location.href = '/dashboard';
+          window.location.href = '/dashboard/jadwal';
         }, 1000);
       }
     } catch (err) {

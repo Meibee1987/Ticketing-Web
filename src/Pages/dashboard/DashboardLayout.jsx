@@ -53,6 +53,18 @@ export default function DashboardLayout() {
             </NavLink>
           )}
 
+          {/* Link ke Monitor Jadwal (public page) */}
+          <a
+            href="/jadwal-monitor"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full text-left px-4 py-2 text-sm rounded-r-full flex items-center gap-2 transition-all hover:bg-[#7a1c2f]/80 text-yellow-300"
+          >
+            <span>📺</span>
+            <span>Monitor Jadwal</span>
+            <span className="text-xs">↗</span>
+          </a>
+
           {/* Semua role bisa akses Ruangan */}
           <NavLink to="/dashboard/ruangan" className={menuItemClass}>
             <span>🏢</span>
