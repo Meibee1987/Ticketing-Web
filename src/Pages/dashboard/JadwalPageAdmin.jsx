@@ -551,6 +551,9 @@ export default function JadwalPageAdmin() {
         mulai_jadwal: '',
         akhir_jadwal: '',
         jenis_pertemuan: 'luring',
+        zoom_id: '',
+        zoom_password: '',
+        note: '',
       };
     } else if (type === 'karya_akhir') {
       return {
@@ -562,6 +565,9 @@ export default function JadwalPageAdmin() {
         agenda_jadwal_karya_akhir: '',
         dosen_ids: [],
         jenis_pertemuan: 'luring',
+        zoom_id: '',
+        zoom_password: '',
+        note: '',
       };
     } else {
       return {
@@ -572,6 +578,9 @@ export default function JadwalPageAdmin() {
         akhir_jadwal: '',
         agenda: '',
         jenis_pertemuan: 'luring',
+        zoom_id: '',
+        zoom_password: '',
+        note: '',
       };
     }
   };
@@ -1002,6 +1011,28 @@ export default function JadwalPageAdmin() {
             displayKey="nama_ruangan"
             required={form.jenis_pertemuan !== 'daring'}
           />
+          {form.jenis_pertemuan === 'hybrid' && (
+            <>
+              <InputField
+                label="Zoom ID"
+                value={form.zoom_id || ''}
+                onChange={(v) => handleChange('zoom_id', v)}
+                placeholder="Masukkan Zoom Meeting ID"
+              />
+              <InputField
+                label="Zoom Password"
+                value={form.zoom_password || ''}
+                onChange={(v) => handleChange('zoom_password', v)}
+                placeholder="Masukkan Zoom Password"
+              />
+            </>
+          )}
+          <InputField
+            label="Catatan / Permintaan"
+            value={form.note || ''}
+            onChange={(v) => handleChange('note', v)}
+            placeholder="Masukkan catatan atau permintaan khusus (opsional)"
+          />
         </>
       );
     } else if (modalType === 'karya_akhir') {
@@ -1055,6 +1086,28 @@ export default function JadwalPageAdmin() {
             displayKey="nama_ruangan"
             required={form.jenis_pertemuan !== 'daring'}
           />
+          {form.jenis_pertemuan === 'hybrid' && (
+            <>
+              <InputField
+                label="Zoom ID"
+                value={form.zoom_id || ''}
+                onChange={(v) => handleChange('zoom_id', v)}
+                placeholder="Masukkan Zoom Meeting ID"
+              />
+              <InputField
+                label="Zoom Password"
+                value={form.zoom_password || ''}
+                onChange={(v) => handleChange('zoom_password', v)}
+                placeholder="Masukkan Zoom Password"
+              />
+            </>
+          )}
+          <InputField
+            label="Catatan / Permintaan"
+            value={form.note || ''}
+            onChange={(v) => handleChange('note', v)}
+            placeholder="Masukkan catatan atau permintaan khusus (opsional)"
+          />
         </>
       );
     } else {
@@ -1096,6 +1149,28 @@ export default function JadwalPageAdmin() {
             options={options.ruangan}
             displayKey="nama_ruangan"
             required={form.jenis_pertemuan !== 'daring'}
+          />
+          {form.jenis_pertemuan === 'hybrid' && (
+            <>
+              <InputField
+                label="Zoom ID"
+                value={form.zoom_id || ''}
+                onChange={(v) => handleChange('zoom_id', v)}
+                placeholder="Masukkan Zoom Meeting ID"
+              />
+              <InputField
+                label="Zoom Password"
+                value={form.zoom_password || ''}
+                onChange={(v) => handleChange('zoom_password', v)}
+                placeholder="Masukkan Zoom Password"
+              />
+            </>
+          )}
+          <InputField
+            label="Catatan / Permintaan"
+            value={form.note || ''}
+            onChange={(v) => handleChange('note', v)}
+            placeholder="Masukkan catatan atau permintaan khusus (opsional)"
           />
         </>
       );
@@ -1650,6 +1725,16 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                             {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
                             {!row.jenis_pertemuan && '🏢 Luring'}
                           </span>
+                          {row.jenis_pertemuan === 'hybrid' && row.zoom_id && (
+                            <div className="mt-1 text-xs text-slate-600">
+                              <div className="font-semibold">
+                                Zoom ID: {row.zoom_id}
+                              </div>
+                              {row.zoom_password && (
+                                <div>Pass: {row.zoom_password}</div>
+                              )}
+                            </div>
+                          )}
                         </td>
                       </>
                     )}
@@ -1713,6 +1798,16 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                             {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
                             {!row.jenis_pertemuan && '🏢 Luring'}
                           </span>
+                          {row.jenis_pertemuan === 'hybrid' && row.zoom_id && (
+                            <div className="mt-1 text-xs text-slate-600">
+                              <div className="font-semibold">
+                                Zoom ID: {row.zoom_id}
+                              </div>
+                              {row.zoom_password && (
+                                <div>Pass: {row.zoom_password}</div>
+                              )}
+                            </div>
+                          )}
                         </td>
                       </>
                     )}
@@ -1758,6 +1853,16 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                             {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
                             {!row.jenis_pertemuan && '🏢 Luring'}
                           </span>
+                          {row.jenis_pertemuan === 'hybrid' && row.zoom_id && (
+                            <div className="mt-1 text-xs text-slate-600">
+                              <div className="font-semibold">
+                                Zoom ID: {row.zoom_id}
+                              </div>
+                              {row.zoom_password && (
+                                <div>Pass: {row.zoom_password}</div>
+                              )}
+                            </div>
+                          )}
                         </td>
                       </>
                     )}
