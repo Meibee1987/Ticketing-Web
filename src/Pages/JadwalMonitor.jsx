@@ -330,19 +330,21 @@ export default function JadwalMonitor() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 p-2 md:p-4">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-3 md:mb-6">
         <div className="text-center">
-          <div className="flex items-center justify-center gap-4 mb-4">
-            <div className="w-16 h-16 bg-yellow-400 rounded-full flex items-center justify-center">
-              <span className="text-2xl font-bold text-blue-900">📚</span>
+          <div className="flex items-center justify-center gap-2 md:gap-4 mb-2 md:mb-4">
+            <div className="w-10 h-10 md:w-16 md:h-16 bg-yellow-400 rounded-full flex items-center justify-center">
+              <span className="text-xl md:text-2xl font-bold text-blue-900">
+                📚
+              </span>
             </div>
             <div>
-              <h1 className="text-4xl font-bold text-white mb-2">
+              <h1 className="text-xl md:text-4xl font-bold text-white mb-1 md:mb-2">
                 INFORMASI JADWAL
               </h1>
-              <p className="text-yellow-300 text-xl font-semibold">
+              <p className="text-yellow-300 text-xs md:text-xl font-semibold">
                 {formatCurrentTime()}
               </p>
             </div>
@@ -353,20 +355,20 @@ export default function JadwalMonitor() {
       {/* Content */}
       {jadwalData.length === 0 ? (
         <div className="text-center">
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 max-w-md mx-auto">
-            <div className="text-6xl mb-4">📅</div>
-            <h2 className="text-2xl font-bold text-white mb-2">
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 md:p-8 max-w-md mx-auto">
+            <div className="text-4xl md:text-6xl mb-4">📅</div>
+            <h2 className="text-xl md:text-2xl font-bold text-white mb-2">
               Tidak Ada Jadwal
             </h2>
-            <p className="text-gray-300">
+            <p className="text-sm md:text-base text-gray-300">
               Tidak ada kegiatan yang terjadwal untuk hari ini
             </p>
           </div>
         </div>
       ) : (
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-2xl">
-          {/* Table Header */}
-          <div className="grid grid-cols-12 gap-4 font-bold text-gray-800 bg-gray-100 p-4 rounded-lg mb-4 text-sm">
+        <div className="bg-white/95 backdrop-blur-sm rounded-xl md:rounded-2xl p-3 md:p-6 shadow-2xl">
+          {/* Table Header - Hidden on Mobile, use card layout instead */}
+          <div className="hidden lg:grid lg:grid-cols-12 gap-4 font-bold text-gray-800 bg-gray-100 p-4 rounded-lg mb-4 text-sm">
             <div className="col-span-1">KODE</div>
             <div className="col-span-2">JAM</div>
             <div className="col-span-4">KEGIATAN</div>
@@ -387,10 +389,10 @@ export default function JadwalMonitor() {
                 <div key={item.id}>
                   {/* Separator Jenis Kegiatan */}
                   {showTypeSeparator && (
-                    <div className="my-6 first:mt-0">
-                      <div className="flex items-center gap-4 mb-3">
+                    <div className="my-3 md:my-6 first:mt-0">
+                      <div className="flex items-center gap-2 md:gap-4 mb-2 md:mb-3">
                         <div
-                          className={`h-1 flex-1 rounded ${
+                          className={`h-0.5 md:h-1 flex-1 rounded ${
                             item.type === 'perkuliahan'
                               ? 'bg-blue-400'
                               : item.type === 'karya_akhir'
@@ -398,13 +400,13 @@ export default function JadwalMonitor() {
                                 : 'bg-green-400'
                           }`}
                         ></div>
-                        <h3 className="text-lg font-bold text-gray-700 px-4 py-1 rounded-full bg-gray-100">
+                        <h3 className="text-xs md:text-lg font-bold text-gray-700 px-2 md:px-4 py-0.5 md:py-1 rounded-full bg-gray-100">
                           {item.type === 'perkuliahan' && '📚 PERKULIAHAN'}
                           {item.type === 'karya_akhir' && '🎓 KARYA AKHIR'}
                           {item.type === 'lain_lain' && '📋 LAIN-LAIN'}
                         </h3>
                         <div
-                          className={`h-1 flex-1 rounded ${
+                          className={`h-0.5 md:h-1 flex-1 rounded ${
                             item.type === 'perkuliahan'
                               ? 'bg-blue-400'
                               : item.type === 'karya_akhir'
@@ -416,25 +418,39 @@ export default function JadwalMonitor() {
                     </div>
                   )}
 
-                  {/* Baris Jadwal */}
+                  {/* Baris Jadwal - Card style for mobile, Grid for desktop */}
                   <div
-                    className={`grid grid-cols-12 gap-4 p-4 rounded-lg border-l-4 ${getTypeColor(item.type)} ${getStatusColor(item.status)}`}
+                    className={`lg:grid lg:grid-cols-12 gap-2 md:gap-4 p-3 md:p-4 rounded-lg border-l-4 ${getTypeColor(item.type)} ${getStatusColor(item.status)}`}
                   >
-                    <div className="col-span-1">
-                      <span className="font-bold text-lg">{item.kode}</span>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="font-mono text-lg font-semibold">
+                    {/* Mobile Card Layout */}
+                    <div className="lg:hidden space-y-2">
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-sm md:text-base">
+                          {item.kode}
+                        </span>
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            item.status === 'ongoing'
+                              ? 'bg-green-100 text-green-700'
+                              : item.status === 'upcoming'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {item.status === 'ongoing' && '🟢 Berlangsung'}
+                          {item.status === 'upcoming' && '⏰ Akan Datang'}
+                          {item.status === 'finished' && '✅ Selesai'}
+                        </span>
+                      </div>
+                      <div className="font-mono text-sm md:text-base font-semibold text-gray-700">
                         {item.jam}
-                      </span>
-                    </div>
-                    <div className="col-span-4">
-                      <div className="font-semibold text-lg leading-tight">
+                      </div>
+                      <div className="font-semibold text-sm md:text-base leading-tight">
                         {item.kegiatan}
                       </div>
                       {item.jenis_pertemuan && (
                         <span
-                          className={`inline-block mt-1 px-2 py-0.5 text-xs rounded-full ${
+                          className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                             item.jenis_pertemuan === 'daring'
                               ? 'bg-green-100 text-green-700'
                               : item.jenis_pertemuan === 'hybrid'
@@ -447,29 +463,65 @@ export default function JadwalMonitor() {
                           {item.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
                         </span>
                       )}
+                      <div className="flex justify-between text-xs md:text-sm text-gray-700">
+                        <span className="font-semibold">📍 {item.tempat}</span>
+                        <span>{item.dosen}</span>
+                      </div>
                     </div>
-                    <div className="col-span-2">
-                      <span className="text-lg font-semibold">
-                        {item.tempat}
-                      </span>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-base">{item.dosen}</span>
-                    </div>
-                    <div className="col-span-1">
-                      <span
-                        className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                          item.status === 'ongoing'
-                            ? 'bg-green-100 text-green-700'
-                            : item.status === 'upcoming'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {item.status === 'ongoing' && '🟢 Berlangsung'}
-                        {item.status === 'upcoming' && '⏰ Akan Datang'}
-                        {item.status === 'finished' && '✅ Selesai'}
-                      </span>
+
+                    {/* Desktop Grid Layout */}
+                    <div className="hidden lg:contents">
+                      <div className="col-span-1">
+                        <span className="font-bold text-lg">{item.kode}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="font-mono text-lg font-semibold">
+                          {item.jam}
+                        </span>
+                      </div>
+                      <div className="col-span-4">
+                        <div className="font-semibold text-lg leading-tight">
+                          {item.kegiatan}
+                        </div>
+                        {item.jenis_pertemuan && (
+                          <span
+                            className={`inline-block mt-1 px-2 py-0.5 text-xs rounded-full ${
+                              item.jenis_pertemuan === 'daring'
+                                ? 'bg-green-100 text-green-700'
+                                : item.jenis_pertemuan === 'hybrid'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : 'bg-blue-100 text-blue-700'
+                            }`}
+                          >
+                            {item.jenis_pertemuan === 'daring' && '🌐 Daring'}
+                            {item.jenis_pertemuan === 'luring' && '🏢 Luring'}
+                            {item.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-lg font-semibold">
+                          {item.tempat}
+                        </span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-base">{item.dosen}</span>
+                      </div>
+                      <div className="col-span-1">
+                        <span
+                          className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                            item.status === 'ongoing'
+                              ? 'bg-green-100 text-green-700'
+                              : item.status === 'upcoming'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {item.status === 'ongoing' && '🟢 Berlangsung'}
+                          {item.status === 'upcoming' && '⏰ Akan Datang'}
+                          {item.status === 'finished' && '✅ Selesai'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -478,22 +530,22 @@ export default function JadwalMonitor() {
           </div>
 
           {/* Footer Info */}
-          <div className="mt-8 text-center">
-            <div className="flex justify-center gap-6 text-sm">
+          <div className="mt-4 md:mt-8 text-center">
+            <div className="flex flex-wrap justify-center gap-3 md:gap-6 text-xs md:text-sm">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-blue-300 rounded border border-blue-400"></div>
+                <div className="w-3 h-3 md:w-4 md:h-4 bg-blue-300 rounded border border-blue-400"></div>
                 <span>Perkuliahan</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-purple-300 rounded border border-purple-400"></div>
+                <div className="w-3 h-3 md:w-4 md:h-4 bg-purple-300 rounded border border-purple-400"></div>
                 <span>Karya Akhir</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-green-300 rounded border border-green-400"></div>
+                <div className="w-3 h-3 md:w-4 md:h-4 bg-green-300 rounded border border-green-400"></div>
                 <span>Lain-lain</span>
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-4">
+            <p className="text-xs text-gray-500 mt-2 md:mt-4">
               Data diperbarui otomatis setiap 5 menit • Total kegiatan hari ini:{' '}
               {jadwalData.length}
             </p>
