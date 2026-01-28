@@ -111,14 +111,14 @@ export default function LoginPage() {
           onCancel={handle2FACancel}
         />
       ) : (
-        <div className="min-h-screen bg-gradient-to-br from-[#1e3a8a] via-[#1e40af] to-[#2563eb] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md px-8 py-12 relative">
+        <div className="min-h-screen bg-gradient-to-br from-[#1e3a8a] via-[#1e40af] to-[#2563eb] flex items-center justify-center p-4 sm:p-6 md:p-8">
+          <div className="bg-white rounded-2xl md:rounded-3xl shadow-2xl w-full max-w-md px-6 sm:px-8 py-10 sm:py-12 relative">
             {/* ICON bulat */}
-            <div className="flex justify-center -mt-20 mb-8">
-              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center shadow-xl">
+            <div className="flex justify-center -mt-16 sm:-mt-20 mb-6 sm:mb-8">
+              <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center shadow-xl">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-14 w-14 text-white"
+                  className="h-10 w-10 sm:h-14 sm:w-14 text-white"
                   viewBox="0 0 24 24"
                   fill="currentColor"
                 >
@@ -127,23 +127,23 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <h2 className="text-center text-2xl font-semibold text-gray-800 mb-2">
+            <h2 className="text-center text-xl sm:text-2xl font-semibold text-gray-800 mb-2">
               Welcome Back
             </h2>
-            <p className="text-center text-gray-500 mb-8 text-sm">
+            <p className="text-center text-gray-500 mb-6 sm:mb-8 text-xs sm:text-sm">
               Please sign in to continue
             </p>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
               {/* EMAIL */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">
                   Email Address
                 </label>
-                <div className="flex items-center bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
+                <div className="flex items-center bg-gray-50 border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
                   <input
                     type="email"
-                    className="w-full bg-transparent outline-none text-sm text-gray-700 placeholder-gray-400"
+                    className="w-full bg-transparent outline-none text-xs sm:text-sm text-gray-700 placeholder-gray-400"
                     placeholder="Enter your email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -154,13 +154,13 @@ export default function LoginPage() {
 
               {/* PASSWORD */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">
                   Password
                 </label>
-                <div className="flex items-center bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
+                <div className="flex items-center bg-gray-50 border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
                   <input
                     type="password"
-                    className="w-full bg-transparent outline-none text-sm text-gray-700 placeholder-gray-400"
+                    className="w-full bg-transparent outline-none text-xs sm:text-sm text-gray-700 placeholder-gray-400"
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -177,7 +177,9 @@ export default function LoginPage() {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                 />
-                <span className="text-gray-600 text-sm">Remember me</span>
+                <span className="text-gray-600 text-xs sm:text-sm">
+                  Remember me
+                </span>
               </label>
 
               {/* ERROR */}
@@ -206,7 +208,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3.5 rounded-lg bg-gradient-to-r from-red-700 to-red-600 hover:from-red-800 hover:to-red-700 text-white text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 sm:py-3.5 rounded-lg bg-gradient-to-r from-red-700 to-red-600 hover:from-red-800 hover:to-red-700 text-white text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? 'Signing In...' : 'Sign In'}
               </button>

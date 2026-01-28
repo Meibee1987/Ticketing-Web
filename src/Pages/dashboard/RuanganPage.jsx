@@ -72,20 +72,20 @@ export default function RuanganPage() {
   const goTo = (fn) => () => setSelectedDate(fn);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold text-slate-800">
+        <h1 className="text-xl md:text-2xl font-semibold text-slate-800">
           📍 Ketersediaan Ruangan
         </h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <p className="text-xs md:text-sm text-slate-500 mt-1">
           Lihat ketersediaan ruangan berdasarkan tanggal. Ruangan "Tersedia"
           hanya berkurang jika sedang digunakan.
         </p>
       </header>
 
       {/* Date Filter */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-200 p-3 md:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
           <div className="flex items-center gap-2">
             <NavButton
               onClick={goTo(new Date(selectedDate.getTime() - 86400000))}
@@ -97,7 +97,7 @@ export default function RuanganPage() {
               onChange={(e) =>
                 setSelectedDate(new Date(e.target.value + 'T00:00:00'))
               }
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="border border-slate-200 rounded-lg px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
             <NavButton
               onClick={goTo(new Date(selectedDate.getTime() + 86400000))}

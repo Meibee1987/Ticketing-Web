@@ -99,19 +99,19 @@ export default function JadwalPage() {
   const isToday = isSameDate(selectedDate, new Date());
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <PageHeader title={tabTitles[activeTab] || 'Jadwal'} />
 
       {/* Date Filter */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-200 p-3 md:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
           <div className="flex items-center gap-2">
             <button
               onClick={goToPrevDay}
-              className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+              className="p-1.5 md:p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
             >
               <svg
-                className="w-5 h-5 text-slate-600"
+                className="w-4 h-4 md:w-5 md:h-5 text-slate-600"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -128,14 +128,14 @@ export default function JadwalPage() {
               type="date"
               value={formatDateInput(selectedDate)}
               onChange={handleDateChange}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="border border-slate-200 rounded-lg px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
             <button
               onClick={goToNextDay}
-              className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+              className="p-1.5 md:p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
             >
               <svg
-                className="w-5 h-5 text-slate-600"
+                className="w-4 h-4 md:w-5 md:h-5 text-slate-600"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -149,10 +149,10 @@ export default function JadwalPage() {
               </svg>
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
             <button
               onClick={goToToday}
-              className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              className={`px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-lg transition-colors ${
                 isToday
                   ? 'bg-indigo-600 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -160,33 +160,34 @@ export default function JadwalPage() {
             >
               Hari Ini
             </button>
-            <span className="text-sm font-medium text-slate-700">
+            <span className="text-xs md:text-sm font-medium text-slate-700">
               {formatDate(selectedDate)}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="border-b border-slate-200">
           <nav className="flex -mb-px overflow-x-auto">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-3 md:py-4 text-xs md:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-blue-600 text-blue-600 bg-blue-50/50'
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                 }`}
               >
                 <span>{tab.icon}</span>
-                <span>{tab.label}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.label.split(' ')[1]}</span>
               </button>
             ))}
           </nav>
         </div>
-        <div className="p-6">
+        <div className="p-3 md:p-6">
           {TabComponent && <TabComponent selectedDate={selectedDate} />}
         </div>
       </div>
@@ -200,7 +201,9 @@ export default function JadwalPage() {
 function PageHeader({ title }) {
   return (
     <header className="text-center">
-      <h1 className="text-2xl font-semibold text-slate-800">{title}</h1>
+      <h1 className="text-xl md:text-2xl font-semibold text-slate-800">
+        {title}
+      </h1>
     </header>
   );
 }
@@ -245,8 +248,8 @@ const EmptyState = ({ text = 'Belum ada data jadwal.' }) => (
 // Table Wrapper (View Only - tanpa tombol tambah)
 function TableWrapper({ title, children }) {
   return (
-    <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="bg-white rounded-xl md:rounded-2xl shadow-md border border-slate-200 p-3 md:p-6">
+      <div className="flex items-center justify-between mb-4 md:mb-6">
         <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
       </div>
       {children}
@@ -254,39 +257,63 @@ function TableWrapper({ title, children }) {
   );
 }
 
-// Data Table (View Only - tanpa kolom aksi)
+// Data Table (View Only - responsive dengan card layout untuk mobile)
 function ViewDataTable({ data, columns }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
-        <thead>
-          <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
-            {columns.map((col, i) => (
-              <th
-                key={i}
-                className={`py-3 px-4 font-semibold ${col.center ? 'text-center' : 'text-left'} border border-slate-300`}
-              >
-                {col.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((row) => (
-            <tr
-              key={row.id}
-              className="border-b border-slate-200 hover:bg-blue-50 transition-colors"
-            >
+    <>
+      {/* Desktop Table View */}
+      <div className="hidden lg:block overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
               {columns.map((col, i) => (
-                <td key={i} className="py-3 px-4 border border-slate-200">
-                  {col.render ? col.render(row) : row[col.key] || '-'}
-                </td>
+                <th
+                  key={i}
+                  className={`py-3 px-4 font-semibold ${col.center ? 'text-center' : 'text-left'} border border-slate-300`}
+                >
+                  {col.label}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {data.map((row) => (
+              <tr
+                key={row.id}
+                className="border-b border-slate-200 hover:bg-blue-50 transition-colors"
+              >
+                {columns.map((col, i) => (
+                  <td key={i} className="py-3 px-4 border border-slate-200">
+                    {col.render ? col.render(row) : row[col.key] || '-'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="lg:hidden space-y-3">
+        {data.map((row) => (
+          <div
+            key={row.id}
+            className="bg-gradient-to-br from-blue-50 to-white border-l-4 border-blue-600 rounded-lg p-3 shadow-sm"
+          >
+            {columns.map((col, i) => (
+              <div key={i} className="mb-2 last:mb-0">
+                <span className="text-xs font-semibold text-slate-600">
+                  {col.label}:{' '}
+                </span>
+                <span className="text-sm text-slate-800">
+                  {col.render ? col.render(row) : row[col.key] || '-'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

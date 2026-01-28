@@ -1,9 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { supabase, TOKEN_KEY } from '../../supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
+import { useState } from 'react';
 
 export default function DashboardLayout() {
   const { userRole, signOut } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = async () => {
     await signOut();
@@ -16,13 +18,42 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-blue-50 via-yellow-50 to-blue-100">
+      {/* Mobile Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar - Fixed */}
-      <aside className="w-64 bg-gradient-to-b from-[#6b1a27] via-[#7a1c2f] to-[#4a0d18] text-white overflow-hidden flex flex-col fixed left-0 top-0 h-screen z-50 shadow-xl border-r-2 border-[#e6c200]/10">
+      <aside
+        className={`w-64 bg-gradient-to-b from-[#6b1a27] via-[#7a1c2f] to-[#4a0d18] text-white overflow-hidden flex flex-col fixed left-0 top-0 h-screen z-50 shadow-xl border-r-2 border-[#e6c200]/10 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+      >
         {/* Logo */}
-        <div className="h-16 flex items-center px-4 border-b border-[#e6c200]/20 bg-gradient-to-r from-transparent to-[#e6c200]/5">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-[#e6c200]/20 bg-gradient-to-r from-transparent to-[#e6c200]/5">
           <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-[#e6c200] bg-clip-text text-transparent">
             MyDashboard
           </span>
+          {/* Close button for mobile */}
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden text-white hover:text-[#e6c200] transition-colors"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
         </div>
 
         {/* User Info */}
@@ -37,7 +68,10 @@ export default function DashboardLayout() {
         </div>
 
         {/* Menu */}
-        <nav className="flex-1 mt-4 space-y-1 overflow-y-auto">
+        <nav
+          className="flex-1 mt-4 space-y-1 overflow-y-auto"
+          onClick={() => setSidebarOpen(false)}
+        >
           {/* Semua role bisa akses Jadwal */}
           <NavLink to="/dashboard/jadwal" className={menuItemClass}>
             <span>📅</span>
@@ -111,16 +145,33 @@ export default function DashboardLayout() {
       </aside>
 
       {/* Main Area dengan margin untuk sidebar */}
-      <div className="flex-1 flex flex-col min-h-screen ml-64">
+      <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
         {/* Header - Fixed */}
-        <header
-          className="h-16 bg-gradient-to-r from-[#1e3a8a] via-[#2563eb] to-[#1e40af] border-b-2 border-[#fed80b]/50 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 z-40 shadow-xl"
-          style={{ left: '16rem' }}
-        >
-          <div className="flex items-center gap-3"></div>
+        <header className="h-16 bg-gradient-to-r from-[#1e3a8a] via-[#2563eb] to-[#1e40af] border-b-2 border-[#fed80b]/50 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 left-0 lg:left-64 z-40 shadow-xl">
+          {/* Hamburger Menu for Mobile */}
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="lg:hidden text-white hover:text-[#fed80b] transition-colors"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
 
-          <div className="flex items-center gap-4">
-            <span className="hidden md:inline text-sm text-[#fed80b] font-medium">
+          <div className="flex items-center gap-3 lg:flex-1"></div>
+
+          <div className="flex items-center gap-2 md:gap-4">
+            <span className="hidden md:inline text-xs md:text-sm text-[#fed80b] font-medium">
               Hi, {userRole?.name || 'User'}
             </span>
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#fed80b] to-[#f5c400] ring-2 ring-white/50 shadow-lg flex items-center justify-center text-xs font-bold text-[#5c0017]">
@@ -130,7 +181,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* Konten route dengan padding top untuk header fixed */}
-        <main className="flex-1 p-4 md:p-6 mt-16">
+        <main className="flex-1 p-3 sm:p-4 md:p-6 mt-16">
           <Outlet />
         </main>
       </div>
