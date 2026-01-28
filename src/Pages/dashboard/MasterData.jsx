@@ -37,7 +37,11 @@ export default function MasterData() {
         .select('*')
         .order('id', { ascending: true });
       if (!error && data) {
-        setRoles(data);
+        // Filter hanya role dosen dan user untuk Master Data
+        const filteredRoles = data.filter(
+          (role) => role.role === 'dosen' || role.role === 'user'
+        );
+        setRoles(filteredRoles);
       }
     };
     fetchRoles();

@@ -661,6 +661,22 @@ export default function JadwalPageAdmin() {
 
   // Check conflict
   const handleCheckConflict = async () => {
+    // Skip validasi konflik ruangan jika jenis pertemuan adalah daring
+    if (form.jenis_pertemuan === 'daring') {
+      // Hanya validasi waktu
+      if (!form.mulai_jadwal || !form.akhir_jadwal) {
+        return '• Waktu mulai dan selesai harus diisi';
+      }
+      const [formStart, formEnd] = [
+        new Date(form.mulai_jadwal),
+        new Date(form.akhir_jadwal),
+      ];
+      if (formStart >= formEnd) {
+        return '• Waktu mulai harus lebih awal dari waktu selesai';
+      }
+      return null;
+    }
+
     if (modalType === 'perkuliahan') {
       return await checkRuanganConflict({
         mulai: form.mulai_jadwal,
@@ -717,6 +733,18 @@ export default function JadwalPageAdmin() {
       let result;
       // Prepare form data - convert dosen_ids array to JSON string for karya_akhir
       let formData = { ...form };
+
+      // Convert empty string ruangan to null untuk daring
+      if (modalType === 'perkuliahan') {
+        if (formData.ruangan_id === '' || formData.ruangan_id === null) {
+          formData.ruangan_id = null;
+        }
+      } else if (modalType === 'karya_akhir' || modalType === 'lain_lain') {
+        if (formData.nama_ruangan === '' || formData.nama_ruangan === null) {
+          formData.nama_ruangan = null;
+        }
+      }
+
       if (modalType === 'karya_akhir' && formData.dosen_ids) {
         formData.dosen_ids = JSON.stringify(formData.dosen_ids);
       }
@@ -949,24 +977,30 @@ export default function JadwalPageAdmin() {
             displayKey="nama_dosen"
             required
           />
-          <SearchableSelect
-            label="Ruangan"
-            value={form.ruangan_id}
-            onChange={(v) => handleChange('ruangan_id', v)}
-            options={options.ruangan}
-            displayKey="nama_ruangan"
-            required
-          />
           <SelectField
             label="Jenis Pertemuan"
             value={form.jenis_pertemuan || 'luring'}
-            onChange={(v) => handleChange('jenis_pertemuan', v)}
+            onChange={(v) => {
+              handleChange('jenis_pertemuan', v);
+              // Clear ruangan jika pilih daring
+              if (v === 'daring') {
+                handleChange('ruangan_id', '');
+              }
+            }}
             options={[
               { id: 'daring', label: '🌐 Daring (Online)' },
               { id: 'luring', label: '🏢 Luring (Offline)' },
               { id: 'hybrid', label: '🔄 Hybrid' },
             ]}
             displayKey="label"
+          />
+          <SearchableSelect
+            label="Ruangan"
+            value={form.ruangan_id}
+            onChange={(v) => handleChange('ruangan_id', v)}
+            options={options.ruangan}
+            displayKey="nama_ruangan"
+            required={form.jenis_pertemuan !== 'daring'}
           />
         </>
       );
@@ -978,14 +1012,6 @@ export default function JadwalPageAdmin() {
             value={form.nama_mahasiswa || ''}
             onChange={(v) => handleChange('nama_mahasiswa', v)}
             placeholder="Masukkan nama mahasiswa"
-            required
-          />
-          <SearchableSelect
-            label="Ruangan"
-            value={form.nama_ruangan}
-            onChange={(v) => handleChange('nama_ruangan', v)}
-            options={options.ruangan}
-            displayKey="nama_ruangan"
             required
           />
           <SearchableSelect
@@ -1007,13 +1033,27 @@ export default function JadwalPageAdmin() {
           <SelectField
             label="Jenis Pertemuan"
             value={form.jenis_pertemuan || 'luring'}
-            onChange={(v) => handleChange('jenis_pertemuan', v)}
+            onChange={(v) => {
+              handleChange('jenis_pertemuan', v);
+              // Clear ruangan jika pilih daring
+              if (v === 'daring') {
+                handleChange('nama_ruangan', '');
+              }
+            }}
             options={[
               { id: 'daring', label: '🌐 Daring (Online)' },
               { id: 'luring', label: '🏢 Luring (Offline)' },
               { id: 'hybrid', label: '🔄 Hybrid' },
             ]}
             displayKey="label"
+          />
+          <SearchableSelect
+            label="Ruangan"
+            value={form.nama_ruangan}
+            onChange={(v) => handleChange('nama_ruangan', v)}
+            options={options.ruangan}
+            displayKey="nama_ruangan"
+            required={form.jenis_pertemuan !== 'daring'}
           />
         </>
       );
@@ -1026,14 +1066,6 @@ export default function JadwalPageAdmin() {
             onChange={(v) => handleChange('nama_user', v)}
             placeholder="Masukkan nama user"
           />
-          <SearchableSelect
-            label="Ruangan"
-            value={form.nama_ruangan}
-            onChange={(v) => handleChange('nama_ruangan', v)}
-            options={options.ruangan}
-            displayKey="nama_ruangan"
-            required
-          />
           <InputField
             label="Agenda"
             value={form.agenda || ''}
@@ -1043,13 +1075,27 @@ export default function JadwalPageAdmin() {
           <SelectField
             label="Jenis Pertemuan"
             value={form.jenis_pertemuan || 'luring'}
-            onChange={(v) => handleChange('jenis_pertemuan', v)}
+            onChange={(v) => {
+              handleChange('jenis_pertemuan', v);
+              // Clear ruangan jika pilih daring
+              if (v === 'daring') {
+                handleChange('nama_ruangan', '');
+              }
+            }}
             options={[
               { id: 'daring', label: '🌐 Daring (Online)' },
               { id: 'luring', label: '🏢 Luring (Offline)' },
               { id: 'hybrid', label: '🔄 Hybrid' },
             ]}
             displayKey="label"
+          />
+          <SearchableSelect
+            label="Ruangan"
+            value={form.nama_ruangan}
+            onChange={(v) => handleChange('nama_ruangan', v)}
+            options={options.ruangan}
+            displayKey="nama_ruangan"
+            required={form.jenis_pertemuan !== 'daring'}
           />
         </>
       );

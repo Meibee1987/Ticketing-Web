@@ -399,13 +399,15 @@ function JadwalTable({ selectedDate }) {
     {
       label: 'Jenis',
       render: (r) => (
-        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
-          r.jenis_pertemuan === 'daring'
-            ? 'bg-blue-100 text-blue-700'
-            : r.jenis_pertemuan === 'hybrid'
-            ? 'bg-purple-100 text-purple-700'
-            : 'bg-green-100 text-green-700'
-        }`}>
+        <span
+          className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+            r.jenis_pertemuan === 'daring'
+              ? 'bg-blue-100 text-blue-700'
+              : r.jenis_pertemuan === 'hybrid'
+                ? 'bg-purple-100 text-purple-700'
+                : 'bg-green-100 text-green-700'
+          }`}
+        >
           {r.jenis_pertemuan === 'daring' && '🌐 Daring'}
           {r.jenis_pertemuan === 'luring' && '🏢 Luring'}
           {r.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
@@ -548,13 +550,15 @@ function JadwalKaryaAkhirTable({ selectedDate }) {
     {
       label: 'Jenis',
       render: (r) => (
-        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
-          r.jenis_pertemuan === 'daring'
-            ? 'bg-blue-100 text-blue-700'
-            : r.jenis_pertemuan === 'hybrid'
-            ? 'bg-purple-100 text-purple-700'
-            : 'bg-green-100 text-green-700'
-        }`}>
+        <span
+          className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+            r.jenis_pertemuan === 'daring'
+              ? 'bg-blue-100 text-blue-700'
+              : r.jenis_pertemuan === 'hybrid'
+                ? 'bg-purple-100 text-purple-700'
+                : 'bg-green-100 text-green-700'
+          }`}
+        >
           {r.jenis_pertemuan === 'daring' && '🌐 Daring'}
           {r.jenis_pertemuan === 'luring' && '🏢 Luring'}
           {r.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
@@ -690,13 +694,15 @@ function JadwalLainLainTable({ selectedDate }) {
     {
       label: 'Jenis',
       render: (r) => (
-        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
-          r.jenis_pertemuan === 'daring'
-            ? 'bg-blue-100 text-blue-700'
-            : r.jenis_pertemuan === 'hybrid'
-            ? 'bg-purple-100 text-purple-700'
-            : 'bg-green-100 text-green-700'
-        }`}>
+        <span
+          className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+            r.jenis_pertemuan === 'daring'
+              ? 'bg-blue-100 text-blue-700'
+              : r.jenis_pertemuan === 'hybrid'
+                ? 'bg-purple-100 text-purple-700'
+                : 'bg-green-100 text-green-700'
+          }`}
+        >
           {r.jenis_pertemuan === 'daring' && '🌐 Daring'}
           {r.jenis_pertemuan === 'luring' && '🏢 Luring'}
           {r.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}

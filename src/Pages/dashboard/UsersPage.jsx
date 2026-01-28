@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../supabaseClient';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function UsersPage() {
+  // Get current user role
+  const { userRole } = useAuth();
   // Tab state
   const [activeTab, setActiveTab] = useState('teknisi'); // 'teknisi' or 'dosen'
 
@@ -728,11 +731,24 @@ export default function UsersPage() {
                   className="border border-slate-300 px-3 py-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">-- Pilih Role --</option>
-                  {roles.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.role}
-                    </option>
-                  ))}
+                  {roles
+                    .filter((role) => {
+                      // Jika user adalah super_admin, bisa pilih semua role
+                      if (userRole?.roleName === 'super_admin') {
+                        return true;
+                      }
+                      // Jika user adalah admin, hanya bisa pilih role user dan dosen
+                      if (userRole?.roleName === 'admin') {
+                        return role.role === 'user' || role.role === 'dosen';
+                      }
+                      // Default: tampilkan semua (fallback)
+                      return true;
+                    })
+                    .map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.role}
+                      </option>
+                    ))}
                 </select>
               </div>
 
