@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useAuth } from 'react';
 import TwoFASetup from '../../components/TwoFASetup';
 
 export default function SettingsPage() {
+  const { userRole } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [profile, setProfile] = useState({
     name: '',
@@ -39,6 +40,14 @@ export default function SettingsPage() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
+
+  if (userRole?.roleName !== 'super admin') {
+    return (
+      <div className="p-8 text-center text-lg text-red-600 font-semibold">
+        ⚠️ Halaman ini hanya bisa diakses oleh Super Admin.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

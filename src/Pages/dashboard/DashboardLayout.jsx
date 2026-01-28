@@ -91,8 +91,7 @@ export default function DashboardLayout() {
           )}
 
           {/* Admin dan Super Admin bisa akses Settings */}
-          {(userRole?.roleName === 'admin' ||
-            userRole?.roleName === 'super admin') && (
+          {userRole?.roleName === 'super admin' && (
             <NavLink to="/dashboard/settings" className={menuItemClass}>
               <span>⚙️</span>
               <span>Settings</span>
