@@ -334,6 +334,108 @@ const checkRuanganConflict = async ({
   return conflicts.length ? conflicts.join('\n') : null;
 };
 
+// Fungsi untuk mengecek konflik dosen
+const checkDosenConflict = async ({
+  mulai,
+  akhir,
+  dosenId,
+  dosenIds,
+  excludeId,
+  excludeTable,
+  dosenMap,
+}) => {
+  if (!mulai || !akhir) return null;
+  const [formStart, formEnd] = [new Date(mulai), new Date(akhir)];
+  if (formStart >= formEnd) return null;
+
+  // Collect all dosen IDs yang akan dicek
+  const targetDosenIds = [];
+  if (dosenId) targetDosenIds.push(parseInt(dosenId));
+  if (dosenIds && Array.isArray(dosenIds)) {
+    targetDosenIds.push(...dosenIds.map((id) => parseInt(id)));
+  }
+
+  if (targetDosenIds.length === 0) return null;
+
+  const conflicts = [];
+  const excludeJenis = JENIS_MAP[excludeTable];
+
+  // Cek setiap dosen yang akan dijadwalkan
+  for (const checkDosenId of targetDosenIds) {
+    const namaDosen = dosenMap?.[checkDosenId] || `Dosen ${checkDosenId}`;
+
+    // 1. Cek jadwal_perkuliahan (dosen_id)
+    const { data: perkuliahanData, error: perkuliahanError } = await supabase
+      .from('jadwal_perkuliahan')
+      .select('id, mulai_jadwal, akhir_jadwal, dosen_id')
+      .eq('dosen_id', checkDosenId);
+
+    if (perkuliahanError) {
+      console.error('Error checking perkuliahan conflict:', perkuliahanError);
+    } else if (perkuliahanData) {
+      perkuliahanData.forEach((j) => {
+        // Skip jika ini adalah record yang sedang diedit
+        if (excludeJenis === 'PERKULIAHAN' && j.id === excludeId) return;
+
+        const [s, e] = [new Date(j.mulai_jadwal), new Date(j.akhir_jadwal)];
+        if (j.mulai_jadwal && j.akhir_jadwal && formStart < e && formEnd > s) {
+          conflicts.push(
+            `• [Perkuliahan] Dosen "${namaDosen}" sudah dijadwalkan ${formatTimestampShort(j.mulai_jadwal)} - ${formatTimestampShort(j.akhir_jadwal)}`
+          );
+        }
+      });
+    }
+
+    // 2. Cek jadwal_karya_akhir (dosen_ids JSON array)
+    const { data: karyaAkhirData, error: karyaAkhirError } = await supabase
+      .from('jadwal_karya_akhir')
+      .select('id, mulai_jadwal, akhir_jadwal, dosen_ids');
+
+    if (karyaAkhirError) {
+      console.error('Error checking karya akhir conflict:', karyaAkhirError);
+    } else if (karyaAkhirData) {
+      karyaAkhirData.forEach((j) => {
+        // Skip jika ini adalah record yang sedang diedit
+        if (excludeJenis === 'KARYA_AKHIR' && j.id === excludeId) return;
+
+        // Parse dosen_ids dari JSON
+        let scheduledDosenIds = [];
+        if (j.dosen_ids) {
+          try {
+            scheduledDosenIds =
+              typeof j.dosen_ids === 'string'
+                ? JSON.parse(j.dosen_ids)
+                : j.dosen_ids;
+          } catch (e) {
+            console.error('Error parsing dosen_ids:', e);
+          }
+        }
+
+        // Cek apakah dosen yang akan dijadwalkan sudah terpakai
+        const isDosenConflict =
+          Array.isArray(scheduledDosenIds) &&
+          scheduledDosenIds.some((id) => parseInt(id) === checkDosenId);
+
+        if (isDosenConflict) {
+          const [s, e] = [new Date(j.mulai_jadwal), new Date(j.akhir_jadwal)];
+          if (
+            j.mulai_jadwal &&
+            j.akhir_jadwal &&
+            formStart < e &&
+            formEnd > s
+          ) {
+            conflicts.push(
+              `• [Karya Akhir] Dosen "${namaDosen}" sudah dijadwalkan ${formatTimestampShort(j.mulai_jadwal)} - ${formatTimestampShort(j.akhir_jadwal)}`
+            );
+          }
+        }
+      });
+    }
+  }
+
+  return conflicts.length ? conflicts.join('\n') : null;
+};
+
 // ================================================================================
 // KOMPONEN UTAMA: JadwalPageAdmin
 // ================================================================================
@@ -670,50 +772,85 @@ export default function JadwalPageAdmin() {
 
   // Check conflict
   const handleCheckConflict = async () => {
-    // Skip validasi konflik ruangan jika jenis pertemuan adalah daring
-    if (form.jenis_pertemuan === 'daring') {
-      // Hanya validasi waktu
-      if (!form.mulai_jadwal || !form.akhir_jadwal) {
-        return '• Waktu mulai dan selesai harus diisi';
-      }
-      const [formStart, formEnd] = [
-        new Date(form.mulai_jadwal),
-        new Date(form.akhir_jadwal),
-      ];
-      if (formStart >= formEnd) {
-        return '• Waktu mulai harus lebih awal dari waktu selesai';
-      }
-      return null;
+    const conflicts = [];
+
+    // Validasi waktu dasar
+    if (!form.mulai_jadwal || !form.akhir_jadwal) {
+      return '• Waktu mulai dan selesai harus diisi';
+    }
+    const [formStart, formEnd] = [
+      new Date(form.mulai_jadwal),
+      new Date(form.akhir_jadwal),
+    ];
+    if (formStart >= formEnd) {
+      return '• Waktu mulai harus lebih awal dari waktu selesai';
     }
 
+    const dosenMap = createMap(options.dosen, 'nama_dosen');
+    const ruanganMap = createMap(options.ruangan, 'nama_ruangan');
+
     if (modalType === 'perkuliahan') {
-      return await checkRuanganConflict({
+      // Cek konflik dosen untuk perkuliahan
+      const dosenConflict = await checkDosenConflict({
         mulai: form.mulai_jadwal,
         akhir: form.akhir_jadwal,
-        ruanganId: form.ruangan_id,
+        dosenId: form.dosen_id,
+        dosenIds: null,
         excludeId: form.id,
         excludeTable: modalMode === 'edit' ? 'jadwal_perkuliahan' : null,
-        ruanganMap: createMap(options.ruangan, 'nama_ruangan'),
+        dosenMap,
       });
+      if (dosenConflict) conflicts.push(dosenConflict);
+
+      // Cek konflik ruangan hanya untuk luring
+      if (form.jenis_pertemuan !== 'daring') {
+        const ruanganConflict = await checkRuanganConflict({
+          mulai: form.mulai_jadwal,
+          akhir: form.akhir_jadwal,
+          ruanganId: form.ruangan_id,
+          excludeId: form.id,
+          excludeTable: modalMode === 'edit' ? 'jadwal_perkuliahan' : null,
+          ruanganMap,
+        });
+        if (ruanganConflict) conflicts.push(ruanganConflict);
+      }
     } else if (modalType === 'karya_akhir') {
-      return await checkRuanganConflict({
+      // Cek konflik dosen untuk karya akhir (multiple dosen)
+      const dosenConflict = await checkDosenConflict({
+        mulai: form.mulai_jadwal,
+        akhir: form.akhir_jadwal,
+        dosenId: null,
+        dosenIds: form.dosen_ids,
+        excludeId: form.id,
+        excludeTable: modalMode === 'edit' ? 'jadwal_karya_akhir' : null,
+        dosenMap,
+      });
+      if (dosenConflict) conflicts.push(dosenConflict);
+
+      // Cek konflik ruangan
+      const ruanganConflict = await checkRuanganConflict({
         mulai: form.mulai_jadwal,
         akhir: form.akhir_jadwal,
         ruanganId: form.nama_ruangan,
         excludeId: form.id,
         excludeTable: modalMode === 'edit' ? 'jadwal_karya_akhir' : null,
-        ruanganMap: createMap(options.ruangan, 'nama_ruangan'),
+        ruanganMap,
       });
+      if (ruanganConflict) conflicts.push(ruanganConflict);
     } else {
-      return await checkRuanganConflict({
+      // Untuk lain-lain, hanya cek ruangan
+      const ruanganConflict = await checkRuanganConflict({
         mulai: form.mulai_jadwal,
         akhir: form.akhir_jadwal,
         ruanganId: form.nama_ruangan,
         excludeId: form.id,
         excludeTable: modalMode === 'edit' ? 'jadwal_lain_lain' : null,
-        ruanganMap: createMap(options.ruangan, 'nama_ruangan'),
+        ruanganMap,
       });
+      if (ruanganConflict) conflicts.push(ruanganConflict);
     }
+
+    return conflicts.length ? conflicts.join('\n\n') : null;
   };
 
   // Submit handler - REFACTORED (lebih simple!)

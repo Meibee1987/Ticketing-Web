@@ -5,6 +5,33 @@ export default function JadwalMonitor() {
   const [jadwalData, setJadwalData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentPage, setCurrentPage] = useState(0);
+
+  // 🎯 KONFIGURASI - Ubah sesuai kebutuhan
+  const ITEMS_PER_PAGE = 6; // Maksimal 6 data per halaman
+  const AUTO_SLIDE_INTERVAL = 10000; // 7 detik per slide
+
+  // 🖼️ KONFIGURASI GAMBAR - Tambahkan URL gambar/iklan di sini
+  const SLIDE_IMAGES = [
+    // ============================================================
+    // 📝 UNCOMMENT BARIS DI BAWAH UNTUK MENGAKTIFKAN GAMBAR
+    // ============================================================
+    // 🧪 CONTOH 1: Gunakan file SVG contoh yang sudah disediakan
+    // { type: 'image', url: '/images/contoh-slide.svg', title: 'Contoh Slide' },
+    // 📁 CONTOH 2: Gambar lokal dari folder public/images/
+    // { type: 'image', url: '/images/iklan1.jpg', title: 'Iklan Pendaftaran' },
+    // { type: 'image', url: '/images/pengumuman.png', title: 'Pengumuman Penting' },
+    // 🌐 CONTOH 3: URL gambar dari internet
+    // { type: 'image', url: 'https://example.com/banner.jpg', title: 'Banner Event' },
+    // ============================================================
+    // 💡 TIPS:
+    // - Simpan gambar di folder: public/images/
+    // - Format: jpg, png, gif, webp
+    // - Resolusi: 1920x1080px (Full HD) atau 3840x2160px (4K)
+    // - Ukuran file: Max 2-5 MB
+    // - Lihat panduan lengkap: MONITOR_SETUP_GUIDE.md
+    // ============================================================
+  ];
 
   // Update waktu setiap detik
   useEffect(() => {
@@ -21,6 +48,21 @@ export default function JadwalMonitor() {
     const interval = setInterval(fetchTodaySchedule, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // 🎯 AUTO-SLIDE: Pindah halaman otomatis setiap 7 detik
+  useEffect(() => {
+    // Calculate total pages including image slides
+    const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
+    const totalPages = totalDataPages + SLIDE_IMAGES.length;
+
+    if (totalPages <= 1) return; // Tidak perlu auto-slide jika hanya 1 halaman
+
+    const slideTimer = setInterval(() => {
+      setCurrentPage((prev) => (prev + 1) % totalPages);
+    }, AUTO_SLIDE_INTERVAL);
+
+    return () => clearInterval(slideTimer);
+  }, [jadwalData.length, SLIDE_IMAGES.length]);
 
   const fetchTodaySchedule = async () => {
     try {
@@ -329,6 +371,19 @@ export default function JadwalMonitor() {
     );
   }
 
+  // 🎯 PAGINATION LOGIC
+  const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
+  const totalPages = totalDataPages + SLIDE_IMAGES.length;
+
+  // Determine if current page is showing image or data
+  const isImageSlide = currentPage >= totalDataPages;
+  const imageSlideIndex = currentPage - totalDataPages;
+
+  // Get current page data (only for data pages)
+  const startIndex = currentPage * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPageData = jadwalData.slice(startIndex, endIndex);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 p-2 md:p-4">
       {/* Header */}
@@ -366,191 +421,319 @@ export default function JadwalMonitor() {
           </div>
         </div>
       ) : (
-        <div className="bg-white/95 backdrop-blur-sm rounded-xl md:rounded-2xl p-3 md:p-6 shadow-2xl">
-          {/* Table Header - Hidden on Mobile, use card layout instead */}
-          <div className="hidden lg:grid lg:grid-cols-12 gap-4 font-bold text-gray-800 bg-gray-100 p-4 rounded-lg mb-4 text-sm">
-            <div className="col-span-1">KODE</div>
-            <div className="col-span-2">JAM</div>
-            <div className="col-span-4">KEGIATAN</div>
-            <div className="col-span-2">TEMPAT</div>
-            <div className="col-span-2">DOSEN/PIC</div>
-            <div className="col-span-1">STATUS</div>
-          </div>
+        <>
+          {/* 🖼️ IMAGE SLIDE */}
+          {isImageSlide && SLIDE_IMAGES[imageSlideIndex] ? (
+            <div className="bg-white/95 backdrop-blur-sm rounded-xl md:rounded-2xl overflow-hidden shadow-2xl">
+              <div className="relative w-full h-[calc(100vh-200px)] flex items-center justify-center bg-gray-100">
+                <img
+                  src={SLIDE_IMAGES[imageSlideIndex].url}
+                  alt={SLIDE_IMAGES[imageSlideIndex].title || 'Slide Image'}
+                  className="max-w-full max-h-full object-contain"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'block';
+                  }}
+                />
+                <div className="hidden text-center p-8">
+                  <div className="text-6xl mb-4">🖼️</div>
+                  <p className="text-xl text-gray-600">
+                    Gambar tidak dapat dimuat
+                  </p>
+                </div>
+              </div>
+              {SLIDE_IMAGES[imageSlideIndex].title && (
+                <div className="bg-gray-900/90 text-white text-center py-4 px-6">
+                  <h3 className="text-xl md:text-2xl font-bold">
+                    {SLIDE_IMAGES[imageSlideIndex].title}
+                  </h3>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* 📋 DATA SLIDE */
+            <div className="bg-white/95 backdrop-blur-sm rounded-xl md:rounded-2xl p-3 md:p-6 shadow-2xl">
+              {/* Table Header - Hidden on Mobile, use card layout instead */}
+              <div className="hidden lg:grid lg:grid-cols-12 gap-4 font-bold text-gray-800 bg-gray-100 p-4 rounded-lg mb-4 text-sm">
+                <div className="col-span-1">KODE</div>
+                <div className="col-span-2">JAM</div>
+                <div className="col-span-4">KEGIATAN</div>
+                <div className="col-span-2">TEMPAT</div>
+                <div className="col-span-2">DOSEN/PIC</div>
+                <div className="col-span-1">STATUS</div>
+              </div>
 
-          {/* Table Content dengan Separator per Jenis dan Ruangan */}
-          <div className="space-y-2">
-            {jadwalData.map((item, index) => {
-              // Cek apakah perlu separator jenis kegiatan
-              const prevItem = index > 0 ? jadwalData[index - 1] : null;
-              const showTypeSeparator =
-                !prevItem || prevItem.type !== item.type;
+              {/* Table Content dengan Separator per Jenis dan Ruangan */}
+              <div className="space-y-2">
+                {currentPageData.map((item, index) => {
+                  // Cek apakah perlu separator jenis kegiatan
+                  const prevItem =
+                    index > 0 ? currentPageData[index - 1] : null;
+                  const showTypeSeparator =
+                    !prevItem || prevItem.type !== item.type;
 
-              return (
-                <div key={item.id}>
-                  {/* Separator Jenis Kegiatan */}
-                  {showTypeSeparator && (
-                    <div className="my-3 md:my-6 first:mt-0">
-                      <div className="flex items-center gap-2 md:gap-4 mb-2 md:mb-3">
-                        <div
-                          className={`h-0.5 md:h-1 flex-1 rounded ${
-                            item.type === 'perkuliahan'
-                              ? 'bg-blue-400'
-                              : item.type === 'karya_akhir'
-                                ? 'bg-purple-400'
-                                : 'bg-green-400'
-                          }`}
-                        ></div>
-                        <h3 className="text-xs md:text-lg font-bold text-gray-700 px-2 md:px-4 py-0.5 md:py-1 rounded-full bg-gray-100">
-                          {item.type === 'perkuliahan' && '📚 PERKULIAHAN'}
-                          {item.type === 'karya_akhir' && '🎓 KARYA AKHIR'}
-                          {item.type === 'lain_lain' && '📋 LAIN-LAIN'}
-                        </h3>
-                        <div
-                          className={`h-0.5 md:h-1 flex-1 rounded ${
-                            item.type === 'perkuliahan'
-                              ? 'bg-blue-400'
-                              : item.type === 'karya_akhir'
-                                ? 'bg-purple-400'
-                                : 'bg-green-400'
-                          }`}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Baris Jadwal - Card style for mobile, Grid for desktop */}
-                  <div
-                    className={`lg:grid lg:grid-cols-12 gap-2 md:gap-4 p-3 md:p-4 rounded-lg border-l-4 ${getTypeColor(item.type)} ${getStatusColor(item.status)}`}
-                  >
-                    {/* Mobile Card Layout */}
-                    <div className="lg:hidden space-y-2">
-                      <div className="flex justify-between items-start">
-                        <span className="font-bold text-sm md:text-base">
-                          {item.kode}
-                        </span>
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            item.status === 'ongoing'
-                              ? 'bg-green-100 text-green-700'
-                              : item.status === 'upcoming'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-600'
-                          }`}
-                        >
-                          {item.status === 'ongoing' && '🟢 Berlangsung'}
-                          {item.status === 'upcoming' && '⏰ Akan Datang'}
-                          {item.status === 'finished' && '✅ Selesai'}
-                        </span>
-                      </div>
-                      <div className="font-mono text-sm md:text-base font-semibold text-gray-700">
-                        {item.jam}
-                      </div>
-                      <div className="font-semibold text-sm md:text-base leading-tight">
-                        {item.kegiatan}
-                      </div>
-                      {item.jenis_pertemuan && (
-                        <span
-                          className={`inline-block px-2 py-0.5 text-xs rounded-full ${
-                            item.jenis_pertemuan === 'daring'
-                              ? 'bg-green-100 text-green-700'
-                              : item.jenis_pertemuan === 'hybrid'
-                                ? 'bg-orange-100 text-orange-700'
-                                : 'bg-blue-100 text-blue-700'
-                          }`}
-                        >
-                          {item.jenis_pertemuan === 'daring' && '🌐 Daring'}
-                          {item.jenis_pertemuan === 'luring' && '🏢 Luring'}
-                          {item.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
-                        </span>
-                      )}
-                      <div className="flex justify-between text-xs md:text-sm text-gray-700">
-                        <span className="font-semibold">📍 {item.tempat}</span>
-                        <span>{item.dosen}</span>
-                      </div>
-                    </div>
-
-                    {/* Desktop Grid Layout */}
-                    <div className="hidden lg:contents">
-                      <div className="col-span-1">
-                        <span className="font-bold text-lg">{item.kode}</span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="font-mono text-lg font-semibold">
-                          {item.jam}
-                        </span>
-                      </div>
-                      <div className="col-span-4">
-                        <div className="font-semibold text-lg leading-tight">
-                          {item.kegiatan}
+                  return (
+                    <div key={item.id}>
+                      {/* Separator Jenis Kegiatan */}
+                      {showTypeSeparator && (
+                        <div className="my-3 md:my-6 first:mt-0">
+                          <div className="flex items-center gap-2 md:gap-4 mb-2 md:mb-3">
+                            <div
+                              className={`h-0.5 md:h-1 flex-1 rounded ${
+                                item.type === 'perkuliahan'
+                                  ? 'bg-blue-400'
+                                  : item.type === 'karya_akhir'
+                                    ? 'bg-purple-400'
+                                    : 'bg-green-400'
+                              }`}
+                            ></div>
+                            <h3 className="text-xs md:text-lg font-bold text-gray-700 px-2 md:px-4 py-0.5 md:py-1 rounded-full bg-gray-100">
+                              {item.type === 'perkuliahan' && '📚 PERKULIAHAN'}
+                              {item.type === 'karya_akhir' && '🎓 KARYA AKHIR'}
+                              {item.type === 'lain_lain' && '📋 LAIN-LAIN'}
+                            </h3>
+                            <div
+                              className={`h-0.5 md:h-1 flex-1 rounded ${
+                                item.type === 'perkuliahan'
+                                  ? 'bg-blue-400'
+                                  : item.type === 'karya_akhir'
+                                    ? 'bg-purple-400'
+                                    : 'bg-green-400'
+                              }`}
+                            ></div>
+                          </div>
                         </div>
-                        {item.jenis_pertemuan && (
-                          <span
-                            className={`inline-block mt-1 px-2 py-0.5 text-xs rounded-full ${
-                              item.jenis_pertemuan === 'daring'
-                                ? 'bg-green-100 text-green-700'
-                                : item.jenis_pertemuan === 'hybrid'
-                                  ? 'bg-orange-100 text-orange-700'
-                                  : 'bg-blue-100 text-blue-700'
-                            }`}
-                          >
-                            {item.jenis_pertemuan === 'daring' && '🌐 Daring'}
-                            {item.jenis_pertemuan === 'luring' && '🏢 Luring'}
-                            {item.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-lg font-semibold">
-                          {item.tempat}
-                        </span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-base">{item.dosen}</span>
-                      </div>
-                      <div className="col-span-1">
-                        <span
-                          className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                            item.status === 'ongoing'
-                              ? 'bg-green-100 text-green-700'
-                              : item.status === 'upcoming'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-600'
-                          }`}
-                        >
-                          {item.status === 'ongoing' && '🟢 Berlangsung'}
-                          {item.status === 'upcoming' && '⏰ Akan Datang'}
-                          {item.status === 'finished' && '✅ Selesai'}
-                        </span>
+                      )}
+
+                      {/* Baris Jadwal - Card style for mobile, Grid for desktop */}
+                      <div
+                        className={`lg:grid lg:grid-cols-12 gap-2 md:gap-4 p-3 md:p-4 rounded-lg border-l-4 ${getTypeColor(item.type)} ${getStatusColor(item.status)}`}
+                      >
+                        {/* Mobile Card Layout */}
+                        <div className="lg:hidden space-y-2">
+                          <div className="flex justify-between items-start">
+                            <span className="font-bold text-sm md:text-base">
+                              {item.kode}
+                            </span>
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                item.status === 'ongoing'
+                                  ? 'bg-green-100 text-green-700'
+                                  : item.status === 'upcoming'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {item.status === 'ongoing' && '🟢 Berlangsung'}
+                              {item.status === 'upcoming' && '⏰ Akan Datang'}
+                              {item.status === 'finished' && '✅ Selesai'}
+                            </span>
+                          </div>
+                          <div className="font-mono text-sm md:text-base font-bold text-gray-900">
+                            {item.jam}
+                          </div>
+                          <div className="font-semibold text-sm md:text-base leading-tight">
+                            {item.kegiatan}
+                          </div>
+                          {item.jenis_pertemuan && (
+                            <span
+                              className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                                item.jenis_pertemuan === 'daring'
+                                  ? 'bg-green-100 text-green-700'
+                                  : item.jenis_pertemuan === 'hybrid'
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : 'bg-blue-100 text-blue-700'
+                              }`}
+                            >
+                              {item.jenis_pertemuan === 'daring' && '🌐 Daring'}
+                              {item.jenis_pertemuan === 'luring' && '🏢 Luring'}
+                              {item.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
+                            </span>
+                          )}
+                          <div className="flex justify-between text-xs md:text-sm text-gray-700">
+                            <span className="font-semibold">
+                              📍 {item.tempat}
+                            </span>
+                            <span>{item.dosen}</span>
+                          </div>
+                        </div>
+
+                        {/* Desktop Grid Layout */}
+                        <div className="hidden lg:contents">
+                          <div className="col-span-1">
+                            <span className="font-bold text-lg">
+                              {item.kode}
+                            </span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="font-mono text-lg font-bold text-gray-900">
+                              {item.jam}
+                            </span>
+                          </div>
+                          <div className="col-span-4">
+                            <div className="font-semibold text-lg leading-tight">
+                              {item.kegiatan}
+                            </div>
+                            {item.jenis_pertemuan && (
+                              <span
+                                className={`inline-block mt-1 px-2 py-0.5 text-xs rounded-full ${
+                                  item.jenis_pertemuan === 'daring'
+                                    ? 'bg-green-100 text-green-700'
+                                    : item.jenis_pertemuan === 'hybrid'
+                                      ? 'bg-orange-100 text-orange-700'
+                                      : 'bg-blue-100 text-blue-700'
+                                }`}
+                              >
+                                {item.jenis_pertemuan === 'daring' &&
+                                  '🌐 Daring'}
+                                {item.jenis_pertemuan === 'luring' &&
+                                  '🏢 Luring'}
+                                {item.jenis_pertemuan === 'hybrid' &&
+                                  '🔄 Hybrid'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-lg font-semibold">
+                              {item.tempat}
+                            </span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-base">{item.dosen}</span>
+                          </div>
+                          <div className="col-span-1">
+                            <span
+                              className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                                item.status === 'ongoing'
+                                  ? 'bg-green-100 text-green-700'
+                                  : item.status === 'upcoming'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {item.status === 'ongoing' && '🟢 Berlangsung'}
+                              {item.status === 'upcoming' && '⏰ Akan Datang'}
+                              {item.status === 'finished' && '✅ Selesai'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+
+              {/* Footer Info */}
+              <div className="mt-4 md:mt-8 text-center">
+                <div className="flex flex-wrap justify-center gap-3 md:gap-6 text-xs md:text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 md:w-4 md:h-4 bg-blue-300 rounded border border-blue-400"></div>
+                    <span>Perkuliahan</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 md:w-4 md:h-4 bg-purple-300 rounded border border-purple-400"></div>
+                    <span>Karya Akhir</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 md:w-4 md:h-4 bg-green-300 rounded border border-green-400"></div>
+                    <span>Lain-lain</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <p className="text-xs text-gray-500 mt-2 md:mt-4">
+                  Data diperbarui otomatis setiap 5 menit • Total kegiatan hari
+                  ini: {jadwalData.length}
+                </p>
+              </div>
 
-          {/* Footer Info */}
-          <div className="mt-4 md:mt-8 text-center">
-            <div className="flex flex-wrap justify-center gap-3 md:gap-6 text-xs md:text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 md:w-4 md:h-4 bg-blue-300 rounded border border-blue-400"></div>
-                <span>Perkuliahan</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 md:w-4 md:h-4 bg-purple-300 rounded border border-purple-400"></div>
-                <span>Karya Akhir</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 md:w-4 md:h-4 bg-green-300 rounded border border-green-400"></div>
-                <span>Lain-lain</span>
+              {/* Developer Credit */}
+              <div className="mt-6 pt-4 border-t border-gray-200/50">
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-sm">
+                    <span className="text-white text-[10px] font-bold">W</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    <span className="font-light">Developed by</span>{' '}
+                    <span className="font-medium text-gray-700">
+                      Wanda Saputra
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-2 md:mt-4">
-              Data diperbarui otomatis setiap 5 menit • Total kegiatan hari ini:{' '}
-              {jadwalData.length}
-            </p>
-          </div>
-        </div>
+          )}
+
+          {/* 🎯 PAGINATION INDICATORS */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-2">
+              {/* Manual Navigation Buttons */}
+              <button
+                onClick={() =>
+                  setCurrentPage((prev) => (prev - 1 + totalPages) % totalPages)
+                }
+                className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-full transition-colors"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 19l-7-7 7-7"
+                  />
+                </svg>
+              </button>
+
+              {/* Page Dots */}
+              <div className="flex gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full">
+                {Array.from({ length: totalPages }).map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setCurrentPage(index)}
+                    className={`transition-all duration-300 rounded-full ${
+                      currentPage === index
+                        ? 'w-8 bg-yellow-400'
+                        : 'w-3 bg-white/40 hover:bg-white/60'
+                    } h-3`}
+                    title={`Halaman ${index + 1}${index >= totalDataPages ? ' (Gambar)' : ''}`}
+                  />
+                ))}
+              </div>
+
+              {/* Manual Navigation Buttons */}
+              <button
+                onClick={() =>
+                  setCurrentPage((prev) => (prev + 1) % totalPages)
+                }
+                className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-full transition-colors"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </button>
+
+              {/* Page Counter */}
+              <div className="ml-4 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full">
+                <span className="text-white text-sm font-semibold">
+                  {currentPage + 1} / {totalPages}
+                </span>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
