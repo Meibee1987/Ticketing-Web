@@ -116,6 +116,15 @@ export default function DashboardLayout() {
             </NavLink>
           )}
 
+          {/* Admin dan Super Admin bisa akses Monitor Settings */}
+          {(userRole?.roleName === 'admin' ||
+            userRole?.roleName === 'super admin') && (
+            <NavLink to="/dashboard/monitor-settings" className={menuItemClass}>
+              <span>📺</span>
+              <span>Monitor Settings</span>
+            </NavLink>
+          )}
+
           {/* Hanya Super Admin bisa akses Users */}
           {userRole?.roleName === 'super admin' && (
             <NavLink to="/dashboard/users" className={menuItemClass}>

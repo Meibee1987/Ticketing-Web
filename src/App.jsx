@@ -21,6 +21,7 @@ import JadwalPage from './Pages/dashboard/JadwalPage';
 import JadwalPageAdmin from './Pages/dashboard/JadwalPageAdmin';
 import RuanganPage from './Pages/dashboard/RuanganPage';
 import MasterData from './Pages/dashboard/MasterData';
+import MonitorSettings from './Pages/dashboard/MonitorSettings';
 
 export default function App() {
   return (
@@ -105,6 +106,14 @@ export default function App() {
                 element={
                   <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
                     <MasterData />
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="monitor-settings"
+                element={
+                  <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
+                    <MonitorSettings />
                   </RoleProtectedRoute>
                 }
               />

@@ -1,37 +1,40 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
+const STORAGE_KEY = 'jadwal_monitor_slides';
+
 export default function JadwalMonitor() {
   const [jadwalData, setJadwalData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(0);
+  const [slideImages, setSlideImages] = useState([]);
 
   // 🎯 KONFIGURASI - Ubah sesuai kebutuhan
-  const ITEMS_PER_PAGE = 6; // Maksimal 6 data per halaman
+  const ITEMS_PER_PAGE = 5; // Maksimal 6 data per halaman
   const AUTO_SLIDE_INTERVAL = 10000; // 7 detik per slide
 
-  // 🖼️ KONFIGURASI GAMBAR - Tambahkan URL gambar/iklan di sini
-  const SLIDE_IMAGES = [
-    // ============================================================
-    // 📝 UNCOMMENT BARIS DI BAWAH UNTUK MENGAKTIFKAN GAMBAR
-    // ============================================================
-    // 🧪 CONTOH 1: Gunakan file SVG contoh yang sudah disediakan
-    // { type: 'image', url: '/images/contoh-slide.svg', title: 'Contoh Slide' },
-    // 📁 CONTOH 2: Gambar lokal dari folder public/images/
-    // { type: 'image', url: '/images/iklan1.jpg', title: 'Iklan Pendaftaran' },
-    // { type: 'image', url: '/images/pengumuman.png', title: 'Pengumuman Penting' },
-    // 🌐 CONTOH 3: URL gambar dari internet
-    // { type: 'image', url: 'https://example.com/banner.jpg', title: 'Banner Event' },
-    // ============================================================
-    // 💡 TIPS:
-    // - Simpan gambar di folder: public/images/
-    // - Format: jpg, png, gif, webp
-    // - Resolusi: 1920x1080px (Full HD) atau 3840x2160px (4K)
-    // - Ukuran file: Max 2-5 MB
-    // - Lihat panduan lengkap: MONITOR_SETUP_GUIDE.md
-    // ============================================================
-  ];
+  // 🖼️ Load gambar dari localStorage (dikelola via halaman MonitorSettings)
+  useEffect(() => {
+    const loadSlides = () => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          setSlideImages(JSON.parse(saved));
+        }
+      } catch (error) {
+        console.error('Error loading slides:', error);
+      }
+    };
+
+    loadSlides();
+
+    // Refresh gambar setiap 5 menit (sinkron dengan refresh jadwal)
+    const interval = setInterval(loadSlides, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const SLIDE_IMAGES = slideImages; // Gunakan gambar dari localStorage
 
   // Update waktu setiap detik
   useEffect(() => {
@@ -389,17 +392,17 @@ export default function JadwalMonitor() {
       {/* Header */}
       <div className="mb-3 md:mb-6">
         <div className="text-center">
-          <div className="flex items-center justify-center gap-2 md:gap-4 mb-2 md:mb-4">
-            <div className="w-10 h-10 md:w-16 md:h-16 bg-yellow-400 rounded-full flex items-center justify-center">
-              <span className="text-xl md:text-2xl font-bold text-blue-900">
+          <div className="flex items-center justify-center gap-3 md:gap-6 mb-3 md:mb-6">
+            <div className="w-16 h-16 md:w-24 md:h-24 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg">
+              <span className="text-3xl md:text-5xl font-bold text-blue-900">
                 📚
               </span>
             </div>
             <div>
-              <h1 className="text-xl md:text-4xl font-bold text-white mb-1 md:mb-2">
+              <h1 className="text-3xl md:text-6xl lg:text-7xl font-bold text-white mb-2 md:mb-3 tracking-tight">
                 INFORMASI JADWAL
               </h1>
-              <p className="text-yellow-300 text-xs md:text-xl font-semibold">
+              <p className="text-yellow-300 text-lg md:text-3xl lg:text-4xl font-semibold">
                 {formatCurrentTime()}
               </p>
             </div>
@@ -454,7 +457,7 @@ export default function JadwalMonitor() {
             /* 📋 DATA SLIDE */
             <div className="bg-white/95 backdrop-blur-sm rounded-xl md:rounded-2xl p-3 md:p-6 shadow-2xl">
               {/* Table Header - Hidden on Mobile, use card layout instead */}
-              <div className="hidden lg:grid lg:grid-cols-12 gap-4 font-bold text-gray-800 bg-gray-100 p-4 rounded-lg mb-4 text-sm">
+              <div className="hidden lg:grid lg:grid-cols-12 gap-4 font-bold text-gray-800 bg-gray-100 p-5 rounded-lg mb-6 text-xl">
                 <div className="col-span-1">KODE</div>
                 <div className="col-span-2">JAM</div>
                 <div className="col-span-4">KEGIATAN</div>
@@ -487,7 +490,7 @@ export default function JadwalMonitor() {
                                     : 'bg-green-400'
                               }`}
                             ></div>
-                            <h3 className="text-xs md:text-lg font-bold text-gray-700 px-2 md:px-4 py-0.5 md:py-1 rounded-full bg-gray-100">
+                            <h3 className="text-lg md:text-2xl lg:text-3xl font-bold text-gray-700 px-4 md:px-6 py-2 md:py-3 rounded-full bg-gray-100">
                               {item.type === 'perkuliahan' && '📚 PERKULIAHAN'}
                               {item.type === 'karya_akhir' && '🎓 KARYA AKHIR'}
                               {item.type === 'lain_lain' && '📋 LAIN-LAIN'}
@@ -510,13 +513,13 @@ export default function JadwalMonitor() {
                         className={`lg:grid lg:grid-cols-12 gap-2 md:gap-4 p-3 md:p-4 rounded-lg border-l-4 ${getTypeColor(item.type)} ${getStatusColor(item.status)}`}
                       >
                         {/* Mobile Card Layout */}
-                        <div className="lg:hidden space-y-2">
+                        <div className="lg:hidden space-y-3">
                           <div className="flex justify-between items-start">
-                            <span className="font-bold text-sm md:text-base">
+                            <span className="font-bold text-xl md:text-2xl">
                               {item.kode}
                             </span>
                             <span
-                              className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              className={`inline-block px-3 py-1.5 rounded-full text-base font-semibold ${
                                 item.status === 'ongoing'
                                   ? 'bg-green-100 text-green-700'
                                   : item.status === 'upcoming'
@@ -529,15 +532,15 @@ export default function JadwalMonitor() {
                               {item.status === 'finished' && '✅ Selesai'}
                             </span>
                           </div>
-                          <div className="font-mono text-sm md:text-base font-bold text-gray-900">
+                          <div className="font-mono text-xl md:text-2xl font-bold text-gray-900">
                             {item.jam}
                           </div>
-                          <div className="font-semibold text-sm md:text-base leading-tight">
+                          <div className="font-semibold text-xl md:text-2xl leading-tight">
                             {item.kegiatan}
                           </div>
                           {item.jenis_pertemuan && (
                             <span
-                              className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                              className={`inline-block px-3 py-1.5 text-base rounded-full ${
                                 item.jenis_pertemuan === 'daring'
                                   ? 'bg-green-100 text-green-700'
                                   : item.jenis_pertemuan === 'hybrid'
@@ -550,7 +553,7 @@ export default function JadwalMonitor() {
                               {item.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
                             </span>
                           )}
-                          <div className="flex justify-between text-xs md:text-sm text-gray-700">
+                          <div className="flex justify-between text-lg md:text-xl text-gray-700">
                             <span className="font-semibold">
                               📍 {item.tempat}
                             </span>
@@ -561,22 +564,22 @@ export default function JadwalMonitor() {
                         {/* Desktop Grid Layout */}
                         <div className="hidden lg:contents">
                           <div className="col-span-1">
-                            <span className="font-bold text-lg">
+                            <span className="font-bold text-2xl">
                               {item.kode}
                             </span>
                           </div>
                           <div className="col-span-2">
-                            <span className="font-mono text-lg font-bold text-gray-900">
+                            <span className="font-mono text-2xl font-bold text-gray-900">
                               {item.jam}
                             </span>
                           </div>
                           <div className="col-span-4">
-                            <div className="font-semibold text-lg leading-tight">
+                            <div className="font-semibold text-2xl leading-tight">
                               {item.kegiatan}
                             </div>
                             {item.jenis_pertemuan && (
                               <span
-                                className={`inline-block mt-1 px-2 py-0.5 text-xs rounded-full ${
+                                className={`inline-block mt-2 px-3 py-1 text-base rounded-full ${
                                   item.jenis_pertemuan === 'daring'
                                     ? 'bg-green-100 text-green-700'
                                     : item.jenis_pertemuan === 'hybrid'
@@ -594,16 +597,16 @@ export default function JadwalMonitor() {
                             )}
                           </div>
                           <div className="col-span-2">
-                            <span className="text-lg font-semibold">
+                            <span className="text-2xl font-semibold">
                               {item.tempat}
                             </span>
                           </div>
                           <div className="col-span-2">
-                            <span className="text-base">{item.dosen}</span>
+                            <span className="text-xl">{item.dosen}</span>
                           </div>
                           <div className="col-span-1">
                             <span
-                              className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                              className={`inline-block px-3 py-2 rounded-full text-sm font-semibold ${
                                 item.status === 'ongoing'
                                   ? 'bg-green-100 text-green-700'
                                   : item.status === 'upcoming'
