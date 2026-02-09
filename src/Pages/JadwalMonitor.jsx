@@ -517,60 +517,54 @@ export default function JadwalMonitor() {
           <div className="absolute bottom-0 right-0 w-96 h-32 bg-gradient-to-tl from-blue-800/30 to-transparent rounded-tl-full"></div>
         </div>
 
-        <div className="relative z-10 px-4 md:px-8 lg:px-12 py-4 md:py-6">
-          {/* Top bar: Logo + Clock */}
-          <div className="flex items-center justify-between mb-4 md:mb-6">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-xl md:text-2xl">🎓</span>
-              </div>
-              <div className="text-white">
-                <div className="text-xs md:text-sm font-medium opacity-90">
-                  IPB University
-                </div>
-                <div className="text-sm md:text-lg font-bold leading-tight">
-                  School of Business
-                </div>
+        <div className="relative z-10 px-4 md:px-8 lg:px-12 py-3 md:py-4">
+          {/* Single row: Logo + School + Title + Clock */}
+          <div className="flex items-center justify-between">
+            {/* Left: Logo + School of Business */}
+            <div className="flex items-center gap-2 md:gap-3">
+              <img
+                src="/logo_sb.png"
+                alt="Logo IPB University"
+                className="h-14 md:h-16 w-auto object-contain"
+              />
+            </div>
+
+            {/* Center: Title only */}
+            <div className="flex flex-col items-center justify-center flex-1">
+              <h1 className="text-xl md:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-lg">
+                INFORMASI JADWAL
+              </h1>
+              <div className="mt-2 md:mt-3 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 md:px-6 py-1.5 rounded-full shadow-lg border border-yellow-300/50">
+                <span className="text-blue-700 text-sm md:text-base font-bold whitespace-nowrap">
+                  {formatDateOnly()}
+                </span>
               </div>
             </div>
 
-            {/* Digital Clock */}
-            <div className="bg-white/15 backdrop-blur-md rounded-xl px-4 md:px-6 py-2 md:py-3 border border-white/20 shadow-lg">
-              <div className="flex items-center gap-1 md:gap-2">
-                <span className="text-yellow-300 text-lg md:text-xl">⏱</span>
-                <span className="text-white font-bold text-2xl md:text-3xl font-mono tracking-wider">
+            {/* Right: Digital Clock */}
+            <div className="bg-white/15 backdrop-blur-md rounded-xl px-3 md:px-5 py-1.5 md:py-2 border border-white/20 shadow-lg">
+              <div className="flex items-center gap-1">
+                <span className="text-yellow-300 text-sm md:text-base">⏱</span>
+                <span className="text-white font-bold text-lg md:text-2xl font-mono tracking-wider">
                   {clock.hours}
                 </span>
-                <span className="text-yellow-300 font-bold text-2xl md:text-3xl animate-pulse">
+                <span className="text-yellow-300 font-bold text-lg md:text-2xl animate-pulse">
                   :
                 </span>
-                <span className="text-white font-bold text-2xl md:text-3xl font-mono tracking-wider">
+                <span className="text-white font-bold text-lg md:text-2xl font-mono tracking-wider">
                   {clock.minutes}
                 </span>
-                <span className="text-white/50 font-bold text-lg md:text-xl font-mono">
+                <span className="text-white/50 font-bold text-sm md:text-base font-mono">
                   : {clock.seconds}
                 </span>
               </div>
-            </div>
-          </div>
-
-          {/* Title */}
-          <div className="text-center pb-2 md:pb-4">
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black text-white tracking-tight drop-shadow-lg">
-              INFORMASI JADWAL
-            </h1>
-            <div className="mt-2 md:mt-3 inline-block bg-white/20 backdrop-blur-sm px-6 py-1.5 rounded-full border border-white/20">
-              <span className="text-yellow-200 text-sm md:text-lg font-semibold">
-                {formatDateOnly()}
-              </span>
             </div>
           </div>
         </div>
       </div>
 
       {/* ═══════════════ STATS CARDS ═══════════════ */}
-      <div className="px-4 md:px-8 lg:px-12 -mt-4 md:-mt-5 relative z-20">
+      <div className="px-4 md:px-8 lg:px-12 mt-3 md:mt-4 relative z-20">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           {[
             {
@@ -931,7 +925,7 @@ export default function JadwalMonitor() {
                               {/* Status */}
                               <div className="col-span-2 flex justify-end">
                                 <span
-                                  className={`${statusBadge.bg} ${statusBadge.text} text-xs font-semibold px-4 py-2 rounded-full shadow-sm`}
+                                  className={`${statusBadge.bg} ${statusBadge.text} text-[10px] font-semibold px-3 py-1.5 rounded-full shadow-sm`}
                                 >
                                   {statusBadge.icon} {statusBadge.label}
                                 </span>
