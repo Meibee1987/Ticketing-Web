@@ -441,7 +441,7 @@ export default function JadwalMonitor() {
     switch (status) {
       case 'ongoing':
         return {
-          bg: 'bg-green-500',
+          bg: 'bg-red-500',
           text: 'text-white',
           label: 'Berlangsung',
           icon: '🟢',
@@ -525,17 +525,17 @@ export default function JadwalMonitor() {
               <img
                 src="/logo_sb.png"
                 alt="Logo IPB University"
-                className="h-14 md:h-16 w-auto object-contain"
+                className="h-12 md:h-14 w-auto object-contain"
               />
             </div>
 
             {/* Center: Title only */}
             <div className="flex flex-col items-center justify-center flex-1">
-              <h1 className="text-xl md:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-lg">
+              <h1 className="text-xl md:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-lg mt-3">
                 INFORMASI JADWAL
               </h1>
               <div className="mt-2 md:mt-3 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 md:px-6 py-1.5 rounded-full shadow-lg border border-yellow-300/50">
-                <span className="text-blue-700 text-sm md:text-base font-bold whitespace-nowrap">
+                <span className="text-blue-700 text-sm md:text-base font-bold whitespace-nowrap ">
                   {formatDateOnly()}
                 </span>
               </div>
