@@ -31,41 +31,15 @@ export default function DashboardLayout() {
         className={`w-64 bg-gradient-to-b from-[#6b1a27] via-[#7a1c2f] to-[#4a0d18] text-white overflow-hidden flex flex-col fixed left-0 top-0 h-screen z-50 shadow-xl border-r-2 border-[#e6c200]/10 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-[#e6c200]/20 bg-gradient-to-r from-transparent to-[#e6c200]/5">
-          <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-[#e6c200] bg-clip-text text-transparent">
-            MyDashboard
-          </span>
-          {/* Close button for mobile */}
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden text-white hover:text-[#e6c200] transition-colors"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+        <div className="flex items-center gap-3 px-10 py-6 ">
+          <img
+            src="/logo_sb.png"
+            alt="Logo IPB University"
+            className="h-12 md:h-14 w-auto object-contain"
+          />
         </div>
 
         {/* User Info */}
-        <div className="px-4 py-3 bg-[#e6c200]/10 border-b border-[#e6c200]/20">
-          <p className="text-xs text-[#e6c200]/70">Logged in as</p>
-          <p className="text-sm font-semibold truncate">
-            {userRole?.name || 'User'}
-          </p>
-          <span className="inline-block mt-1 px-2 py-0.5 bg-[#e6c200]/20 text-[#e6c200] text-xs rounded-full">
-            {userRole?.roleName || 'user'}
-          </span>
-        </div>
 
         {/* Menu */}
         <nav
@@ -180,10 +154,15 @@ export default function DashboardLayout() {
           <div className="flex items-center gap-3 lg:flex-1"></div>
 
           <div className="flex items-center gap-2 md:gap-4">
-            <span className="hidden md:inline text-xs md:text-sm text-[#fed80b] font-medium">
-              Hi, {userRole?.name || 'User'}
-            </span>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#fed80b] to-[#f5c400] ring-2 ring-white/50 shadow-lg flex items-center justify-center text-xs font-bold text-[#5c0017]">
+            <div className="flex flex-col items-end">
+              <p className="hidden md:inline text-xs md:text-sm text-[#fed80b] font-bold">
+                Hi, {userRole?.name || 'User'}
+              </p>
+              <span className="inline-block mt-1 px-2 py-0.5 bg-[#e6c200]/20 text-[#e6c200] text-xs rounded-full">
+                {userRole?.roleName || 'user'}
+              </span>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#fed80b] to-[#f5c400] ring-2 ring-white/50 shadow-lg flex items-center justify-center text-xs font-bold text-[#5c0017] ml-2">
               {userRole?.name?.[0]?.toUpperCase() || 'U'}
             </div>
           </div>

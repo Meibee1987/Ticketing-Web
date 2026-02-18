@@ -169,7 +169,10 @@ function useRuanganData(selectedDate) {
         matkulRes,
         agendaKARes,
       ] = await Promise.all([
-        supabase.from('ruangan').select('*').order('nama_ruangan'),
+        supabase
+          .from('ruangan')
+          .select('id, nama_ruangan, kapasitas_ruangan, gedung, aktif_nonaktif')
+          .order('nama_ruangan'),
         supabase.from('jadwal_perkuliahan').select('*'),
         supabase.from('jadwal_karya_akhir').select('*'),
         supabase.from('jadwal_lain_lain').select('*'),
@@ -564,6 +567,15 @@ function RuanganCard({ ruangan, selectedDate }) {
             <span>{cfg.icon}</span>
             {cfg.text}
           </span>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {ruangan.kapasitas_ruangan && (
+              <span className="inline-flex items-center gap-1 text-xs text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
+                👥{' '}
+                <span className="font-medium">{ruangan.kapasitas_ruangan}</span>{' '}
+                orang
+              </span>
+            )}
+          </div>
         </div>
         {ruangan.totalBookings > 0 && (
           <span className="text-xs text-slate-400 bg-white px-2 py-1 rounded-full">

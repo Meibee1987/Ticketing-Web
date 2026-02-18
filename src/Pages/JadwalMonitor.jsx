@@ -54,8 +54,17 @@ export default function JadwalMonitor() {
 
   // 🎯 AUTO-SLIDE: Pindah halaman otomatis setiap 7 detik
   useEffect(() => {
-    // Calculate total pages including image slides
-    const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
+    // Group jadwal by type and paginate each group
+    const perkuliahanData = jadwalData.filter((j) => j.type === 'perkuliahan');
+    const karyaAkhirData = jadwalData.filter((j) => j.type === 'karya_akhir');
+    const lainLainData = jadwalData.filter((j) => j.type === 'lain_lain');
+
+    // Calculate pages for each type (max 5 items per page)
+    const perkuliahanPages = Math.ceil(perkuliahanData.length / ITEMS_PER_PAGE);
+    const karyaAkhirPages = Math.ceil(karyaAkhirData.length / ITEMS_PER_PAGE);
+    const lainLainPages = Math.ceil(lainLainData.length / ITEMS_PER_PAGE);
+
+    const totalDataPages = perkuliahanPages + karyaAkhirPages + lainLainPages;
     const totalPages = totalDataPages + SLIDE_IMAGES.length;
 
     if (totalPages <= 1) return; // Tidak perlu auto-slide jika hanya 1 halaman
@@ -441,7 +450,7 @@ export default function JadwalMonitor() {
     switch (status) {
       case 'ongoing':
         return {
-          bg: 'bg-red-500',
+          bg: 'bg-blue-500',
           text: 'text-white',
           label: 'Berlangsung',
           icon: '🟢',
@@ -484,8 +493,18 @@ export default function JadwalMonitor() {
     );
   }
 
-  // 🎯 PAGINATION LOGIC
-  const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
+  // 🎯 PAGINATION LOGIC - Group by type with max 5 items per page
+  // Group jadwal by type
+  const perkuliahanData = jadwalData.filter((j) => j.type === 'perkuliahan');
+  const karyaAkhirData = jadwalData.filter((j) => j.type === 'karya_akhir');
+  const lainLainData = jadwalData.filter((j) => j.type === 'lain_lain');
+
+  // Calculate pages for each type (max 5 items per page)
+  const perkuliahanPages = Math.ceil(perkuliahanData.length / ITEMS_PER_PAGE);
+  const karyaAkhirPages = Math.ceil(karyaAkhirData.length / ITEMS_PER_PAGE);
+  const lainLainPages = Math.ceil(lainLainData.length / ITEMS_PER_PAGE);
+
+  const totalDataPages = perkuliahanPages + karyaAkhirPages + lainLainPages;
   const totalPages = totalDataPages + SLIDE_IMAGES.length;
 
   // Determine if current page is showing image or data
@@ -493,9 +512,30 @@ export default function JadwalMonitor() {
   const imageSlideIndex = currentPage - totalDataPages;
 
   // Get current page data (only for data pages)
-  const startIndex = currentPage * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentPageData = jadwalData.slice(startIndex, endIndex);
+  let currentPageData = [];
+  if (!isImageSlide) {
+    if (currentPage < perkuliahanPages) {
+      // Page is in perkuliahan group
+      const startIdx = currentPage * ITEMS_PER_PAGE;
+      currentPageData = perkuliahanData.slice(
+        startIdx,
+        startIdx + ITEMS_PER_PAGE
+      );
+    } else if (currentPage < perkuliahanPages + karyaAkhirPages) {
+      // Page is in karya akhir group
+      const pageInGroup = currentPage - perkuliahanPages;
+      const startIdx = pageInGroup * ITEMS_PER_PAGE;
+      currentPageData = karyaAkhirData.slice(
+        startIdx,
+        startIdx + ITEMS_PER_PAGE
+      );
+    } else {
+      // Page is in lain-lain group
+      const pageInGroup = currentPage - perkuliahanPages - karyaAkhirPages;
+      const startIdx = pageInGroup * ITEMS_PER_PAGE;
+      currentPageData = lainLainData.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+    }
+  }
 
   const clock = formatClockTime();
 
@@ -531,10 +571,10 @@ export default function JadwalMonitor() {
 
             {/* Center: Title only */}
             <div className="flex flex-col items-center justify-center flex-1">
-              <h1 className="text-xl md:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-lg mt-3">
+              <h1 className="text-xl md:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-lg mt-1">
                 INFORMASI JADWAL
               </h1>
-              <div className="mt-2 md:mt-3 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 md:px-6 py-1.5 rounded-full shadow-lg border border-yellow-300/50">
+              <div className="mt-1 md:mt-1 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 md:px-6 py-1.5 rounded-full shadow-lg border border-yellow-300/50">
                 <span className="text-blue-700 text-sm md:text-base font-bold whitespace-nowrap ">
                   {formatDateOnly()}
                 </span>
@@ -565,7 +605,7 @@ export default function JadwalMonitor() {
 
       {/* ═══════════════ STATS CARDS ═══════════════ */}
       <div className="px-4 md:px-8 lg:px-12 mt-3 md:mt-4 relative z-20">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
           {[
             {
               label: 'Total Jadwal',
@@ -594,15 +634,15 @@ export default function JadwalMonitor() {
           ].map((stat, i) => (
             <div
               key={i}
-              className={`bg-gradient-to-br ${stat.gradient} rounded-xl p-3 md:p-4 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5`}
+              className={`bg-gradient-to-br ${stat.gradient} rounded-xl p-2.5 md:p-3 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5`}
             >
-              <div className="flex items-center gap-2 md:gap-3">
-                <span className="text-xl md:text-2xl">{stat.icon}</span>
+              <div className="flex items-center gap-1.5 md:gap-2.5">
+                <span className="text-lg md:text-xl">{stat.icon}</span>
                 <div>
-                  <div className="text-white/80 text-[10px] md:text-xs font-medium">
+                  <div className="text-white/80 text-[9px] md:text-[11px] font-medium">
                     {stat.label}
                   </div>
-                  <div className="text-white text-xl md:text-2xl font-bold">
+                  <div className="text-white text-lg md:text-xl font-bold">
                     {stat.value}
                   </div>
                 </div>
@@ -670,9 +710,9 @@ export default function JadwalMonitor() {
                     <div key={item.id}>
                       {/* ── Category Separator ── */}
                       {showTypeSeparator && (
-                        <div className="flex items-center gap-3 mb-4 mt-2 first:mt-0">
+                        <div className="flex items-center justify-center gap-3 mb-2 mt-1">
                           <div
-                            className={`w-10 h-10 md:w-11 md:h-11 bg-gradient-to-br ${getTypeIconBg(item.type)} rounded-xl flex items-center justify-center shadow-md`}
+                            className={`w-8 h-8 md:w-9 md:h-9 bg-gradient-to-br ${getTypeIconBg(item.type)} rounded-xl flex items-center justify-center shadow-md`}
                           >
                             <span className="text-white text-lg md:text-xl">
                               {item.type === 'perkuliahan' && '📚'}
@@ -833,7 +873,7 @@ export default function JadwalMonitor() {
                                   </svg>
                                 </div>
                                 <div>
-                                  <div className="font-semibold text-gray-800 text-2xl leading-tight">
+                                  <div className="font-semibold text-gray-700 text-2xl leading-tight">
                                     {item.kegiatan}
                                   </div>
                                   {item.jenis_pertemuan && (
@@ -879,7 +919,7 @@ export default function JadwalMonitor() {
                                   />
                                 </svg>
                                 <div>
-                                  <div className="font-semibold text-gray-700 text-2xl">
+                                  <div className="font-semibold text-gray-700 text-2xl leading-tight">
                                     {item.tempat}
                                   </div>
                                   <span className="font-medium block text-center w-full">
@@ -903,7 +943,7 @@ export default function JadwalMonitor() {
                                     d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                                   />
                                 </svg>
-                                <span className="text-gray-600 text-2xl font-medium">
+                                <span className="text-gray-600 text[20] font-bold">
                                   {item.dosen}
                                 </span>
                               </div>
