@@ -79,22 +79,8 @@ export default function JadwalMonitor() {
   const fetchTodaySchedule = async () => {
     try {
       setLoading(true);
-      const today = new Date();
-      // Format tanggal untuk filter (YYYY-MM-DD)
-      const todayStr = today.toISOString().split('T')[0];
-      const startOfDay = todayStr + 'T00:00:00.000Z';
-      const endOfDay = todayStr + 'T23:59:59.999Z';
 
-      console.log(
-        'Filtering for date:',
-        todayStr,
-        'from',
-        startOfDay,
-        'to',
-        endOfDay
-      );
-
-      // Fetch semua jadwal hari ini menggunakan logika yang sama dengan JadwalPage
+      // Fetch semua data, filter tanggal dilakukan client-side (sama seperti JadwalPage)
       const [
         perkuliahanRes,
         karyaAkhirRes,
@@ -102,28 +88,21 @@ export default function JadwalMonitor() {
         ruanganRes,
         agendaRes,
       ] = await Promise.all([
-        // Jadwal Perkuliahan dengan filter tanggal yang lebih ketat
         supabase
           .from('jadwal_perkuliahan')
           .select('*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)')
-          .gte('mulai_jadwal', startOfDay)
-          .lt('mulai_jadwal', todayStr + 'T24:00:00.000Z') // Lebih ketat, tidak termasuk hari berikutnya
           .order('mulai_jadwal', { ascending: true }),
 
         // Jadwal Karya Akhir
         supabase
           .from('jadwal_karya_akhir')
           .select('*')
-          .gte('mulai_jadwal', startOfDay)
-          .lt('mulai_jadwal', todayStr + 'T24:00:00.000Z')
           .order('mulai_jadwal', { ascending: true }),
 
         // Jadwal Lain-lain
         supabase
           .from('jadwal_lain_lain')
           .select('*')
-          .gte('mulai_jadwal', startOfDay)
-          .lt('mulai_jadwal', todayStr + 'T24:00:00.000Z')
           .order('mulai_jadwal', { ascending: true }),
 
         // Reference data
@@ -209,12 +188,13 @@ export default function JadwalMonitor() {
             type: 'karya_akhir',
             kode: 'KA',
             jam: `${formatTime(merged.mulai_jadwal)} - ${formatTime(merged.akhir_jadwal)}`,
-            kegiatan: `${merged.display_agenda} - ${merged.display_mahasiswa}`,
+            kegiatan: `${merged.display_agenda}`,
             tempat:
               merged.jenis_pertemuan === 'daring'
                 ? '🌐 Daring'
                 : merged.display_ruangan || '-',
-            dosen: dosenNames,
+            dosen: merged.display_mahasiswa,
+
             status: getStatus(merged.mulai_jadwal, merged.akhir_jadwal),
             mulai: new Date(merged.mulai_jadwal),
             jenis_pertemuan: merged.jenis_pertemuan || 'luring',
@@ -273,35 +253,17 @@ export default function JadwalMonitor() {
         return a.mulai - b.mulai;
       });
 
-      // Filter tambahan: pastikan hanya jadwal hari ini
-      const currentDate = new Date();
-      const todayDateOnly = currentDate.toISOString().split('T')[0]; // '2026-01-28'
-
-      const filteredSchedules = allSchedules.filter((item) => {
-        const itemDate = item.mulai.toISOString().split('T')[0];
-        const isToday = itemDate === todayDateOnly;
-        if (!isToday) {
-          console.log('Filtering out item from different date:', {
-            id: item.id,
-            type: item.type,
-            kegiatan: item.kegiatan,
-            dosen: item.dosen,
-            itemDate,
-            todayDateOnly,
-            mulai: item.mulai,
-          });
-        }
-        return isToday;
+      // Filter client-side: hanya jadwal hari ini (compare tanggal lokal, sama seperti JadwalPage)
+      const now = new Date();
+      const todaySchedules = allSchedules.filter((item) => {
+        return (
+          item.mulai.getFullYear() === now.getFullYear() &&
+          item.mulai.getMonth() === now.getMonth() &&
+          item.mulai.getDate() === now.getDate()
+        );
       });
 
-      console.log(
-        'Final filtered schedules:',
-        filteredSchedules.length,
-        'items for date:',
-        todayDateOnly
-      );
-      console.log('Total schedules before filter:', allSchedules.length);
-      setJadwalData(filteredSchedules);
+      setJadwalData(todaySchedules);
     } catch (error) {
       console.error('Error fetching schedule:', error);
     } finally {
@@ -600,55 +562,6 @@ export default function JadwalMonitor() {
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* ═══════════════ STATS CARDS ═══════════════ */}
-      <div className="px-4 md:px-8 lg:px-12 mt-3 md:mt-4 relative z-20">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-          {[
-            {
-              label: 'Total Jadwal',
-              value: totalJadwal,
-              icon: '📋',
-              gradient: 'from-blue-500 to-blue-600',
-            },
-            {
-              label: 'Berlangsung',
-              value: jadwalBerlangsung,
-              icon: '🟢',
-              gradient: 'from-green-500 to-emerald-600',
-            },
-            {
-              label: 'Akan Datang',
-              value: jadwalAkanDatang,
-              icon: '⏰',
-              gradient: 'from-amber-500 to-orange-500',
-            },
-            {
-              label: 'Selesai',
-              value: jadwalSelesai,
-              icon: '✅',
-              gradient: 'from-emerald-500 to-teal-600',
-            },
-          ].map((stat, i) => (
-            <div
-              key={i}
-              className={`bg-gradient-to-br ${stat.gradient} rounded-xl p-2.5 md:p-3 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5`}
-            >
-              <div className="flex items-center gap-1.5 md:gap-2.5">
-                <span className="text-lg md:text-xl">{stat.icon}</span>
-                <div>
-                  <div className="text-white/80 text-[9px] md:text-[11px] font-medium">
-                    {stat.label}
-                  </div>
-                  <div className="text-white text-lg md:text-xl font-bold">
-                    {stat.value}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
