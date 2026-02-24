@@ -13,6 +13,7 @@ import React, {
   useRef,
 } from 'react';
 import { supabase } from '../../supabaseClient';
+import { useAuth } from '../../contexts/AuthContext';
 // 🎯 Import komponen reusable dari folder components/
 import SearchBar from '../../components/SearchBar';
 import ActionButtons from '../../components/ActionButtons';
@@ -198,6 +199,21 @@ const formatTimestamp = (ts) => {
       hour12: false,
     });
     return `${hari}, ${tanggal}, ${waktu}`;
+  } catch {
+    return '-';
+  }
+};
+
+const formatTime = (ts) => {
+  if (!ts || ts === '-') return '-';
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return '-';
+    return date.toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
   } catch {
     return '-';
   }
@@ -440,6 +456,9 @@ const checkDosenConflict = async ({
 // KOMPONEN UTAMA: JadwalPageAdmin
 // ================================================================================
 export default function JadwalPageAdmin() {
+  // 🔐 Auth context untuk logging
+  const { userRole } = useAuth();
+
   // Data states
   const [jadwalPerkuliahan, setJadwalPerkuliahan] = useState([]);
   const [jadwalKaryaAkhir, setJadwalKaryaAkhir] = useState([]);
@@ -533,6 +552,8 @@ export default function JadwalPageAdmin() {
         mulai_formatted: formatTimestamp(r.mulai_jadwal),
         akhir_formatted: formatTimestamp(r.akhir_jadwal),
         last_modified: r.updated_at || r.created_at || new Date().toISOString(),
+        created_by: r.created_by || '-',
+        updated_by: r.updated_by || '-',
       }));
       setJadwalPerkuliahan(mergedPerkuliahan);
 
@@ -576,6 +597,8 @@ export default function JadwalPageAdmin() {
           akhir_formatted: formatTimestamp(j.akhir_jadwal),
           last_modified:
             j.updated_at || j.created_at || new Date().toISOString(),
+          created_by: j.created_by || '-',
+          updated_by: j.updated_by || '-',
         };
       });
       setJadwalKaryaAkhir(mergedKaryaAkhir);
@@ -595,6 +618,8 @@ export default function JadwalPageAdmin() {
         mulai_formatted: formatTimestamp(j.mulai_jadwal),
         akhir_formatted: formatTimestamp(j.akhir_jadwal),
         last_modified: j.updated_at || j.created_at || new Date().toISOString(),
+        created_by: j.created_by || '-',
+        updated_by: j.updated_by || '-',
       }));
       setJadwalLainLain(mergedLainLain);
 
@@ -895,10 +920,17 @@ export default function JadwalPageAdmin() {
         formData.dosen_ids = JSON.stringify(formData.dosen_ids);
       }
 
+      // 🔐 Tambahkan info user yang membuat/mengedit
+      const userName = userRole?.name || 'Unknown';
+
       if (modalMode === 'add') {
         const { id, ...dataToInsert } = formData; // Hapus id untuk insert
+        dataToInsert.created_by = userName;
+        dataToInsert.updated_by = userName;
         result = await supabase.from(table).insert([dataToInsert]);
       } else {
+        formData.updated_by = userName;
+        formData.updated_at = new Date().toISOString();
         result = await supabase
           .from(table)
           .update(formData)
@@ -906,6 +938,7 @@ export default function JadwalPageAdmin() {
       }
 
       if (result.error) throw result.error;
+
       alert(
         `Data berhasil ${modalMode === 'add' ? 'ditambahkan' : 'diupdate'}!`
       );
@@ -1736,23 +1769,23 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                 <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                   {jenis === 'perkuliahan' && (
                     <>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Angkatan
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
-                        Mulai
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Waktu
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
-                        Selesai
-                      </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Agenda
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Tempat
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Jenis
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Dibuat/Diedit
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Aksi
@@ -1761,26 +1794,26 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                   )}
                   {jenis === 'karya_akhir' && (
                     <>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Nama Mahasiswa
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
-                        Mulai
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Waktu
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
-                        Selesai
-                      </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Agenda
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Dosen Penguji
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Ruangan
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Jenis
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Dibuat/Diedit
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Aksi
@@ -1789,23 +1822,23 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                   )}
                   {jenis === 'lain_lain' && (
                     <>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Nama User
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
-                        Mulai
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Waktu
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
-                        Selesai
-                      </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Agenda
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Tempat
                       </th>
-                      <th className="py-3 px-4 font-semibold text-left border border-slate-300">
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Jenis
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Dibuat/Diedit
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Aksi
@@ -1828,14 +1861,15 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
-                          <span className="font-medium text-slate-800 text-xs">
-                            {row.mulai_formatted}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 border border-slate-200">
-                          <span className="font-medium text-slate-800 text-xs">
-                            {row.akhir_formatted}
-                          </span>
+                          <div className="text-xs font-medium text-slate-800">
+                            {row.mulai_jadwal
+                              ? formatDate(new Date(row.mulai_jadwal))
+                              : '-'}
+                          </div>
+                          <div className="text-xs text-slate-600">
+                            {formatTime(row.mulai_jadwal)} -{' '}
+                            {formatTime(row.akhir_jadwal)}
+                          </div>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <div className="font-semibold text-slate-900">
@@ -1886,14 +1920,15 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
-                          <span className="font-medium text-slate-800 text-xs">
-                            {row.mulai_formatted}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 border border-slate-200">
-                          <span className="font-medium text-slate-800 text-xs">
-                            {row.akhir_formatted}
-                          </span>
+                          <div className="text-xs font-medium text-slate-800">
+                            {row.mulai_jadwal
+                              ? formatDate(new Date(row.mulai_jadwal))
+                              : '-'}
+                          </div>
+                          <div className="text-xs text-slate-600">
+                            {formatTime(row.mulai_jadwal)} -{' '}
+                            {formatTime(row.akhir_jadwal)}
+                          </div>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <div className="font-semibold text-slate-900">
@@ -1959,14 +1994,15 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
-                          <span className="font-medium text-slate-800 text-xs">
-                            {row.mulai_formatted}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 border border-slate-200">
-                          <span className="font-medium text-slate-800 text-xs">
-                            {row.akhir_formatted}
-                          </span>
+                          <div className="text-xs font-medium text-slate-800">
+                            {row.mulai_jadwal
+                              ? formatDate(new Date(row.mulai_jadwal))
+                              : '-'}
+                          </div>
+                          <div className="text-xs text-slate-600">
+                            {formatTime(row.mulai_jadwal)} -{' '}
+                            {formatTime(row.akhir_jadwal)}
+                          </div>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <div className="font-semibold text-slate-900">
@@ -2006,6 +2042,55 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                         </td>
                       </>
                     )}
+                    <td className="py-3 px-4 border border-slate-200">
+                      <div className="min-w-[150px]">
+                        {row.updated_by && row.updated_by !== '-' ? (
+                          <div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-blue-500 text-xs">✏️</span>
+                              <span className="text-xs font-semibold text-slate-700 text-center">
+                                {row.updated_by}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 ml-4">
+                              {new Date(
+                                row.updated_at || row.last_modified
+                              ).toLocaleString('id-ID', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false,
+                              })}
+                            </div>
+                          </div>
+                        ) : row.created_by && row.created_by !== '-' ? (
+                          <div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-green-500 text-xs">➕</span>
+                              <span className="text-xs font-semibold text-slate-700 text-center">
+                                {row.created_by}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 ml-4">
+                              {new Date(
+                                row.created_at || row.last_modified
+                              ).toLocaleString('id-ID', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false,
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-3 px-4 border border-slate-200 text-center">
                       {/* 🎯 Menggunakan komponen ActionButtons yang reusable */}
                       <ActionButtons
