@@ -186,7 +186,7 @@ export default function JadwalMonitor() {
           allSchedules.push({
             id: `K${merged.id}`,
             type: 'karya_akhir',
-            kode: 'KA',
+            kode: 'KARYA AKHIR',
             jam: `${formatTime(merged.mulai_jadwal)} - ${formatTime(merged.akhir_jadwal)}`,
             kegiatan: `${merged.display_agenda}`,
             tempat:
@@ -214,7 +214,7 @@ export default function JadwalMonitor() {
           allSchedules.push({
             id: `L${merged.id}`,
             type: 'lain_lain',
-            kode: 'LAIN',
+            kode: 'LAINNYA',
             jam: `${formatTime(merged.mulai_jadwal)} - ${formatTime(merged.akhir_jadwal)}`,
             kegiatan: merged.agenda || 'Kegiatan Lain',
             tempat:
@@ -504,7 +504,7 @@ export default function JadwalMonitor() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 flex flex-col relative overflow-hidden">
       {/* ═══════════════ HEADER ═══════════════ */}
-      <div className="relative bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 overflow-hidden">
+      <div className="relative bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 overflow-hidden ">
         {/* Animated floating patterns */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-10 -left-10 w-48 h-48 bg-white/10 rounded-full blur-2xl animate-pulse"></div>
@@ -533,11 +533,11 @@ export default function JadwalMonitor() {
 
             {/* Center: Title only */}
             <div className="flex flex-col items-center justify-center flex-1">
-              <h1 className="text-xl md:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-lg mt-1">
+              <h1 className="text-base md:text-2xl lg:text-3xl font-black text-white tracking-tight drop-shadow-lg mt-1">
                 INFORMASI JADWAL
               </h1>
               <div className="mt-1 md:mt-1 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 md:px-6 py-1.5 rounded-full shadow-lg border border-yellow-300/50">
-                <span className="text-blue-700 text-sm md:text-base font-bold whitespace-nowrap ">
+                <span className="text-blue-700 text-xs md:text-sm font-bold whitespace-nowrap ">
                   {formatDateOnly()}
                 </span>
               </div>
@@ -546,17 +546,17 @@ export default function JadwalMonitor() {
             {/* Right: Digital Clock */}
             <div className="bg-white/15 backdrop-blur-md rounded-xl px-3 md:px-5 py-1.5 md:py-2 border border-white/20 shadow-lg">
               <div className="flex items-center gap-1">
-                <span className="text-yellow-300 text-sm md:text-base">⏱</span>
-                <span className="text-white font-bold text-lg md:text-2xl font-mono tracking-wider">
+                <span className="text-yellow-300 text-xs md:text-sm">⏱</span>
+                <span className="text-white font-bold text-base md:text-xl font-mono tracking-wider">
                   {clock.hours}
                 </span>
-                <span className="text-yellow-300 font-bold text-lg md:text-2xl animate-pulse">
+                <span className="text-yellow-300 font-bold text-base md:text-xl animate-pulse">
                   :
                 </span>
-                <span className="text-white font-bold text-lg md:text-2xl font-mono tracking-wider">
+                <span className="text-white font-bold text-base md:text-xl font-mono tracking-wider">
                   {clock.minutes}
                 </span>
-                <span className="text-white/50 font-bold text-sm md:text-base font-mono">
+                <span className="text-white/50 font-bold text-xs md:text-sm font-mono">
                   : {clock.seconds}
                 </span>
               </div>
@@ -570,11 +570,11 @@ export default function JadwalMonitor() {
         {jadwalData.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="bg-white rounded-2xl p-8 md:p-12 max-w-md mx-auto shadow-xl text-center">
-              <div className="text-5xl md:text-6xl mb-4">📅</div>
-              <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-2">
+              <div className="text-4xl md:text-5xl mb-4">📅</div>
+              <h2 className="text-base md:text-xl font-bold text-gray-800 mb-2">
                 Tidak Ada Jadwal
               </h2>
-              <p className="text-sm md:text-base text-gray-500">
+              <p className="text-xs md:text-sm text-gray-500">
                 Tidak ada kegiatan yang terjadwal untuk hari ini
               </p>
             </div>
@@ -595,15 +595,15 @@ export default function JadwalMonitor() {
                     }}
                   />
                   <div className="hidden text-center p-8">
-                    <div className="text-5xl mb-4">🖼️</div>
-                    <p className="text-lg text-gray-500">
+                    <div className="text-4xl mb-4">🖼️</div>
+                    <p className="text-base text-gray-500">
                       Gambar tidak dapat dimuat
                     </p>
                   </div>
                 </div>
                 {SLIDE_IMAGES[imageSlideIndex].title && (
                   <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-center py-3 px-6">
-                    <h3 className="text-lg md:text-xl font-bold">
+                    <h3 className="text-base font-bold">
                       {SLIDE_IMAGES[imageSlideIndex].title}
                     </h3>
                   </div>
@@ -621,24 +621,6 @@ export default function JadwalMonitor() {
 
                   return (
                     <div key={item.id}>
-                      {/* ── Category Separator ── */}
-                      {showTypeSeparator && (
-                        <div className="flex items-center justify-center gap-3 mb-2 mt-1">
-                          <div
-                            className={`w-8 h-8 md:w-9 md:h-9 bg-gradient-to-br ${getTypeIconBg(item.type)} rounded-xl flex items-center justify-center shadow-md`}
-                          >
-                            <span className="text-white text-lg md:text-xl">
-                              {item.type === 'perkuliahan' && '📚'}
-                              {item.type === 'karya_akhir' && '🎓'}
-                              {item.type === 'lain_lain' && '📋'}
-                            </span>
-                          </div>
-                          <h3 className="text-lg md:text-2xl font-bold bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">
-                            {getTypeLabel(item.type)}
-                          </h3>
-                        </div>
-                      )}
-
                       {/* ── Schedule Card ── */}
                       <div
                         className={`bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden group hover:-translate-y-0.5 ${item.status === 'ongoing' ? 'ring-2 ring-green-400/50' : ''}`}
@@ -658,15 +640,15 @@ export default function JadwalMonitor() {
                           ></div>
 
                           {/* Card content */}
-                          <div className="flex-1 p-3 md:p-4 lg:p-5">
+                          <div className="flex-1 p-2.5 md:p-3.5 lg:p-4.5">
                             {/* Mobile Layout */}
                             <div className="lg:hidden space-y-3">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                  <span className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-sm md:text-base font-bold px-3 py-1.5 rounded-lg shadow-sm">
+                                  <span className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs md:text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
                                     {item.kode}
                                   </span>
-                                  <div className="flex items-center gap-1.5 text-gray-500 text-sm">
+                                  <div className="flex items-center gap-1.5 text-gray-500 text-xs">
                                     <svg
                                       className="w-4 h-4"
                                       fill="none"
@@ -686,17 +668,17 @@ export default function JadwalMonitor() {
                                   </div>
                                 </div>
                                 <span
-                                  className={`${statusBadge.bg} ${statusBadge.text} text-xs font-semibold px-3 py-1.5 rounded-full shadow-sm`}
+                                  className={`${statusBadge.bg} ${statusBadge.text} text-[10px] font-semibold px-3 py-1.5 rounded-full shadow-sm`}
                                 >
                                   {statusBadge.icon} {statusBadge.label}
                                 </span>
                               </div>
-                              <div className="font-semibold text-gray-800 text-base">
+                              <div className="font-semibold text-gray-800 text-sm">
                                 {item.kegiatan}
                               </div>
                               {item.jenis_pertemuan && (
                                 <span
-                                  className={`inline-block px-2.5 py-1 text-xs rounded-full font-medium ${
+                                  className={`inline-block px-2.5 py-1 text-[10px] rounded-full font-medium ${
                                     item.jenis_pertemuan === 'daring'
                                       ? 'bg-green-50 text-green-600'
                                       : item.jenis_pertemuan === 'hybrid'
@@ -712,7 +694,7 @@ export default function JadwalMonitor() {
                                     '🔄 Hybrid'}
                                 </span>
                               )}
-                              <div className="flex items-center justify-between text-sm text-gray-600">
+                              <div className="flex items-center justify-between text-xs text-gray-600">
                                 <span className="flex items-center gap-1.5">
                                   <svg
                                     className="w-4 h-4 text-red-400"
@@ -755,11 +737,11 @@ export default function JadwalMonitor() {
                             </div>
 
                             {/* Desktop Layout */}
-                            <div className="hidden lg:grid lg:grid-cols-12 items-center gap-4">
+                            <div className="hidden lg:grid lg:grid-cols-12 items-center gap-4 ">
                               {/* Kode + Jam */}
                               <div className="col-span-2 flex items-center gap-4">
                                 <div className="flex flex-col items-center">
-                                  <span className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-medium font-bold px-4 py-2 rounded-lg shadow-sm">
+                                  <span className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm">
                                     {item.kode}
                                   </span>
                                   <div className="flex items-center gap-1.5 text-gray-400 text-xs mt-2"></div>
@@ -786,12 +768,12 @@ export default function JadwalMonitor() {
                                   </svg>
                                 </div>
                                 <div>
-                                  <div className="font-semibold text-gray-700 text-2xl leading-tight">
+                                  <div className="font-semibold text-gray-700 text-xl leading-tight">
                                     {item.kegiatan}
                                   </div>
                                   {item.jenis_pertemuan && (
                                     <span
-                                      className={`inline-block mt-1 px-2.5 py-0.5 text-[15px] rounded-full font-bold ${
+                                      className={`inline-block mt-1 px-2.5 py-0.5 text-xs rounded-full font-bold ${
                                         item.jenis_pertemuan === 'daring'
                                           ? 'bg-green-50 text-green-600'
                                           : item.jenis_pertemuan === 'hybrid'
@@ -832,7 +814,7 @@ export default function JadwalMonitor() {
                                   />
                                 </svg>
                                 <div>
-                                  <div className="font-semibold text-gray-700 text-2xl leading-tight">
+                                  <div className="font-semibold text-gray-700 text-xl leading-tight">
                                     {item.tempat}
                                   </div>
                                   <span className="font-medium block text-center w-full">
@@ -856,7 +838,7 @@ export default function JadwalMonitor() {
                                     d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                                   />
                                 </svg>
-                                <span className="text-gray-600 text[20] font-bold">
+                                <span className="text-gray-600 text-sm font-bold">
                                   {item.dosen}
                                 </span>
                               </div>
@@ -864,7 +846,7 @@ export default function JadwalMonitor() {
                               {/* Status */}
                               <div className="col-span-2 flex justify-end">
                                 <span
-                                  className={`${statusBadge.bg} ${statusBadge.text} text-[12px] font-semibold px-3 py-1.5 rounded-full shadow-sm`}
+                                  className={`${statusBadge.bg} ${statusBadge.text} text-[10px] font-semibold px-3 py-1.5 rounded-full shadow-sm`}
                                 >
                                   {statusBadge.icon} {statusBadge.label}
                                 </span>
@@ -881,13 +863,12 @@ export default function JadwalMonitor() {
           </>
         )}
       </div>
-
       {/* ═══════════════ FOOTER ═══════════════ */}
       <div className="px-4 md:px-8 lg:px-12 pb-3 md:pb-4">
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl px-4 md:px-6 py-3 shadow-sm border border-gray-100">
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl px-4 md:px-6 py-2.5 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between flex-wrap gap-3">
             {/* Legend */}
-            <div className="flex items-center gap-4 md:gap-6 text-xs md:text-sm text-gray-600">
+            <div className="flex items-center gap-4 md:gap-6 text-[10px] md:text-xs text-gray-600">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
                 <span>Perkuliahan</span>
@@ -965,7 +946,7 @@ export default function JadwalMonitor() {
                     />
                   </svg>
                 </button>
-                <span className="text-xs text-gray-500 ml-1">
+                <span className="text-[10px] text-gray-500 ml-1">
                   {currentPage + 1}/{totalPages}
                 </span>
               </div>
@@ -976,9 +957,9 @@ export default function JadwalMonitor() {
               <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-sm">
                 <span className="text-white text-[8px] font-bold">W</span>
               </div>
-              <span className="text-[10px] text-gray-400">
+              <span className="text-[12px] text-gray-400">
                 Developed by{' '}
-                <span className="font-medium text-gray-500">Wanda Saputra</span>
+                <span className="font-bold text-gray-500">Wanda Saputra</span>
               </span>
             </div>
           </div>
