@@ -519,44 +519,64 @@ export default function JadwalMonitor() {
           <div className="absolute bottom-0 right-0 w-96 h-32 bg-gradient-to-tl from-blue-800/30 to-transparent rounded-tl-full"></div>
         </div>
 
-        <div className="relative z-10 px-4 md:px-8 lg:px-12 py-3 md:py-4">
-          {/* Single row: Logo + School + Title + Clock */}
-          <div className="flex items-center justify-between">
-            {/* Left: Logo + School of Business */}
-            <div className="flex items-center gap-2 md:gap-3">
+        <div className="relative z-10 px-3 md:px-8 lg:px-12 py-2 md:py-4">
+          {/* ── Mobile Header (stacked, centered) ── */}
+          <div className="md:hidden flex flex-col items-center gap-1">
+            {/* Logo */}
+            <img
+              src="/logo_sb.png"
+              alt="Logo IPB University"
+              className="h-8 w-auto object-contain"
+            />
+            {/* Title */}
+            <h1 className="text-sm font-black text-white tracking-tight drop-shadow-lg">
+              INFORMASI JADWAL
+            </h1>
+            {/* Date */}
+            <div className="bg-yellow-400/90 backdrop-blur-sm px-3 py-0.5 rounded-full shadow-lg border border-yellow-300/50">
+              <span className="text-blue-700 text-[10px] font-bold whitespace-nowrap">
+                {formatDateOnly()}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Desktop Header (single row) ── */}
+          <div className="hidden md:flex items-center justify-between gap-2">
+            {/* Left: Logo */}
+            <div className="flex-shrink-0">
               <img
                 src="/logo_sb.png"
                 alt="Logo IPB University"
-                className="h-12 md:h-14 w-auto object-contain"
+                className="h-14 w-auto object-contain"
               />
             </div>
 
-            {/* Center: Title only */}
-            <div className="flex flex-col items-center justify-center flex-1">
-              <h1 className="text-base md:text-2xl lg:text-3xl font-black text-white tracking-tight drop-shadow-lg mt-1">
+            {/* Center: Title + Date */}
+            <div className="flex flex-col items-center justify-center flex-1 min-w-0">
+              <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight drop-shadow-lg leading-tight text-center">
                 INFORMASI JADWAL
               </h1>
-              <div className="mt-1 md:mt-1 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 md:px-6 py-1.5 rounded-full shadow-lg border border-yellow-300/50">
-                <span className="text-blue-700 text-xs md:text-sm font-bold whitespace-nowrap ">
+              <div className="mt-1 inline-block bg-yellow-400/90 backdrop-blur-sm px-6 py-1.5 rounded-full shadow-lg border border-yellow-300/50">
+                <span className="text-blue-700 text-sm font-bold whitespace-nowrap">
                   {formatDateOnly()}
                 </span>
               </div>
             </div>
 
             {/* Right: Digital Clock */}
-            <div className="bg-white/15 backdrop-blur-md rounded-xl px-3 md:px-5 py-1.5 md:py-2 border border-white/20 shadow-lg">
+            <div className="flex-shrink-0 bg-white/15 backdrop-blur-md rounded-xl px-5 py-2 border border-white/20 shadow-lg">
               <div className="flex items-center gap-1">
-                <span className="text-yellow-300 text-xs md:text-sm">⏱</span>
-                <span className="text-white font-bold text-base md:text-xl font-mono tracking-wider">
+                <span className="text-yellow-300 text-sm">⏱</span>
+                <span className="text-white font-bold text-xl font-mono tracking-wider">
                   {clock.hours}
                 </span>
-                <span className="text-yellow-300 font-bold text-base md:text-xl animate-pulse">
+                <span className="text-yellow-300 font-bold text-xl animate-pulse">
                   :
                 </span>
-                <span className="text-white font-bold text-base md:text-xl font-mono tracking-wider">
+                <span className="text-white font-bold text-xl font-mono tracking-wider">
                   {clock.minutes}
                 </span>
-                <span className="text-white/50 font-bold text-xs md:text-sm font-mono">
+                <span className="text-white/50 font-bold text-sm font-mono">
                   : {clock.seconds}
                 </span>
               </div>
@@ -864,11 +884,12 @@ export default function JadwalMonitor() {
         )}
       </div>
       {/* ═══════════════ FOOTER ═══════════════ */}
-      <div className="px-4 md:px-8 lg:px-12 pb-3 md:pb-4">
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl px-4 md:px-6 py-2.5 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="px-3 md:px-8 lg:px-12 pb-2 md:pb-4">
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl px-3 md:px-6 py-2 md:py-2.5 shadow-sm border border-gray-100">
+          {/* Desktop: single row | Mobile: stacked */}
+          <div className="hidden md:flex items-center justify-between gap-3">
             {/* Legend */}
-            <div className="flex items-center gap-4 md:gap-6 text-[10px] md:text-xs text-gray-600">
+            <div className="flex items-center gap-6 text-xs text-gray-600">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
                 <span>Perkuliahan</span>
@@ -887,7 +908,7 @@ export default function JadwalMonitor() {
               </span>
             </div>
 
-            {/* Pagination inline */}
+            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center gap-2">
                 <button
@@ -961,6 +982,104 @@ export default function JadwalMonitor() {
                 Developed by{' '}
                 <span className="font-bold text-gray-500">Wanda Saputra</span>
               </span>
+            </div>
+          </div>
+
+          {/* Mobile layout: 2 compact rows */}
+          <div className="md:hidden space-y-1.5">
+            {/* Row 1: Legend + Total */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[9px] text-gray-600">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-blue-500 rounded-sm"></div>
+                  <span>Perkuliahan</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-purple-500 rounded-sm"></div>
+                  <span>Karya Akhir</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-sm"></div>
+                  <span>Lain-lain</span>
+                </div>
+              </div>
+              <span className="text-[9px] text-gray-500">
+                Total: <strong>{totalJadwal}</strong>
+              </span>
+            </div>
+            {/* Row 2: Pagination + Dev credit */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
+                  <span className="text-white text-[6px] font-bold">W</span>
+                </div>
+                <span className="text-[9px] text-gray-400">
+                  by{' '}
+                  <span className="font-bold text-gray-500">Wanda Saputra</span>
+                </span>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() =>
+                      setCurrentPage(
+                        (prev) => (prev - 1 + totalPages) % totalPages
+                      )
+                    }
+                    className="bg-blue-50 text-blue-600 p-0.5 rounded transition-colors"
+                  >
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 19l-7-7 7-7"
+                      />
+                    </svg>
+                  </button>
+                  <div className="flex gap-1">
+                    {Array.from({ length: totalPages }).map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentPage(index)}
+                        className={`transition-all duration-300 rounded-full h-1.5 ${
+                          currentPage === index
+                            ? 'w-4 bg-blue-500'
+                            : 'w-1.5 bg-gray-300'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    onClick={() =>
+                      setCurrentPage((prev) => (prev + 1) % totalPages)
+                    }
+                    className="bg-blue-50 text-blue-600 p-0.5 rounded transition-colors"
+                  >
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </button>
+                  <span className="text-[9px] text-gray-500">
+                    {currentPage + 1}/{totalPages}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
