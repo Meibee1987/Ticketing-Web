@@ -9,8 +9,10 @@ import LoginPage from './Pages/LoginPage';
 import LoginPageOTP from './Pages/LoginPageOTP';
 import JadwalMonitor from './Pages/JadwalMonitor';
 
-import DashboardLayout from './Pages/dashboard/DashboardLayout';
-import OverviewPage from './Pages/dashboard/OverviewPage';
+// ── NEW Figma-matching layout & overview ──
+import NewDashboardLayout from './components/layout/NewDashboardLayout';
+import NewOverviewPage from './Pages/dashboard/NewOverviewPage';
+
 import DashboardTicketPage from './Pages/dashboard/DashboardTicketPage';
 import TicketingPage from './Pages/dashboard/TicketingPage';
 import AllTicketsPage from './Pages/dashboard/AllTicketsPage';
@@ -33,14 +35,11 @@ export default function App() {
           <Route path="/login-password" element={<LoginPage />} />
           <Route path="/jadwal-monitor" element={<JadwalMonitor />} />
 
-          {/* Protected Routes */}
+          {/* Protected Routes – uses NEW Figma layout */}
           <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<DashboardLayout />}>
-              {/* Default redirect ke jadwal untuk semua role */}
-              <Route
-                index
-                element={<Navigate to="/dashboard/jadwal" replace />}
-              />
+            <Route path="/dashboard" element={<NewDashboardLayout />}>
+              {/* Dashboard overview (KPI + charts + table) */}
+              <Route index element={<NewOverviewPage />} />
 
               {/* === HALAMAN UNTUK SEMUA ROLE (termasuk dosen) === */}
               <Route path="jadwal" element={<JadwalPage />} />

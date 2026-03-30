@@ -1,0 +1,374 @@
+/**
+ * OverviewPage – Main Dashboard page matching Figma design
+ *
+ * Features:
+ *   - KPI cards synced with RuanganPage logic (time-aware)
+ *   - Donut chart with Luring / Online / Hybrid percentages
+ *   - Real-time notification system from jadwal CRUD events
+ *   - Date picker that filters ALL dashboard data
+ *
+ * Layout:
+ *   ┌─────────────────────────────────────┐
+ *   │  Date Picker                        │
+ *   ├─────────┬─────────┬─────────┬───────┤
+ *   │  KPI 1  │  KPI 2  │  KPI 3  │ KPI 4│
+ *   ├─────────┴─────────┼─────────┴───────┤
+ *   │  Bar Chart        │  Donut Chart    │
+ *   ├───────────────────┼─────────────────┤
+ *   │  Jadwal Hari Ini  │  Notifikasi     │
+ *   └───────────────────┴─────────────────┘
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  CalendarDays,
+  Building2,
+  DoorOpen,
+  GraduationCap,
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
+
+// UI components
+import KPICard from '../../components/ui/KPICard';
+import ChartCard from '../../components/ui/ChartCard';
+import BarChartWidget from '../../components/ui/BarChartWidget';
+import DonutChartWidget from '../../components/ui/DonutChartWidget';
+import DataTable from '../../components/ui/DataTable';
+import NotificationPanel from '../../components/ui/NotificationPanel';
+
+// Notification context
+import { useNotifications } from '../../contexts/NotificationContext';
+
+// Data layer
+import {
+  fetchDashboardKPI,
+  fetchWeeklyStats,
+  fetchJenisPertemuanStats,
+  fetchJadwalHariIni,
+  subscribeJadwalChanges,
+} from '../../data/dashboard';
+
+// ── Helpers ──
+const isSameDate = (d1, d2) => d1.toDateString() === d2.toDateString();
+const formatDateInput = (d) => d.toISOString().split('T')[0];
+const formatDateDisplay = (d) =>
+  d.toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+// ── Max notifications kept in state ──
+const MAX_NOTIFICATIONS = 20;
+
+export default function NewOverviewPage() {
+  // ── Date state ──
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const isToday = isSameDate(selectedDate, new Date());
+
+  // ── Global notifications from context ──
+  const { notifications, dismissNotification } = useNotifications();
+
+  // ── KPI state ──
+  const [loading, setLoading] = useState(true);
+  const [kpi, setKpi] = useState({
+    totalJadwal: 0,
+    ruanganUsed: 0,
+    totalRuangan: 0,
+    tersedia: 0,
+    dosenAktif: 0,
+  });
+  const [prevKpi, setPrevKpi] = useState({
+    totalJadwal: 0,
+    ruanganUsed: 0,
+    tersedia: 0,
+  });
+
+  // ── Chart state ──
+  const [weeklyData, setWeeklyData] = useState([]);
+  const [jenisStats, setJenisStats] = useState({
+    luring: 0,
+    online: 0,
+    hybrid: 0,
+  });
+  const [chartLoading, setChartLoading] = useState(true);
+
+  // ── Table state ──
+  const [jadwalHariIni, setJadwalHariIni] = useState([]);
+
+  // ── Auto-refresh "sedang digunakan" every 60s (same as RuanganPage) ──
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!isToday) return;
+    const timer = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(timer);
+  }, [isToday]);
+
+  // ── Load KPI (synced with RuanganPage) ──
+  const loadKPI = useCallback(async (date) => {
+    try {
+      setLoading(true);
+      const yesterday = new Date(date.getTime() - 86400000);
+
+      const [todayKPI, yesterdayKPI] = await Promise.all([
+        fetchDashboardKPI(date),
+        fetchDashboardKPI(yesterday),
+      ]);
+
+      setKpi(todayKPI);
+      setPrevKpi({
+        totalJadwal: yesterdayKPI.totalJadwal,
+        ruanganUsed: yesterdayKPI.ruanganUsed,
+        tersedia: yesterdayKPI.tersedia,
+      });
+    } catch (err) {
+      console.error('Error loading KPI:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Load Charts ──
+  const loadCharts = useCallback(async (date) => {
+    try {
+      setChartLoading(true);
+      const [weekly, jenis] = await Promise.all([
+        fetchWeeklyStats(date),
+        fetchJenisPertemuanStats(date),
+      ]);
+      setWeeklyData(weekly);
+      setJenisStats(jenis);
+    } catch (err) {
+      console.error('Error loading charts:', err);
+    } finally {
+      setChartLoading(false);
+    }
+  }, []);
+
+  // ── Load Table ──
+  const loadTable = useCallback(async (date) => {
+    try {
+      const data = await fetchJadwalHariIni(date);
+      setJadwalHariIni(data);
+    } catch (err) {
+      console.error('Error loading jadwal:', err);
+    }
+  }, []);
+
+  // ── Load all data when selectedDate changes ──
+  useEffect(() => {
+    loadKPI(selectedDate);
+    loadCharts(selectedDate);
+    loadTable(selectedDate);
+  }, [selectedDate, loadKPI, loadCharts, loadTable]);
+
+  // ── Realtime subscription for data refresh (notifications handled by global context) ──
+  useEffect(() => {
+    const handleChange = () => {
+      loadKPI(selectedDate);
+      loadCharts(selectedDate);
+      loadTable(selectedDate);
+    };
+
+    const cleanup = subscribeJadwalChanges(handleChange);
+    return cleanup;
+  }, [selectedDate, loadKPI, loadCharts, loadTable]);
+
+  // ── KPI trend calculations ──
+  const jadwalTrend = (() => {
+    const diff = kpi.totalJadwal - prevKpi.totalJadwal;
+    if (prevKpi.totalJadwal === 0) return kpi.totalJadwal > 0 ? '+100%' : null;
+    const pct = Math.round((diff / prevKpi.totalJadwal) * 100);
+    return pct >= 0 ? `+${pct}%` : `${pct}%`;
+  })();
+
+  const ruanganUsedTrend = (() => {
+    const diff = kpi.ruanganUsed - prevKpi.ruanganUsed;
+    return diff >= 0 ? `+${diff}` : `${diff}`;
+  })();
+
+  const ruanganAvailDiff = kpi.tersedia - prevKpi.tersedia;
+  const ruanganAvailTrend =
+    ruanganAvailDiff >= 0 ? `+${ruanganAvailDiff}` : `${ruanganAvailDiff}`;
+
+  // ── Date display ──
+  const dateDisplay = formatDateDisplay(selectedDate);
+
+  // ── Dismiss notification (from context) ──
+  const handleDismissNotif = dismissNotification;
+
+  // ── Date navigation ──
+  const goToPrev = () =>
+    setSelectedDate((d) => new Date(d.getTime() - 86400000));
+  const goToNext = () =>
+    setSelectedDate((d) => new Date(d.getTime() + 86400000));
+  const goToToday = () => setSelectedDate(new Date());
+
+  return (
+    <div className="space-y-6">
+      {/* ── Date Picker Bar ── */}
+      <section className="sticky top-[72px] z-20 bg-white rounded-[var(--radius-card)] shadow-[var(--shadow-card)] border border-slate-100 p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goToPrev}
+              className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+            >
+              <ChevronLeft size={18} className="text-slate-600" />
+            </button>
+            <input
+              type="date"
+              value={formatDateInput(selectedDate)}
+              onChange={(e) =>
+                setSelectedDate(new Date(e.target.value + 'T00:00:00'))
+              }
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+            />
+            <button
+              onClick={goToNext}
+              className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+            >
+              <ChevronRight size={18} className="text-slate-600" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={goToToday}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                isToday
+                  ? 'bg-primary-500 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Hari Ini
+            </button>
+
+            <span className="text-sm font-medium text-slate-700">
+              {dateDisplay}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 4 KPI Cards ── */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
+        <KPICard
+          title="Total Jadwal"
+          value={kpi.totalJadwal}
+          trend={jadwalTrend}
+          trendLabel="dari kemarin"
+          icon={CalendarDays}
+          accent="blue"
+          loading={loading}
+        />
+        <KPICard
+          title="Ruangan Sedang Digunakan"
+          value={kpi.ruanganUsed}
+          trend={ruanganUsedTrend}
+          trendLabel="dari kemarin"
+          icon={Building2}
+          accent="green"
+          loading={loading}
+        />
+        <KPICard
+          title="Ruangan Tersedia"
+          value={kpi.tersedia}
+          trend={ruanganAvailTrend}
+          trendLabel="dari kemarin"
+          icon={DoorOpen}
+          accent="amber"
+          loading={loading}
+        />
+        <KPICard
+          title="Total Dosen Aktif"
+          value={kpi.dosenAktif}
+          trend={null}
+          trendLabel=""
+          icon={GraduationCap}
+          accent="indigo"
+          loading={loading}
+        />
+      </section>
+
+      {/* ── Charts Row ── */}
+      <section className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-5">
+        {/* Bar chart: 3/5 width */}
+        <div className="lg:col-span-3">
+          <ChartCard
+            title="Statistik Jadwal 7 Hari"
+            subtitle={`Total ${weeklyData.reduce((a, b) => a + b, 0)} jadwal minggu ini`}
+            action={
+              <button className="px-3 py-1.5 rounded-lg bg-primary-50 text-primary-600 text-xs font-semibold hover:bg-primary-100 transition">
+                Mingguan
+              </button>
+            }
+          >
+            <BarChartWidget data={weeklyData} loading={chartLoading} />
+          </ChartCard>
+        </div>
+
+        {/* Donut chart: 2/5 width */}
+        <div className="lg:col-span-2">
+          <ChartCard
+            title="Jenis Pertemuan"
+            subtitle={`Luring / Online / Hybrid · ${dateDisplay}`}
+          >
+            <DonutChartWidget
+              luring={jenisStats.luring}
+              online={jenisStats.online}
+              hybrid={jenisStats.hybrid}
+              loading={chartLoading}
+            />
+          </ChartCard>
+        </div>
+      </section>
+
+      {/* ── Table + Notifications Row ── */}
+      <section className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-5">
+        {/* Jadwal table: 3/5 width */}
+        <div className="lg:col-span-3">
+          <div className="bg-white rounded-[var(--radius-card)] shadow-[var(--shadow-card)] border border-slate-100 p-5 md:p-6">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-[15px] font-semibold text-slate-900">
+                  {isToday ? 'Jadwal Hari Ini' : `Jadwal ${dateDisplay}`}
+                </h3>
+                <p className="text-[12px] text-slate-500 mt-0.5">
+                  {jadwalHariIni.length} sesi
+                </p>
+              </div>
+              <Link
+                to="/dashboard/jadwal"
+                className="flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700 transition"
+              >
+                View All
+                <ArrowUpRight size={15} />
+              </Link>
+            </div>
+
+            {/* Table */}
+            <DataTable
+              data={jadwalHariIni}
+              loading={loading}
+              showActions={false}
+            />
+          </div>
+        </div>
+
+        {/* Notification panel: 2/5 width */}
+        <div className="lg:col-span-2">
+          <NotificationPanel
+            notifications={notifications}
+            onDismiss={handleDismissNotif}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}

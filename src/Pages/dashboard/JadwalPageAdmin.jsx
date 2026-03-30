@@ -14,6 +14,7 @@ import React, {
 } from 'react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 // 🎯 Import komponen reusable dari folder components/
 import SearchBar from '../../components/SearchBar';
 import ActionButtons from '../../components/ActionButtons';
@@ -458,6 +459,7 @@ const checkDosenConflict = async ({
 export default function JadwalPageAdmin() {
   // 🔐 Auth context untuk logging
   const { userRole } = useAuth();
+  const { addNotification } = useNotifications();
 
   // Data states
   const [jadwalPerkuliahan, setJadwalPerkuliahan] = useState([]);
@@ -939,6 +941,21 @@ export default function JadwalPageAdmin() {
 
       if (result.error) throw result.error;
 
+      // 🔔 Push notification ke global context
+      const tableLabels = {
+        perkuliahan: 'Perkuliahan',
+        karya_akhir: 'Karya Akhir',
+        lain_lain: 'Lain-lain',
+      };
+      const verb = modalMode === 'add' ? 'ditambahkan' : 'diperbarui';
+      addNotification({
+        type: modalMode === 'add' ? 'tambah' : 'edit',
+        tag: modalMode === 'add' ? 'BARU' : 'UPDATE',
+        title:
+          modalMode === 'add' ? 'Jadwal Baru Ditambahkan' : 'Jadwal Diperbarui',
+        description: `${tableLabels[modalType]}: Data jadwal telah ${verb} oleh ${userName}.`,
+      });
+
       alert(
         `Data berhasil ${modalMode === 'add' ? 'ditambahkan' : 'diupdate'}!`
       );
@@ -968,6 +985,19 @@ export default function JadwalPageAdmin() {
         .delete()
         .eq('id', id);
       if (error) throw error;
+
+      // 🔔 Push notification ke global context
+      const tableLabels = {
+        perkuliahan: 'Perkuliahan',
+        karya_akhir: 'Karya Akhir',
+        lain_lain: 'Lain-lain',
+      };
+      addNotification({
+        type: 'hapus',
+        tag: 'HAPUS',
+        title: 'Jadwal Dihapus',
+        description: `${tableLabels[jenis]}: Data jadwal telah dihapus.`,
+      });
 
       alert('Data berhasil dihapus!');
       fetchAllData();
