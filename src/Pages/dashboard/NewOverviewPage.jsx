@@ -319,7 +319,7 @@ export default function NewOverviewPage() {
         {/* Bar chart: 3/5 width */}
         <div className="lg:col-span-3">
           <ChartCard
-            title="Statistik Jadwal 7 Hari"
+            title="Statistik Jadwal Minggu Ini"
             subtitle={`Total ${weeklyData.reduce((a, b) => a + (b.luring ?? 0) + (b.online ?? 0) + (b.hybrid ?? 0), 0)} jadwal minggu ini`}
             action={
               <button className="px-3 py-1.5 rounded-lg bg-primary-50 text-primary-600 text-xs font-semibold hover:bg-primary-100 transition">

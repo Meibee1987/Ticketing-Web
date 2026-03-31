@@ -209,6 +209,18 @@ export async function sendEmailOTP(email) {
         );
       }
 
+      // Handle unexpected_failure: biasanya terjadi karena SMTP tidak dikonfigurasi
+      // atau batas email Supabase free tier sudah habis
+      if (
+        error.code === 'unexpected_failure' ||
+        errorLower.includes('unexpected_failure') ||
+        errorLower.includes('error sending magic link email')
+      ) {
+        throw new Error(
+          'Gagal mengirim email OTP. Layanan email sedang tidak tersedia. Hubungi admin untuk memeriksa konfigurasi SMTP di Supabase Dashboard.'
+        );
+      }
+
       throw new Error(error.message);
     }
 

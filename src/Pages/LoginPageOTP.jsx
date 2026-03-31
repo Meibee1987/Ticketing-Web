@@ -20,11 +20,29 @@ export default function LoginPageOTP() {
   // Cek session saat load dan restore cooldown dari localStorage
   useEffect(() => {
     const checkSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) {
-        window.location.href = '/dashboard/jadwal';
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error) {
+          // Session tidak valid (misalnya refresh token expired/not found)
+          // Bersihkan session yang rusak supaya tidak terus error
+          console.warn('Session invalid, signing out:', error.message);
+          await supabase.auth.signOut();
+          localStorage.removeItem('supabase_session');
+          return;
+        }
+
+        if (session) {
+          window.location.href = '/dashboard/jadwal';
+        }
+      } catch (err) {
+        // Jika error apapun saat cek session, bersihkan saja
+        console.warn('Error checking session, clearing:', err.message);
+        await supabase.auth.signOut().catch(() => {});
+        localStorage.removeItem('supabase_session');
       }
     };
 
