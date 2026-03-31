@@ -6,7 +6,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
 const COLORS = {
   Luring: '#3b82f6',
-  Online: '#6366f1',
+  Daring: '#6366f1',
   Hybrid: '#8b5cf6',
 };
 
@@ -18,12 +18,12 @@ export default function DonutChartWidget({
 }) {
   const total = luring + online + hybrid || 1;
   const luringPct = Math.round((luring / total) * 100);
-  const onlinePct = Math.round((online / total) * 100);
-  const hybridPct = 100 - luringPct - onlinePct;
+  const daringPct = Math.round((online / total) * 100);
+  const hybridPct = 100 - luringPct - daringPct;
 
   const data = [
     { name: 'Luring', value: luring || 0 },
-    { name: 'Online', value: online || 0 },
+    { name: 'Daring', value: online || 0 },
     { name: 'Hybrid', value: hybrid || 0 },
   ].filter((d) => d.value > 0);
 
@@ -45,7 +45,7 @@ export default function DonutChartWidget({
     luring >= online && luring >= hybrid
       ? { pct: luringPct, label: 'Luring' }
       : online >= hybrid
-        ? { pct: onlinePct, label: 'Online' }
+        ? { pct: daringPct, label: 'Daring' }
         : { pct: hybridPct, label: 'Hybrid' };
 
   return (
@@ -102,11 +102,11 @@ export default function DonutChartWidget({
           <div className="flex items-center gap-2">
             <span
               className="w-3 h-3 rounded-full"
-              style={{ background: COLORS.Online }}
+              style={{ background: COLORS.Daring }}
             />
-            <span className="text-sm text-slate-600 font-medium">Online</span>
+            <span className="text-sm text-slate-600 font-medium">Daring</span>
             <span className="text-sm font-bold text-slate-900 ml-1">
-              {onlinePct}%
+              {daringPct}%
             </span>
           </div>
         )}

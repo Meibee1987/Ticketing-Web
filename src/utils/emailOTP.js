@@ -1,6 +1,45 @@
 import { supabase } from '../supabaseClient';
 
 /**
+ * Cek cooldown OTP untuk email tertentu
+ * @param {string} email - Email user
+ * @returns {{isOnCooldown: boolean, remainingSeconds: number}}
+ */
+export function checkOtpCooldown(email) {
+  try {
+    const cooldownEndStr = localStorage.getItem(`otp_cooldown_${email}`);
+    if (!cooldownEndStr) {
+      return { isOnCooldown: false, remainingSeconds: 0 };
+    }
+
+    const cooldownEnd = parseInt(cooldownEndStr);
+    const now = Date.now();
+
+    if (now >= cooldownEnd) {
+      // Cooldown sudah berakhir, hapus dari localStorage
+      localStorage.removeItem(`otp_cooldown_${email}`);
+      return { isOnCooldown: false, remainingSeconds: 0 };
+    }
+
+    const remainingSeconds = Math.ceil((cooldownEnd - now) / 1000);
+    return { isOnCooldown: true, remainingSeconds };
+  } catch (err) {
+    // Jika error parsing, abaikan
+    return { isOnCooldown: false, remainingSeconds: 0 };
+  }
+}
+
+/**
+ * Set cooldown OTP untuk email tertentu
+ * @param {string} email - Email user
+ * @param {number} seconds - Durasi cooldown dalam detik
+ */
+export function setOtpCooldown(email, seconds = 60) {
+  const cooldownEnd = Date.now() + seconds * 1000;
+  localStorage.setItem(`otp_cooldown_${email}`, cooldownEnd.toString());
+}
+
+/**
  * Cek apakah email sudah terdaftar di tabel Teknisi atau Dosen
  * @param {string} email - Email user
  * @returns {Promise<{isRegistered: boolean, userInfo: object|null, userType: string|null}>}
@@ -75,20 +114,96 @@ export async function sendEmailOTP(email) {
       console.error('Send OTP error:', error);
 
       // Handle specific error codes
-      if (
+      const errorLower = error.message?.toLowerCase() || '';
+
+      // Cek apakah ini "email rate limit exceeded" (hard limit, butuh waktu lama)
+      const isHardRateLimit =
+        errorLower.includes('email rate limit') ||
+        errorLower.includes('rate limit exceeded');
+
+      // Cek rate limit biasa (per-request)
+      const isSoftRateLimit =
         error.status === 429 ||
-        error.message?.includes('Too Many Requests')
-      ) {
-        throw new Error(
-          'Terlalu banyak permintaan. Tunggu 60 detik sebelum mencoba lagi.'
-        );
+        errorLower.includes('too many requests') ||
+        errorLower.includes('rate limit') ||
+        errorLower.includes('security purposes') ||
+        errorLower.includes('request this after');
+
+      if (isHardRateLimit || isSoftRateLimit) {
+        let waitTime;
+
+        if (isHardRateLimit) {
+          // Hard rate limit: Supabase blokir pengiriman email, perlu tunggu lebih lama
+          // Cek apakah sudah ada cooldown sebelumnya (artinya user sudah pernah kena rate limit)
+          const existingCooldown = localStorage.getItem(
+            `otp_cooldown_${email}`
+          );
+          const existingRemaining = existingCooldown
+            ? Math.max(
+                0,
+                Math.ceil((parseInt(existingCooldown) - Date.now()) / 1000)
+              )
+            : 0;
+
+          if (existingRemaining > 60) {
+            // Sudah ada cooldown panjang yang belum habis, perpanjang sedikit
+            waitTime = existingRemaining + 30;
+          } else {
+            // Pertama kali kena hard rate limit, set 5 menit
+            waitTime = 300;
+          }
+        } else {
+          // Soft rate limit: parse waktu tunggu dari error message
+          waitTime = 60; // Default 60 detik
+
+          const patterns = [
+            /after\s+(\d+)\s+second/i,
+            /wait\s+(\d+)\s+second/i,
+            /(\d+)\s*s(?:econd)?s?(?:\s|$)/i,
+            /(\d+)\s*menit/i,
+            /(\d+)\s*minute/i,
+            /tunggu\s+(\d+)\s+detik/i,
+          ];
+
+          for (const pattern of patterns) {
+            const match = errorLower.match(pattern);
+            if (match) {
+              const value = parseInt(match[1]);
+              if (
+                pattern.source.includes('menit') ||
+                pattern.source.includes('minute')
+              ) {
+                waitTime = value * 60;
+              } else {
+                waitTime = value;
+              }
+              break;
+            }
+          }
+
+          // Tambah buffer 5 detik
+          waitTime = waitTime + 5;
+        }
+
+        // Simpan cooldown end time ke localStorage
+        const cooldownEnd = Date.now() + waitTime * 1000;
+        localStorage.setItem(`otp_cooldown_${email}`, cooldownEnd.toString());
+
+        const minutes = Math.ceil(waitTime / 60);
+        const errorMsg = isHardRateLimit
+          ? `Batas pengiriman email tercapai. Tunggu ${minutes} menit (${waitTime} detik) sebelum mencoba lagi.`
+          : `Terlalu banyak permintaan. Tunggu ${waitTime} detik sebelum mencoba lagi.`;
+
+        throw new Error(errorMsg);
       }
 
-      if (error.message?.includes('12 seconds')) {
-        throw new Error('Harap tunggu 12 detik sebelum mengirim OTP lagi.');
+      if (errorLower.includes('12 seconds')) {
+        const cooldownEnd12 = Date.now() + 15 * 1000;
+        localStorage.setItem(`otp_cooldown_${email}`, cooldownEnd12.toString());
+        throw new Error('Harap tunggu 15 detik sebelum mengirim OTP lagi.');
       }
 
-      if (error.message?.includes('Signups not allowed')) {
+      if (errorLower.includes('signups not allowed')) {
         throw new Error(
           'Email OTP belum diaktifkan. Hubungi admin untuk mengaktifkan di Supabase Dashboard > Authentication > Email Provider.'
         );

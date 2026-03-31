@@ -157,18 +157,34 @@ async function fetchTotalJadwalForDate(date = new Date()) {
 // CHART DATA
 // ────────────────────────────────────────
 
-/** Jadwal count per day for the week containing `date` */
+/** Jadwal count per day for the week containing `date`, broken down by jenis */
 export async function fetchWeeklyStats(date = new Date()) {
   const monday = getMonday(date);
   const days = [];
 
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 6; i++) {
     const d = new Date(monday);
     d.setDate(d.getDate() + i);
     days.push(d);
   }
 
-  return Promise.all(days.map((d) => fetchTotalJadwalForDate(d)));
+  const results = await Promise.all(
+    days.map(async (d) => {
+      const bookings = await fetchAllBookingsForDate(d);
+      let luring = 0,
+        online = 0,
+        hybrid = 0;
+      bookings.forEach((b) => {
+        const jenis = (b.jenis || '').toLowerCase();
+        if (jenis === 'daring' || jenis === 'online') online++;
+        else if (jenis === 'hybrid') hybrid++;
+        else luring++;
+      });
+      return { luring, online, hybrid };
+    })
+  );
+
+  return results;
 }
 
 /**

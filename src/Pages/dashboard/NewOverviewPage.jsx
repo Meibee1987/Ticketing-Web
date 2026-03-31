@@ -20,7 +20,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarDays,
   Building2,
@@ -66,6 +66,8 @@ const formatDateDisplay = (d) =>
 const MAX_NOTIFICATIONS = 20;
 
 export default function NewOverviewPage() {
+  const navigate = useNavigate();
+
   // ── Date state ──
   const [selectedDate, setSelectedDate] = useState(new Date());
   const isToday = isSameDate(selectedDate, new Date());
@@ -99,6 +101,7 @@ export default function NewOverviewPage() {
 
   // ── Table state ──
   const [jadwalHariIni, setJadwalHariIni] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // ── Auto-refresh "sedang digunakan" every 60s (same as RuanganPage) ──
   const [, setTick] = useState(0);
@@ -195,6 +198,19 @@ export default function NewOverviewPage() {
   const ruanganAvailTrend =
     ruanganAvailDiff >= 0 ? `+${ruanganAvailDiff}` : `${ruanganAvailDiff}`;
 
+  // ── Filtered jadwal for table ──
+  const filteredJadwal = searchQuery.trim()
+    ? jadwalHariIni.filter((row) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          (row.nama_angkatan || '').toLowerCase().includes(q) ||
+          (row.nama_matkul || row.agenda || '').toLowerCase().includes(q) ||
+          (row.nama_ruangan || '').toLowerCase().includes(q) ||
+          (row.nama_dosen || '').toLowerCase().includes(q)
+        );
+      })
+    : jadwalHariIni;
+
   // ── Date display ──
   const dateDisplay = formatDateDisplay(selectedDate);
 
@@ -265,6 +281,7 @@ export default function NewOverviewPage() {
           icon={CalendarDays}
           accent="blue"
           loading={loading}
+          onClick={() => navigate('/dashboard/jadwal')}
         />
         <KPICard
           title="Ruangan Sedang Digunakan"
@@ -274,6 +291,7 @@ export default function NewOverviewPage() {
           icon={Building2}
           accent="green"
           loading={loading}
+          onClick={() => navigate('/dashboard/ruangan?filter=sedang_digunakan')}
         />
         <KPICard
           title="Ruangan Tersedia"
@@ -283,6 +301,7 @@ export default function NewOverviewPage() {
           icon={DoorOpen}
           accent="amber"
           loading={loading}
+          onClick={() => navigate('/dashboard/ruangan?filter=tersedia')}
         />
         <KPICard
           title="Total Dosen Aktif"
@@ -301,7 +320,7 @@ export default function NewOverviewPage() {
         <div className="lg:col-span-3">
           <ChartCard
             title="Statistik Jadwal 7 Hari"
-            subtitle={`Total ${weeklyData.reduce((a, b) => a + b, 0)} jadwal minggu ini`}
+            subtitle={`Total ${weeklyData.reduce((a, b) => a + (b.luring ?? 0) + (b.online ?? 0) + (b.hybrid ?? 0), 0)} jadwal minggu ini`}
             action={
               <button className="px-3 py-1.5 rounded-lg bg-primary-50 text-primary-600 text-xs font-semibold hover:bg-primary-100 transition">
                 Mingguan
@@ -316,7 +335,7 @@ export default function NewOverviewPage() {
         <div className="lg:col-span-2">
           <ChartCard
             title="Jenis Pertemuan"
-            subtitle={`Luring / Online / Hybrid · ${dateDisplay}`}
+            subtitle={`Luring / Daring / Hybrid · ${dateDisplay}`}
           >
             <DonutChartWidget
               luring={jenisStats.luring}
@@ -340,7 +359,9 @@ export default function NewOverviewPage() {
                   {isToday ? 'Jadwal Hari Ini' : `Jadwal ${dateDisplay}`}
                 </h3>
                 <p className="text-[12px] text-slate-500 mt-0.5">
-                  {jadwalHariIni.length} sesi
+                  {filteredJadwal.length === jadwalHariIni.length
+                    ? `${jadwalHariIni.length} sesi`
+                    : `${filteredJadwal.length} dari ${jadwalHariIni.length} sesi`}
                 </p>
               </div>
               <Link
@@ -352,9 +373,53 @@ export default function NewOverviewPage() {
               </Link>
             </div>
 
+            {/* Search */}
+            <div className="relative mb-4">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
+                />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari angkatan, agenda, tempat, dosen..."
+                className="w-full pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-slate-50"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+
             {/* Table */}
             <DataTable
-              data={jadwalHariIni}
+              data={filteredJadwal}
               loading={loading}
               showActions={false}
             />

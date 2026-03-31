@@ -1,7 +1,12 @@
 // src/pages/LoginPageOTP.jsx
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { sendEmailOTP, verifyEmailOTP } from '../utils/emailOTP';
+import {
+  sendEmailOTP,
+  verifyEmailOTP,
+  checkOtpCooldown,
+  setOtpCooldown,
+} from '../utils/emailOTP';
 
 export default function LoginPageOTP() {
   const [email, setEmail] = useState('');
@@ -12,7 +17,7 @@ export default function LoginPageOTP() {
   const [isLoading, setIsLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
-  // Cek session saat load
+  // Cek session saat load dan restore cooldown dari localStorage
   useEffect(() => {
     const checkSession = async () => {
       const {
@@ -22,8 +27,18 @@ export default function LoginPageOTP() {
         window.location.href = '/dashboard/jadwal';
       }
     };
+
+    // Cek session
     checkSession();
-  }, []);
+
+    // Restore cooldown dari localStorage (berlaku di semua step)
+    if (email) {
+      const { isOnCooldown, remainingSeconds } = checkOtpCooldown(email);
+      if (isOnCooldown) {
+        setCountdown(remainingSeconds);
+      }
+    }
+  }, [step, email]);
 
   // Countdown timer untuk resend OTP
   useEffect(() => {
@@ -38,6 +53,14 @@ export default function LoginPageOTP() {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    // Cek apakah masih dalam cooldown sebelumnya
+    const { isOnCooldown, remainingSeconds } = checkOtpCooldown(email);
+    if (isOnCooldown) {
+      setCountdown(remainingSeconds);
+      return;
+    }
+
     setIsLoading(true);
 
     // Validate email
@@ -51,9 +74,24 @@ export default function LoginPageOTP() {
       await sendEmailOTP(email);
       setSuccess('OTP berhasil dikirim! Cek email Anda.');
       setStep('otp');
-      setCountdown(60); // 60 detik cooldown untuk resend
+      // Set cooldown di localStorage dan UI agar sinkron dengan Supabase
+      setOtpCooldown(email, 60);
+      setCountdown(60);
     } catch (err) {
-      setError(err.message || 'Gagal mengirim OTP. Coba lagi.');
+      // Error dari sendEmailOTP sudah set localStorage cooldown
+      // Cukup ambil dari localStorage, jangan parse ulang
+      const errorMsg = err.message || 'Gagal mengirim OTP. Coba lagi.';
+
+      // Check apakah cooldown sudah di-set di localStorage (dari emailOTP.js)
+      const { isOnCooldown, remainingSeconds } = checkOtpCooldown(email);
+      if (isOnCooldown) {
+        setCountdown(remainingSeconds);
+        // Countdown banner akan tampil otomatis, tidak perlu set error
+        setError('');
+      } else {
+        // Error bukan rate-limit (misal: email tidak terdaftar), tampilkan saja tanpa cooldown
+        setError(errorMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -76,6 +114,8 @@ export default function LoginPageOTP() {
     try {
       const result = await verifyEmailOTP(email, otp);
       if (result.success && result.session) {
+        // Clear cooldown saat login berhasil
+        localStorage.removeItem(`otp_cooldown_${email}`);
         setSuccess('Login berhasil! Mengalihkan...');
         setTimeout(() => {
           window.location.href = '/dashboard/jadwal';
@@ -91,7 +131,13 @@ export default function LoginPageOTP() {
 
   // Handle resend OTP
   const handleResendOTP = async () => {
-    if (countdown > 0) return;
+    // Cek apakah masih dalam cooldown
+    const { isOnCooldown, remainingSeconds } = checkOtpCooldown(email);
+    if (isOnCooldown || countdown > 0) {
+      const waitTime = Math.max(countdown, remainingSeconds);
+      setCountdown(waitTime);
+      return;
+    }
 
     setError('');
     setIsLoading(true);
@@ -99,9 +145,22 @@ export default function LoginPageOTP() {
     try {
       await sendEmailOTP(email);
       setSuccess('OTP baru berhasil dikirim!');
+      // Set cooldown di localStorage dan UI
+      setOtpCooldown(email, 60);
       setCountdown(60);
     } catch (err) {
-      setError(err.message || 'Gagal mengirim OTP');
+      // Error dari sendEmailOTP sudah set localStorage cooldown
+      const errorMsg = err.message || 'Gagal mengirim OTP';
+
+      // Check apakah cooldown sudah di-set di localStorage (dari emailOTP.js)
+      const { isOnCooldown, remainingSeconds } = checkOtpCooldown(email);
+      if (isOnCooldown) {
+        setCountdown(remainingSeconds);
+        setError('');
+      } else {
+        // Error bukan rate-limit, tampilkan saja tanpa cooldown tambahan
+        setError(errorMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -113,6 +172,7 @@ export default function LoginPageOTP() {
     setOtp('');
     setError('');
     setSuccess('');
+    setCountdown(0);
   };
 
   return (
@@ -185,6 +245,19 @@ export default function LoginPageOTP() {
                 </div>
               </div>
 
+              {/* Countdown Warning - live countdown */}
+              {countdown > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-amber-700 text-xs text-center font-medium">
+                    ⏳ Tunggu{' '}
+                    {countdown > 60
+                      ? `${Math.ceil(countdown / 60)} menit ${countdown % 60} detik`
+                      : `${countdown} detik`}{' '}
+                    sebelum mengirim OTP lagi
+                  </p>
+                </div>
+              )}
+
               {/* Error Message */}
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
@@ -203,7 +276,7 @@ export default function LoginPageOTP() {
 
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || countdown > 0}
                 className="w-full py-3.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
@@ -226,6 +299,8 @@ export default function LoginPageOTP() {
                     </svg>
                     Mengirim...
                   </span>
+                ) : countdown > 0 ? (
+                  `Kirim OTP (${countdown}s)`
                 ) : (
                   'Kirim OTP'
                 )}

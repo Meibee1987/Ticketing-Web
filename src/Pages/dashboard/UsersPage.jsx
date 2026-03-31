@@ -379,199 +379,286 @@ export default function UsersPage() {
 
   // Get current user list based on active tab
   const currentUserList = activeTab === 'teknisi' ? teknisiList : dosenList;
-  const currentUserTitle =
-    activeTab === 'teknisi' ? 'Manajemen User Teknisi' : 'Manajemen User Dosen';
+
+  // Role badge color helper
+  const getRoleBadge = (roleName) => {
+    const r = (roleName || '').toLowerCase();
+    if (r === 'super admin' || r === 'super_admin')
+      return 'bg-purple-100 text-purple-700';
+    if (r === 'admin') return 'bg-blue-100 text-blue-700';
+    if (r === 'dosen') return 'bg-indigo-100 text-indigo-700';
+    return 'bg-slate-100 text-slate-600';
+  };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto p-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-800">
-            {currentUserTitle}
-          </h2>
-          {activeTab === 'dosen' && (
-            <p className="text-sm text-slate-500 mt-1">
-              Terintegrasi dengan Master Data Dosen - assign role ke dosen yang
-              sudah terdaftar
-            </p>
-          )}
-        </div>
-        <button
-          onClick={openAddModal}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium"
-        >
-          {activeTab === 'teknisi' ? '+ Tambah User' : '+ Assign Role Dosen'}
-        </button>
-      </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <header>
+        <h1 className="text-xl md:text-2xl font-semibold text-slate-800">
+          👥 Manajemen Users
+        </h1>
+        <p className="text-xs md:text-sm text-slate-500 mt-1">
+          Kelola user Teknisi dan Dosen beserta hak akses role mereka.
+        </p>
+      </header>
 
-      {/* Tab Navigation */}
-      <div className="bg-white rounded shadow">
+      {/* Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        {/* Tab + Tombol Tambah */}
         <div className="border-b border-slate-200">
-          <nav className="flex -mb-px">
+          <div className="flex items-center justify-between px-4">
+            <nav className="flex -mb-px overflow-x-auto">
+              {[
+                { key: 'teknisi', label: 'User Teknisi', icon: '🔧' },
+                { key: 'dosen', label: 'User Dosen', icon: '🎓' },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    activeTab === tab.key
+                      ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                  <span
+                    className={`ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      activeTab === tab.key
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {tab.key === 'teknisi'
+                      ? teknisiList.length
+                      : dosenList.length}
+                  </span>
+                </button>
+              ))}
+            </nav>
             <button
-              onClick={() => setActiveTab('teknisi')}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'teknisi'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-              }`}
+              onClick={openAddModal}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
             >
-              User Teknisi
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              {activeTab === 'teknisi' ? 'Tambah User' : 'Assign Role Dosen'}
             </button>
-            <button
-              onClick={() => setActiveTab('dosen')}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'dosen'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-              }`}
-            >
-              User Dosen
-            </button>
-          </nav>
+          </div>
         </div>
 
-        {/* Tabel User */}
+        {/* Info banner untuk tab dosen */}
+        {activeTab === 'dosen' && (
+          <div className="px-6 py-3 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2 text-sm text-indigo-700">
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z"
+              />
+            </svg>
+            Terintegrasi dengan Master Data Dosen — assign role ke dosen yang
+            sudah terdaftar
+          </div>
+        )}
+
+        {/* Table */}
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="text-center py-8 text-slate-600">Loading...</div>
+            <div className="p-12 text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto" />
+              <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
+            </div>
+          ) : currentUserList.length === 0 ? (
+            <div className="p-12 text-center">
+              <p className="text-slate-400 text-3xl mb-3">
+                {activeTab === 'teknisi' ? '🔧' : '🎓'}
+              </p>
+              <p className="text-sm text-slate-500">
+                {activeTab === 'dosen'
+                  ? 'Belum ada dosen yang di-assign role.'
+                  : 'Belum ada data user teknisi.'}
+              </p>
+            </div>
           ) : (
             <table className="min-w-full">
-              <thead className="bg-slate-50 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     ID
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     Nama
                   </th>
                   {activeTab === 'dosen' && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                       NIP
                     </th>
                   )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     Email
                   </th>
                   {activeTab === 'dosen' && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                       Telepon
                     </th>
                   )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     Role
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     Status Login
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     Aksi
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-slate-200">
-                {currentUserList.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={activeTab === 'dosen' ? 8 : 6}
-                      className="px-6 py-4 text-center text-sm text-slate-500"
-                    >
-                      {activeTab === 'dosen'
-                        ? 'Belum ada dosen yang di-assign role. Klik "Assign Role Dosen" untuk memulai.'
-                        : 'Belum ada data user'}
+              <tbody className="divide-y divide-slate-100">
+                {currentUserList.map((user) => (
+                  <tr
+                    key={user.id}
+                    className="hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-sm text-slate-500 font-mono">
+                      {user.id}
                     </td>
-                  </tr>
-                ) : (
-                  currentUserList.map((user) => (
-                    <tr key={user.id} className="hover:bg-slate-50">
-                      <td className="px-6 py-4 text-sm text-slate-900">
-                        {user.id}
+                    <td className="px-6 py-4 text-sm font-semibold text-slate-800">
+                      {activeTab === 'teknisi'
+                        ? user.nama_teknisi
+                        : user.nama_dosen}
+                    </td>
+                    {activeTab === 'dosen' && (
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {user.nip || '-'}
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                        {activeTab === 'teknisi'
-                          ? user.nama_teknisi
-                          : user.nama_dosen}
+                    )}
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      {user.email || '-'}
+                    </td>
+                    {activeTab === 'dosen' && (
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {user.telepon || '-'}
                       </td>
-                      {activeTab === 'dosen' && (
-                        <td className="px-6 py-4 text-sm text-slate-700">
-                          {user.nip || '-'}
-                        </td>
-                      )}
-                      <td className="px-6 py-4 text-sm text-slate-700">
-                        {user.email || '-'}
-                      </td>
-                      {activeTab === 'dosen' && (
-                        <td className="px-6 py-4 text-sm text-slate-700">
-                          {user.telepon || '-'}
-                        </td>
-                      )}
-                      <td className="px-6 py-4 text-sm">
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                          {user.roles?.role || '-'}
+                    )}
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadge(user.roles?.role)}`}
+                      >
+                        {user.roles?.role || '-'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {user.auth_id ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+                          ✅ Sudah Login
                         </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {user.auth_id ? (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                            ✅ Sudah Login
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs font-medium">
-                            ⏳ Belum Login
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm space-x-2">
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">
+                          ⏳ Belum Login
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={() => openEditModal(user)}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-blue-100 hover:text-blue-700 transition-colors"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(user.id)}
-                          className="text-red-600 hover:text-red-800 font-medium"
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-red-100 hover:text-red-700 transition-colors"
                         >
-                          {activeTab === 'dosen' ? 'Hapus Role' : 'Delete'}
+                          {activeTab === 'dosen' ? 'Hapus Role' : 'Hapus'}
                         </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
         </div>
+
+        {/* Footer */}
+        {currentUserList.length > 0 && (
+          <div className="px-6 py-3 border-t border-slate-200 bg-slate-50">
+            <span className="text-xs text-slate-500">
+              Menampilkan {currentUserList.length}{' '}
+              {activeTab === 'teknisi' ? 'user teknisi' : 'user dosen'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Modal Add/Edit User */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="px-6 py-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-semibold">
-                {activeTab === 'teknisi'
-                  ? modalMode === 'edit'
-                    ? 'Edit User Teknisi'
-                    : 'Tambah User Teknisi'
-                  : modalMode === 'edit'
-                    ? 'Edit Role Dosen'
-                    : 'Assign Role ke Dosen'}
-              </h3>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-base font-semibold text-slate-800">
+                  {activeTab === 'teknisi'
+                    ? modalMode === 'edit'
+                      ? '✏️ Edit User Teknisi'
+                      : '➕ Tambah User Teknisi'
+                    : modalMode === 'edit'
+                      ? '✏️ Edit Role Dosen'
+                      : '🎓 Assign Role ke Dosen'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {activeTab === 'teknisi'
+                    ? 'User login menggunakan OTP email'
+                    : 'Data dosen dari Master Data'}
+                </p>
+              </div>
               <button
                 onClick={closeModal}
-                className="text-slate-400 hover:text-slate-600 text-xl"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
               >
-                ×
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
               </button>
             </div>
 
+            {/* Modal Body */}
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               {activeTab === 'teknisi' ? (
-                // === FORM TEKNISI ===
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       Nama Teknisi <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -582,12 +669,11 @@ export default function UsersPage() {
                       }
                       placeholder="Masukkan nama"
                       required
-                      className="border border-slate-300 px-3 py-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       Email <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -599,30 +685,28 @@ export default function UsersPage() {
                       placeholder="email@example.com"
                       required
                       disabled={modalMode === 'edit' && form.auth_id}
-                      className={`border border-slate-300 px-3 py-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      className={`w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                         modalMode === 'edit' && form.auth_id
-                          ? 'bg-slate-100 cursor-not-allowed'
+                          ? 'bg-slate-100 cursor-not-allowed text-slate-500'
                           : ''
                       }`}
                     />
                     {modalMode === 'edit' && form.auth_id ? (
-                      <p className="text-xs text-amber-600 mt-1">
+                      <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
                         ⚠️ Email tidak dapat diubah karena user sudah login
                       </p>
                     ) : (
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-xs text-slate-400 mt-1.5">
                         User akan login menggunakan OTP
                       </p>
                     )}
                   </div>
                 </>
               ) : (
-                // === FORM DOSEN (Terintegrasi Master Data) ===
                 <>
                   {modalMode === 'add' ? (
-                    // Dropdown pilih dosen dari Master Data
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
                         Pilih Dosen dari Master Data{' '}
                         <span className="text-red-500">*</span>
                       </label>
@@ -630,7 +714,7 @@ export default function UsersPage() {
                         value={form.dosen_id}
                         onChange={(e) => handleSelectDosen(e.target.value)}
                         required
-                        className="border border-slate-300 px-3 py-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
                         <option value="">-- Pilih Dosen --</option>
                         {masterDosenList.length === 0 ? (
@@ -640,44 +724,42 @@ export default function UsersPage() {
                         ) : (
                           masterDosenList.map((dosen) => (
                             <option key={dosen.id} value={dosen.id}>
-                              {dosen.nama_dosen}{' '}
-                              {dosen.nip ? `(${dosen.nip})` : ''}
+                              {dosen.nama_dosen}
+                              {dosen.nip ? ` (${dosen.nip})` : ''}
                             </option>
                           ))
                         )}
                       </select>
                       {masterDosenList.length === 0 && (
-                        <p className="text-xs text-amber-600 mt-1">
+                        <p className="text-xs text-amber-600 mt-1.5">
                           ⚠️ Semua dosen sudah di-assign role. Tambah dosen baru
                           di Master Data.
                         </p>
                       )}
                     </div>
                   ) : (
-                    // Edit mode: tampilkan info dosen (readonly)
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
                         Nama Dosen
                       </label>
                       <input
                         type="text"
                         value={form.nama}
                         disabled
-                        className="border border-slate-300 px-3 py-2 w-full rounded bg-slate-100 cursor-not-allowed"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-slate-100 cursor-not-allowed text-slate-500"
                       />
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-xs text-slate-400 mt-1.5">
                         Data dosen hanya bisa diubah di Master Data
                       </p>
                     </div>
                   )}
 
-                  {/* Preview info dosen yang dipilih */}
                   {form.dosen_id && modalMode === 'add' && (
-                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                      <p className="text-sm font-medium text-blue-800 mb-2">
-                        📋 Info Dosen Terpilih:
+                    <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
+                      <p className="text-xs font-semibold text-blue-700 mb-2">
+                        📋 Info Dosen Terpilih
                       </p>
-                      <div className="text-sm text-blue-700 space-y-1">
+                      <div className="text-xs text-blue-700 space-y-1">
                         <p>
                           <strong>Nama:</strong> {form.nama}
                         </p>
@@ -700,26 +782,25 @@ export default function UsersPage() {
                     </div>
                   )}
 
-                  {/* Info email untuk edit mode */}
                   {modalMode === 'edit' && (
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
                         Email
                       </label>
                       <input
                         type="email"
                         value={form.email}
                         disabled
-                        className="border border-slate-300 px-3 py-2 w-full rounded bg-slate-100 cursor-not-allowed"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-slate-100 cursor-not-allowed text-slate-500"
                       />
                     </div>
                   )}
                 </>
               )}
 
-              {/* Role dropdown (untuk semua) */}
+              {/* Role dropdown */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
                   Role <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -728,20 +809,14 @@ export default function UsersPage() {
                     setForm({ ...form, roles_id: e.target.value })
                   }
                   required={activeTab === 'dosen'}
-                  className="border border-slate-300 px-3 py-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">-- Pilih Role --</option>
                   {roles
                     .filter((role) => {
-                      // Jika user adalah super_admin, bisa pilih semua role
-                      if (userRole?.roleName === 'super_admin') {
-                        return true;
-                      }
-                      // Jika user adalah admin, hanya bisa pilih role user dan dosen
-                      if (userRole?.roleName === 'admin') {
+                      if (userRole?.roleName === 'super_admin') return true;
+                      if (userRole?.roleName === 'admin')
                         return role.role === 'user' || role.role === 'dosen';
-                      }
-                      // Default: tampilkan semua (fallback)
                       return true;
                     })
                     .map((role) => (
@@ -753,16 +828,18 @@ export default function UsersPage() {
               </div>
 
               {error && (
-                <div className="text-red-600 text-sm bg-red-50 p-3 rounded">
-                  {error}
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <span className="text-red-500 mt-0.5">⚠️</span>
+                  <p className="text-sm text-red-600">{error}</p>
                 </div>
               )}
 
-              <div className="flex justify-end space-x-3 pt-4">
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-4 py-2 border border-slate-300 rounded text-slate-700 hover:bg-slate-50"
+                  className="px-4 py-2.5 text-sm font-medium border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
@@ -774,15 +851,15 @@ export default function UsersPage() {
                       modalMode === 'add' &&
                       masterDosenList.length === 0)
                   }
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
+                  className="px-4 py-2.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {saving
                     ? 'Menyimpan...'
                     : modalMode === 'edit'
-                      ? 'Update'
+                      ? 'Simpan Perubahan'
                       : activeTab === 'dosen'
                         ? 'Assign Role'
-                        : 'Simpan'}
+                        : 'Tambah User'}
                 </button>
               </div>
             </form>

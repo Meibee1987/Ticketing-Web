@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 
 // ============= HELPERS =============
@@ -60,6 +61,9 @@ const STATUS_CONFIG = {
 
 // ============= MAIN COMPONENT =============
 export default function RuanganPage() {
+  const [searchParams] = useSearchParams();
+  const initialFilter = searchParams.get('filter') || 'all';
+
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -119,7 +123,11 @@ export default function RuanganPage() {
       </div>
 
       <RuanganStats selectedDate={selectedDate} currentTime={currentTime} />
-      <RuanganList selectedDate={selectedDate} currentTime={currentTime} />
+      <RuanganList
+        selectedDate={selectedDate}
+        currentTime={currentTime}
+        initialFilter={initialFilter}
+      />
     </div>
   );
 }
@@ -402,10 +410,10 @@ function RuanganStats({ selectedDate, currentTime }) {
 }
 
 // ============= RUANGAN LIST =============
-function RuanganList({ selectedDate, currentTime }) {
+function RuanganList({ selectedDate, currentTime, initialFilter = 'all' }) {
   const { ruangan, filteredBookings, loading, error } =
     useRuanganData(selectedDate);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(initialFilter);
 
   const enhancedRuangan = useMemo(() => {
     if (loading || !ruangan.length) return [];

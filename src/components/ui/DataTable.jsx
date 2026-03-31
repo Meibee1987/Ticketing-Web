@@ -101,7 +101,7 @@ export default function DataTable({
                 <Badge variant={row.jenis_pertemuan || 'luring'}>
                   {row.jenis_pertemuan === 'daring' ||
                   row.jenis_pertemuan === 'online'
-                    ? 'Online'
+                    ? 'Daring'
                     : row.jenis_pertemuan === 'hybrid'
                       ? 'Hybrid'
                       : 'Luring'}

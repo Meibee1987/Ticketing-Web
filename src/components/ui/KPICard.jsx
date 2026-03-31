@@ -40,6 +40,7 @@ export default function KPICard({
   icon: Icon,
   accent = 'blue',
   loading = false,
+  onClick,
 }) {
   const colors = ACCENT[accent] || ACCENT.blue;
 
@@ -55,10 +56,12 @@ export default function KPICard({
 
   return (
     <div
+      onClick={onClick}
       className={`
         bg-white rounded-[var(--radius-card)] border-t-4 ${colors.border}
         shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)]
         transition-shadow duration-200 p-5 md:p-6
+        ${onClick ? 'cursor-pointer hover:ring-2 hover:ring-primary-300 hover:ring-offset-1 select-none' : ''}
       `}
     >
       <div className="flex items-start justify-between">

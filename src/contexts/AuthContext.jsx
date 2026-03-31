@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }) => {
           .eq('auth_id', authId)
           .single(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 3000)
+          setTimeout(() => reject(new Error('Timeout')), 8000)
         ),
       ]);
 
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }) => {
           .eq('auth_id', authId)
           .single(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 3000)
+          setTimeout(() => reject(new Error('Timeout')), 8000)
         ),
       ]);
 
