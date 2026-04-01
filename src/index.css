@@ -63,6 +63,11 @@
     0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
   --shadow-card-hover:
     0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+
+  /* ── Custom breakpoints untuk monitor besar ── */
+  --breakpoint-3xl: 1920px; /* Full HD */
+  --breakpoint-4xl: 2560px; /* 2K / QHD */
+  --breakpoint-5xl: 3840px; /* 4K / UHD */
 }
 
 /* ── Base styles ── */

@@ -519,7 +519,7 @@ export default function JadwalMonitor() {
           <div className="absolute bottom-0 right-0 w-96 h-32 bg-gradient-to-tl from-blue-800/30 to-transparent rounded-tl-full"></div>
         </div>
 
-        <div className="relative z-10 px-3 md:px-8 lg:px-12 py-2 md:py-4">
+        <div className="relative z-10 px-3 md:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-24 4xl:px-32 py-2 md:py-3 lg:py-4 3xl:py-6 4xl:py-8">
           {/* ── Mobile Header (stacked, centered) ── */}
           <div className="md:hidden flex flex-col items-center gap-1">
             {/* Logo */}
@@ -547,36 +547,38 @@ export default function JadwalMonitor() {
               <img
                 src="/logo_sb.png"
                 alt="Logo IPB University"
-                className="h-14 w-auto object-contain"
+                className="h-10 lg:h-12 xl:h-14 2xl:h-16 3xl:h-20 4xl:h-28 5xl:h-36 w-auto object-contain"
               />
             </div>
 
             {/* Center: Title + Date */}
             <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-              <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight drop-shadow-lg leading-tight text-center">
+              <h1 className="text-lg lg:text-2xl xl:text-3xl 2xl:text-4xl 3xl:text-5xl 4xl:text-7xl 5xl:text-9xl font-black text-white tracking-tight drop-shadow-lg leading-tight text-center">
                 INFORMASI JADWAL
               </h1>
-              <div className="mt-1 inline-block bg-yellow-400/90 backdrop-blur-sm px-6 py-1.5 rounded-full shadow-lg border border-yellow-300/50">
-                <span className="text-blue-700 text-sm font-bold whitespace-nowrap">
+              <div className="mt-1 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 lg:px-6 3xl:px-8 4xl:px-12 py-1 lg:py-1.5 3xl:py-2 4xl:py-3 rounded-full shadow-lg border border-yellow-300/50">
+                <span className="text-blue-700 text-xs lg:text-sm 2xl:text-base 3xl:text-xl 4xl:text-3xl 5xl:text-4xl font-bold whitespace-nowrap">
                   {formatDateOnly()}
                 </span>
               </div>
             </div>
 
             {/* Right: Digital Clock */}
-            <div className="flex-shrink-0 bg-white/15 backdrop-blur-md rounded-xl px-5 py-2 border border-white/20 shadow-lg">
-              <div className="flex items-center gap-1">
-                <span className="text-yellow-300 text-sm">⏱</span>
-                <span className="text-white font-bold text-xl font-mono tracking-wider">
+            <div className="flex-shrink-0 bg-white/15 backdrop-blur-md rounded-xl px-3 lg:px-5 3xl:px-7 4xl:px-10 py-1.5 lg:py-2 3xl:py-3 4xl:py-5 border border-white/20 shadow-lg">
+              <div className="flex items-center gap-1 3xl:gap-2 4xl:gap-3">
+                <span className="text-yellow-300 text-xs lg:text-sm 3xl:text-xl 4xl:text-3xl">
+                  ⏱
+                </span>
+                <span className="text-white font-bold text-base lg:text-xl 2xl:text-2xl 3xl:text-4xl 4xl:text-6xl 5xl:text-7xl font-mono tracking-wider">
                   {clock.hours}
                 </span>
-                <span className="text-yellow-300 font-bold text-xl animate-pulse">
+                <span className="text-yellow-300 font-bold text-base lg:text-xl 2xl:text-2xl 3xl:text-4xl 4xl:text-6xl 5xl:text-7xl animate-pulse">
                   :
                 </span>
-                <span className="text-white font-bold text-xl font-mono tracking-wider">
+                <span className="text-white font-bold text-base lg:text-xl 2xl:text-2xl 3xl:text-4xl 4xl:text-6xl 5xl:text-7xl font-mono tracking-wider">
                   {clock.minutes}
                 </span>
-                <span className="text-white/50 font-bold text-sm font-mono">
+                <span className="text-white/50 font-bold text-xs lg:text-sm 2xl:text-base 3xl:text-2xl 4xl:text-4xl 5xl:text-5xl font-mono">
                   : {clock.seconds}
                 </span>
               </div>
@@ -586,7 +588,7 @@ export default function JadwalMonitor() {
       </div>
 
       {/* ═══════════════ CONTENT ═══════════════ */}
-      <div className="flex-1 px-4 md:px-8 lg:px-12 py-4 md:py-6">
+      <div className="flex-1 px-3 md:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-24 4xl:px-32 py-3 md:py-4 lg:py-5 3xl:py-8 4xl:py-12">
         {jadwalData.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="bg-white rounded-2xl p-8 md:p-12 max-w-md mx-auto shadow-xl text-center">
@@ -604,7 +606,7 @@ export default function JadwalMonitor() {
             {/* 🖼️ IMAGE SLIDE */}
             {isImageSlide && SLIDE_IMAGES[imageSlideIndex] ? (
               <div className="bg-white rounded-2xl overflow-hidden shadow-xl">
-                <div className="relative w-full h-[calc(100vh-320px)] flex items-center justify-center bg-gray-50">
+                <div className="relative w-full h-[calc(100vh-200px)] sm:h-[calc(100vh-240px)] md:h-[calc(100vh-260px)] lg:h-[calc(100vh-280px)] xl:h-[calc(100vh-300px)] 3xl:h-[calc(100vh-340px)] 4xl:h-[calc(100vh-420px)] flex items-center justify-center bg-gray-50">
                   <img
                     src={SLIDE_IMAGES[imageSlideIndex].url}
                     alt={SLIDE_IMAGES[imageSlideIndex].title || 'Slide Image'}
@@ -623,7 +625,7 @@ export default function JadwalMonitor() {
                 </div>
                 {SLIDE_IMAGES[imageSlideIndex].title && (
                   <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-center py-3 px-6">
-                    <h3 className="text-base font-bold">
+                    <h3 className="text-sm md:text-base lg:text-lg font-bold">
                       {SLIDE_IMAGES[imageSlideIndex].title}
                     </h3>
                   </div>
@@ -631,7 +633,7 @@ export default function JadwalMonitor() {
               </div>
             ) : (
               /* 📋 DATA SLIDE */
-              <div className="space-y-3 md:space-y-4">
+              <div className="space-y-2 md:space-y-3 lg:space-y-4 3xl:space-y-5 4xl:space-y-8">
                 {currentPageData.map((item, index) => {
                   const prevItem =
                     index > 0 ? currentPageData[index - 1] : null;
@@ -660,7 +662,7 @@ export default function JadwalMonitor() {
                           ></div>
 
                           {/* Card content */}
-                          <div className="flex-1 p-2.5 md:p-3.5 lg:p-4.5">
+                          <div className="flex-1 p-2.5 md:p-3 lg:p-4 xl:p-5 3xl:p-6 4xl:p-10">
                             {/* Mobile Layout */}
                             <div className="lg:hidden space-y-3">
                               <div className="flex items-center justify-between">
@@ -757,11 +759,11 @@ export default function JadwalMonitor() {
                             </div>
 
                             {/* Desktop Layout */}
-                            <div className="hidden lg:grid lg:grid-cols-12 items-center gap-4 ">
+                            <div className="hidden lg:grid lg:grid-cols-12 items-center gap-2 lg:gap-3 xl:gap-4 3xl:gap-6 4xl:gap-10">
                               {/* Kode + Jam */}
-                              <div className="col-span-2 flex items-center gap-4">
+                              <div className="col-span-2 flex items-center gap-2 xl:gap-4">
                                 <div className="flex flex-col items-center">
-                                  <span className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm">
+                                  <span className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs xl:text-sm 3xl:text-base 4xl:text-2xl 5xl:text-3xl font-bold px-2.5 lg:px-3 xl:px-4 3xl:px-5 4xl:px-8 py-1.5 xl:py-2 3xl:py-3 4xl:py-4 rounded-lg shadow-sm">
                                     {item.kode}
                                   </span>
                                   <div className="flex items-center gap-1.5 text-gray-400 text-xs mt-2"></div>
@@ -769,12 +771,12 @@ export default function JadwalMonitor() {
                               </div>
 
                               {/* Kegiatan */}
-                              <div className="col-span-3 flex items-center gap-3">
+                              <div className="col-span-3 flex items-center gap-2 xl:gap-3 3xl:gap-4">
                                 <div
-                                  className={`w-8 h-8 bg-gradient-to-br ${getTypeIconBg(item.type)} rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm`}
+                                  className={`w-6 h-6 xl:w-8 xl:h-8 3xl:w-10 3xl:h-10 4xl:w-16 4xl:h-16 bg-gradient-to-br ${getTypeIconBg(item.type)} rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm`}
                                 >
                                   <svg
-                                    className="w-4 h-4 text-white"
+                                    className="w-3 h-3 xl:w-4 xl:h-4 3xl:w-5 3xl:h-5 4xl:w-8 4xl:h-8 text-white"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -787,13 +789,13 @@ export default function JadwalMonitor() {
                                     />
                                   </svg>
                                 </div>
-                                <div>
-                                  <div className="font-semibold text-gray-700 text-xl leading-tight">
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-gray-700 text-sm lg:text-base xl:text-lg 2xl:text-xl 3xl:text-2xl 4xl:text-4xl 5xl:text-5xl leading-tight truncate">
                                     {item.kegiatan}
                                   </div>
                                   {item.jenis_pertemuan && (
                                     <span
-                                      className={`inline-block mt-1 px-2.5 py-0.5 text-xs rounded-full font-bold ${
+                                      className={`inline-block mt-1 px-2 xl:px-2.5 3xl:px-3 4xl:px-5 py-0.5 3xl:py-1 text-[10px] xl:text-xs 3xl:text-sm 4xl:text-xl rounded-full font-bold ${
                                         item.jenis_pertemuan === 'daring'
                                           ? 'bg-green-50 text-green-600'
                                           : item.jenis_pertemuan === 'hybrid'
@@ -813,9 +815,9 @@ export default function JadwalMonitor() {
                               </div>
 
                               {/* Tempat */}
-                              <div className="col-span-3 flex items-center gap-2">
+                              <div className="col-span-3 flex items-center gap-2 3xl:gap-3">
                                 <svg
-                                  className="w-6 h-6 text-red-400 flex-shrink-0 self-start mt-1.5"
+                                  className="w-4 h-4 xl:w-6 xl:h-6 3xl:w-7 3xl:h-7 4xl:w-10 4xl:h-10 text-red-400 flex-shrink-0 self-start mt-1.5"
                                   fill="none"
                                   stroke="currentColor"
                                   viewBox="0 0 24 24"
@@ -833,20 +835,20 @@ export default function JadwalMonitor() {
                                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                                   />
                                 </svg>
-                                <div>
-                                  <div className="font-semibold text-gray-700 text-xl leading-tight">
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-gray-700 text-sm lg:text-base xl:text-lg 2xl:text-xl 3xl:text-2xl 4xl:text-4xl 5xl:text-5xl leading-tight truncate">
                                     {item.tempat}
                                   </div>
-                                  <span className="font-medium block text-center w-full">
+                                  <span className="font-medium block text-center w-full text-xs xl:text-sm 3xl:text-base 4xl:text-2xl">
                                     {item.jam}
                                   </span>
                                 </div>
                               </div>
 
                               {/* Dosen */}
-                              <div className="col-span-2 flex items-center gap-2">
+                              <div className="col-span-2 flex items-center gap-2 3xl:gap-3">
                                 <svg
-                                  className="w-5 h-5 text-purple-400 flex-shrink-0"
+                                  className="w-4 h-4 xl:w-5 xl:h-5 3xl:w-6 3xl:h-6 4xl:w-9 4xl:h-9 text-purple-400 flex-shrink-0"
                                   fill="none"
                                   stroke="currentColor"
                                   viewBox="0 0 24 24"
@@ -858,7 +860,7 @@ export default function JadwalMonitor() {
                                     d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                                   />
                                 </svg>
-                                <span className="text-gray-600 text-sm font-bold">
+                                <span className="text-gray-600 text-xs xl:text-sm 3xl:text-base 4xl:text-2xl 5xl:text-3xl font-bold truncate">
                                   {item.dosen}
                                 </span>
                               </div>
@@ -866,7 +868,7 @@ export default function JadwalMonitor() {
                               {/* Status */}
                               <div className="col-span-2 flex justify-end">
                                 <span
-                                  className={`${statusBadge.bg} ${statusBadge.text} text-[10px] font-semibold px-3 py-1.5 rounded-full shadow-sm`}
+                                  className={`${statusBadge.bg} ${statusBadge.text} text-[9px] xl:text-[10px] 3xl:text-xs 4xl:text-xl 5xl:text-2xl font-semibold px-2 xl:px-3 3xl:px-4 4xl:px-6 py-1 xl:py-1.5 3xl:py-2 4xl:py-3 rounded-full shadow-sm whitespace-nowrap`}
                                 >
                                   {statusBadge.icon} {statusBadge.label}
                                 </span>
@@ -884,7 +886,7 @@ export default function JadwalMonitor() {
         )}
       </div>
       {/* ═══════════════ FOOTER ═══════════════ */}
-      <div className="px-3 md:px-8 lg:px-12 pb-2 md:pb-4">
+      <div className="px-3 md:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-24 4xl:px-32 pb-2 md:pb-3 lg:pb-4 3xl:pb-6 4xl:pb-8">
         <div className="bg-white/80 backdrop-blur-sm rounded-xl px-3 md:px-6 py-2 md:py-2.5 shadow-sm border border-gray-100">
           {/* Desktop: single row | Mobile: stacked */}
           <div className="hidden md:flex items-center justify-between gap-3">
