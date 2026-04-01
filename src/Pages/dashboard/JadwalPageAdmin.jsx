@@ -912,6 +912,9 @@ export default function JadwalPageAdmin() {
         if (formData.ruangan_id === '' || formData.ruangan_id === null) {
           formData.ruangan_id = null;
         }
+        if (formData.dosen_id === '' || formData.dosen_id === null) {
+          formData.dosen_id = null;
+        }
       } else if (modalType === 'karya_akhir' || modalType === 'lain_lain') {
         if (formData.nama_ruangan === '' || formData.nama_ruangan === null) {
           formData.nama_ruangan = null;
@@ -1184,7 +1187,6 @@ export default function JadwalPageAdmin() {
             onChange={(v) => handleChange('dosen_id', v)}
             options={options.dosen}
             displayKey="nama_dosen"
-            required
           />
           <SelectField
             label="Jenis Pertemuan"
@@ -2073,33 +2075,12 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                       </>
                     )}
                     <td className="py-3 px-4 border border-slate-200">
-                      <div className="min-w-[150px]">
-                        {row.updated_by && row.updated_by !== '-' ? (
-                          <div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-blue-500 text-xs">✏️</span>
-                              <span className="text-xs font-semibold text-slate-700 text-center">
-                                {row.updated_by}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 ml-4">
-                              {new Date(
-                                row.updated_at || row.last_modified
-                              ).toLocaleString('id-ID', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                hour12: false,
-                              })}
-                            </div>
-                          </div>
-                        ) : row.created_by && row.created_by !== '-' ? (
+                      <div className="min-w-[150px] flex flex-col gap-1">
+                        {row.created_by && row.created_by !== '-' ? (
                           <div>
                             <div className="flex items-center gap-1">
                               <span className="text-green-500 text-xs">➕</span>
-                              <span className="text-xs font-semibold text-slate-700 text-center">
+                              <span className="text-xs font-semibold text-slate-700">
                                 {row.created_by}
                               </span>
                             </div>
@@ -2116,9 +2097,33 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                               })}
                             </div>
                           </div>
-                        ) : (
-                          <span className="text-xs text-slate-400">-</span>
-                        )}
+                        ) : null}
+                        {row.updated_by && row.updated_by !== '-' ? (
+                          <div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-blue-500 text-xs">✏️</span>
+                              <span className="text-xs font-semibold text-slate-700">
+                                {row.updated_by}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 ml-4">
+                              {new Date(
+                                row.updated_at || row.last_modified
+                              ).toLocaleString('id-ID', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false,
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                        {(!row.created_by || row.created_by === '-') &&
+                          (!row.updated_by || row.updated_by === '-') && (
+                            <span className="text-xs text-slate-400">-</span>
+                          )}
                       </div>
                     </td>
                     <td className="py-3 px-4 border border-slate-200 text-center">

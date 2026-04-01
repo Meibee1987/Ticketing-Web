@@ -33,7 +33,7 @@ export default function LoginPage() {
         }
 
         if (session) {
-          window.location.href = '/dashboard/jadwal';
+          window.location.href = '/dashboard';
         }
       } catch (err) {
         console.error('Session check error:', err);
@@ -77,7 +77,7 @@ export default function LoginPage() {
         }
 
         // Jika tidak ada 2FA, langsung login
-        window.location.href = '/dashboard/jadwal';
+        window.location.href = '/dashboard';
       } else {
         setError('Gagal membuat session. Coba lagi.');
         setIsLoading(false);
@@ -91,7 +91,7 @@ export default function LoginPage() {
 
   const handle2FASuccess = async () => {
     // 2FA verified, redirect to dashboard
-    window.location.href = '/dashboard/jadwal';
+    window.location.href = '/dashboard';
   };
 
   const handle2FACancel = () => {

@@ -32,7 +32,7 @@ const MENU_ITEMS = [
   {
     to: '/dashboard/monitor-settings',
     icon: MonitorPlay,
-    label: 'Monitor Jadwal',
+    label: 'Monitor Setting',
     roles: ['admin', 'super admin'],
   },
   { to: '/dashboard/ruangan', icon: Building2, label: 'Ruangan' },
@@ -48,16 +48,25 @@ const MENU_ITEMS = [
     label: 'Users',
     roles: ['super admin'],
   },
-  {
-    to: '/dashboard/settings',
-    icon: Settings,
-    label: 'Settings',
-    roles: ['super admin', 'admin'],
-  },
+  // {
+  //   to: '/dashboard/settings',
+  //   icon: Settings,
+  //   label: 'Settings',
+  //   roles: ['super admin', 'admin'],
+  // },
 ];
 
 export default function Sidebar({ open, onClose }) {
   const { userRole, signOut } = useAuth();
+
+  const now = new Date();
+  const year = now.getFullYear(); // ambil tahun sekarang
+  const month = now.getMonth() + 1; // bulan (1-12)
+
+  const academicYear =
+    month >= 7 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
+
+  const version = '1.0.0';
 
   const handleLogout = async () => {
     await signOut();
@@ -158,10 +167,10 @@ export default function Sidebar({ open, onClose }) {
 
           <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/5">
             <p className="text-[11px] font-semibold text-slate-300">
-              v2.4.1 · 2026
+              v{version} . {year}
             </p>
             <p className="text-[10px] text-slate-500 mt-0.5">
-              Academic Year 2025/2026
+              Academic Year {academicYear}
             </p>
           </div>
         </div>

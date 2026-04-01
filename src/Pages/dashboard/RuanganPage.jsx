@@ -239,7 +239,10 @@ function useRuanganData(selectedDate) {
               'ruangan_id',
               maps.matkul[j.id_mata_kuliah] || 'Mata Kuliah',
               maps.dosen[j.dosen_id] || '',
-              { angkatan: maps.angkatan[j.id_angkatan] || '' }
+              {
+                angkatan: maps.angkatan[j.id_angkatan] || '',
+                jenis_pertemuan: j.jenis_pertemuan || 'luring',
+              }
             )
           ),
         ...(karyaAkhirRes.data || [])
@@ -324,6 +327,8 @@ function RuanganStats({ selectedDate, currentTime }) {
     const [sedangDigunakan, adaJadwal] = [new Set(), new Set()];
 
     filteredBookings.forEach((b) => {
+      // Jenis daring tidak menggunakan ruangan fisik, skip dari hitungan status ruangan
+      if (b.jenis_pertemuan === 'daring') return;
       // Tampilkan semua jadwal, tapi hitung hanya yang aktif untuk statistik
       if (isToday && now >= b.mulai && now < b.akhir)
         sedangDigunakan.add(b.ruangan_id);
@@ -427,7 +432,12 @@ function RuanganList({ selectedDate, currentTime, initialFilter = 'all' }) {
           (b) => String(b.ruangan_id) === String(r.id)
         );
         const currentBooking = isToday
-          ? roomBookings.find((b) => now >= b.mulai && now < b.akhir)
+          ? roomBookings.find(
+              (b) =>
+                now >= b.mulai &&
+                now < b.akhir &&
+                b.jenis_pertemuan !== 'daring'
+            )
           : null;
 
         // Tampilkan semua jadwal (aktif dan selesai), tandai yang sudah selesai

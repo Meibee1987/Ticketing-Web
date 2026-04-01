@@ -398,7 +398,7 @@ export default function UsersPage() {
           👥 Manajemen Users
         </h1>
         <p className="text-xs md:text-sm text-slate-500 mt-1">
-          Kelola user Teknisi dan Dosen beserta hak akses role mereka.
+          Kelola User Admin dan Dosen beserta hak akses role mereka.
         </p>
       </header>
 
@@ -409,7 +409,7 @@ export default function UsersPage() {
           <div className="flex items-center justify-between px-4">
             <nav className="flex -mb-px overflow-x-auto">
               {[
-                { key: 'teknisi', label: 'User Teknisi', icon: '🔧' },
+                { key: 'teknisi', label: 'User Admin', icon: '🔧' },
                 { key: 'dosen', label: 'User Dosen', icon: '🎓' },
               ].map((tab) => (
                 <button

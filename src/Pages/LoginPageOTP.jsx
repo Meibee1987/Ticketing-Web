@@ -36,7 +36,7 @@ export default function LoginPageOTP() {
         }
 
         if (session) {
-          window.location.href = '/dashboard/jadwal';
+          window.location.href = '/dashboard';
         }
       } catch (err) {
         // Jika error apapun saat cek session, bersihkan saja
@@ -136,7 +136,7 @@ export default function LoginPageOTP() {
         localStorage.removeItem(`otp_cooldown_${email}`);
         setSuccess('Login berhasil! Mengalihkan...');
         setTimeout(() => {
-          window.location.href = '/dashboard/jadwal';
+          window.location.href = '/dashboard';
         }, 1000);
       }
     } catch (err) {
