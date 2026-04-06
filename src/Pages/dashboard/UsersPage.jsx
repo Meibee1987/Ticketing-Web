@@ -23,7 +23,10 @@ export default function UsersPage() {
     roles_id: '',
     auth_id: null,
     dosen_id: '', // untuk pilih dosen dari master data
+    foto_url: '',
   });
+  const [fotoFile, setFotoFile] = useState(null);
+  const [fotoPreview, setFotoPreview] = useState(null);
   const [editId, setEditId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -33,7 +36,7 @@ export default function UsersPage() {
     const { data, error } = await supabase
       .from('Teknisi')
       .select(
-        `id, email, nama_teknisi, auth_id, roles_id, roles:roles_id(id, role)`
+        `id, email, nama_teknisi, auth_id, roles_id, foto_url, roles:roles_id(id, role)`
       )
       .order('id', { ascending: true });
     if (!error && data) setTeknisiList(data);
@@ -46,7 +49,7 @@ export default function UsersPage() {
     const { data, error } = await supabase
       .from('dosen')
       .select(
-        `id, nama_dosen, nip, email, telepon, auth_id, roles_id, aktif_nonaktif, roles:roles_id(id, role)`
+        `id, nama_dosen, nip, email, telepon, auth_id, roles_id, aktif_nonaktif, foto_url, roles:roles_id(id, role)`
       )
       .not('roles_id', 'is', null) // Hanya yang sudah punya role
       .order('id', { ascending: true });
@@ -125,7 +128,16 @@ export default function UsersPage() {
   // === MODAL HANDLERS ===
   const openAddModal = () => {
     setModalMode('add');
-    setForm({ nama: '', email: '', roles_id: '', auth_id: null, dosen_id: '' });
+    setForm({
+      nama: '',
+      email: '',
+      roles_id: '',
+      auth_id: null,
+      dosen_id: '',
+      foto_url: '',
+    });
+    setFotoFile(null);
+    setFotoPreview(null);
     setEditId(null);
     setError(null);
     setModalOpen(true);
@@ -144,6 +156,7 @@ export default function UsersPage() {
         roles_id: user.roles_id || '',
         auth_id: user.auth_id || null,
         dosen_id: '',
+        foto_url: user.foto_url || '',
       });
     } else {
       // Dosen - data sudah dari master data
@@ -153,8 +166,11 @@ export default function UsersPage() {
         roles_id: user.roles_id || '',
         auth_id: user.auth_id || null,
         dosen_id: user.id,
+        foto_url: user.foto_url || '',
       });
     }
+    setFotoFile(null);
+    setFotoPreview(user.foto_url || null);
     setEditId(user.id);
     setError(null);
     setModalOpen(true);
@@ -162,9 +178,59 @@ export default function UsersPage() {
 
   const closeModal = () => {
     setModalOpen(false);
-    setForm({ nama: '', email: '', roles_id: '', auth_id: null, dosen_id: '' });
+    setForm({
+      nama: '',
+      email: '',
+      roles_id: '',
+      auth_id: null,
+      dosen_id: '',
+      foto_url: '',
+    });
+    setFotoFile(null);
+    setFotoPreview(null);
     setEditId(null);
     setError(null);
+  };
+
+  // Handle pilih file foto
+  const handleFotoChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validasi tipe file
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Format foto harus JPG, PNG, atau WebP');
+      return;
+    }
+    // Validasi ukuran file (maks 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Ukuran foto maksimal 2MB');
+      return;
+    }
+
+    setFotoFile(file);
+    setFotoPreview(URL.createObjectURL(file));
+    setError(null);
+  };
+
+  // Upload foto ke Supabase Storage, kembalikan URL publik
+  const uploadFoto = async (file, userId, tablePrefix) => {
+    const ext = file.name.split('.').pop();
+    const fileName = `${tablePrefix}_${userId}_${Date.now()}.${ext}`;
+    const filePath = `${tablePrefix}/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('user-photos')
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError)
+      throw new Error(`Upload foto gagal: ${uploadError.message}`);
+
+    const { data } = supabase.storage
+      .from('user-photos')
+      .getPublicUrl(filePath);
+    return data.publicUrl;
   };
 
   // Handle pilih dosen dari dropdown
@@ -222,11 +288,27 @@ export default function UsersPage() {
             roles_id: form.roles_id ? parseInt(form.roles_id) : null,
           };
 
-          const { error: insertError } = await supabase
+          const { data: insertedRows, error: insertError } = await supabase
             .from(tableName)
-            .insert([insertData]);
+            .insert([insertData])
+            .select('id')
+            .single();
 
           if (insertError) throw insertError;
+
+          // Upload foto jika ada, update foto_url
+          if (fotoFile && insertedRows?.id) {
+            const publicUrl = await uploadFoto(
+              fotoFile,
+              insertedRows.id,
+              'teknisi'
+            );
+            await supabase
+              .from(tableName)
+              .update({ foto_url: publicUrl })
+              .eq('id', insertedRows.id);
+          }
+
           alert('User berhasil ditambahkan! User bisa login dengan OTP.');
         } else {
           const updateData = {
@@ -253,6 +335,12 @@ export default function UsersPage() {
             updateData.email = form.email;
           }
 
+          // Upload foto baru jika ada
+          if (fotoFile) {
+            const publicUrl = await uploadFoto(fotoFile, editId, 'teknisi');
+            updateData.foto_url = publicUrl;
+          }
+
           const { error: updateError } = await supabase
             .from(tableName)
             .update(updateData)
@@ -276,10 +364,19 @@ export default function UsersPage() {
             throw new Error('Pilih role untuk dosen');
           }
 
-          // Update tabel dosen di Master Data dengan roles_id
+          // Upload foto jika ada
+          let foto_url = undefined;
+          if (fotoFile) {
+            foto_url = await uploadFoto(fotoFile, form.dosen_id, 'dosen');
+          }
+
+          // Update tabel dosen di Master Data dengan roles_id (dan foto_url jika ada)
+          const updatePayload = { roles_id: parseInt(form.roles_id) };
+          if (foto_url) updatePayload.foto_url = foto_url;
+
           const { error: updateError } = await supabase
             .from('dosen')
-            .update({ roles_id: parseInt(form.roles_id) })
+            .update(updatePayload)
             .eq('id', parseInt(form.dosen_id));
 
           if (updateError) throw updateError;
@@ -287,14 +384,22 @@ export default function UsersPage() {
             'Role berhasil di-assign ke dosen! Dosen bisa login dengan OTP.'
           );
         } else {
-          // Edit: hanya update role
+          // Edit: hanya update role (dan foto jika ada)
           if (!form.roles_id) {
             throw new Error('Pilih role untuk dosen');
           }
 
+          const updatePayload = { roles_id: parseInt(form.roles_id) };
+
+          // Upload foto baru jika ada
+          if (fotoFile) {
+            const foto_url = await uploadFoto(fotoFile, editId, 'dosen');
+            updatePayload.foto_url = foto_url;
+          }
+
           const { error: updateError } = await supabase
             .from('dosen')
-            .update({ roles_id: parseInt(form.roles_id) })
+            .update(updatePayload)
             .eq('id', editId);
 
           if (updateError) throw updateError;
@@ -506,6 +611,9 @@ export default function UsersPage() {
                     ID
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Foto
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     Nama
                   </th>
                   {activeTab === 'dosen' && (
@@ -540,6 +648,31 @@ export default function UsersPage() {
                   >
                     <td className="px-6 py-4 text-sm text-slate-500 font-mono">
                       {user.id}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="w-9 h-9 rounded-full border border-slate-200 overflow-hidden bg-slate-100 flex items-center justify-center">
+                        {user.foto_url ? (
+                          <img
+                            src={user.foto_url}
+                            alt="Foto"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <svg
+                            className="w-5 h-5 text-slate-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                            />
+                          </svg>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-slate-800">
                       {activeTab === 'teknisi'
@@ -797,6 +930,73 @@ export default function UsersPage() {
                   )}
                 </>
               )}
+
+              {/* Foto Upload */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Foto Profil{' '}
+                  <span className="text-slate-400 font-normal">(opsional)</span>
+                </label>
+                <div className="flex items-center gap-4">
+                  {/* Preview */}
+                  <div className="w-16 h-16 rounded-full border-2 border-slate-200 overflow-hidden bg-slate-100 flex items-center justify-center shrink-0">
+                    {fotoPreview ? (
+                      <img
+                        src={fotoPreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <svg
+                        className="w-8 h-8 text-slate-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        />
+                      </svg>
+                    )}
+                  </div>
+                  {/* File input */}
+                  <div className="flex-1">
+                    <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors">
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
+                      </svg>
+                      {fotoFile ? 'Ganti Foto' : 'Pilih Foto'}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={handleFotoChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-xs text-slate-400 mt-1">
+                      JPG, PNG, WebP · maks 2MB
+                    </p>
+                    {fotoFile && (
+                      <p className="text-xs text-green-600 mt-0.5">
+                        ✅ {fotoFile.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
 
               {/* Role dropdown */}
               <div>

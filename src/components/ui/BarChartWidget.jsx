@@ -21,6 +21,12 @@ const COLORS = {
   hybrid: '#f59e0b', // amber
 };
 
+const KEY_LABELS = {
+  luring: 'Luring',
+  online: 'Daring',
+  hybrid: 'Hybrid',
+};
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -32,7 +38,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             className="w-2 h-2 rounded-full inline-block"
             style={{ background: p.fill }}
           />
-          <span className="capitalize">{p.dataKey}</span>
+          <span>{KEY_LABELS[p.dataKey] ?? p.dataKey}</span>
           <span className="ml-auto font-bold">{p.value}</span>
         </div>
       ))}

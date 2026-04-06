@@ -1,0 +1,38 @@
+name: Deploy via FTP
+
+on:
+  push:
+    branches:
+      - master # deploy saat push ke main
+
+jobs:
+  deploy:
+    name: Upload to FTP Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Optional: build project (React/Vite/Node)
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      # Deploy ke FTP
+      - name: Upload via FTP
+        uses: SamKirland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secret.FTP_SERVER }}
+          username: ${{ secret.FTP_USERNAME }}
+          password: ${{ secret.FTP_PASSWORD }}
+          port: ${{ secret.FTP_PORT || 21 }}
+          local-dir: ./dst/ #folder hasil build (React/Vite)
+          server-dir: /wanda.anbyaali.com/ #folder di server
+          dangerous-cleam-slate: true
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**

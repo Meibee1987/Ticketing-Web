@@ -441,6 +441,9 @@ export default function LoginPageOTP() {
             Cek folder spam jika tidak menemukan email OTP
           </p>
         </div>
+        <div>
+          <p className="text-center text-gray-400 text-xs">Version 1.0.0</p>
+        </div>
       </div>
     </div>
   );

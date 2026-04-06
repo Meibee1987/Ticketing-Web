@@ -54,17 +54,7 @@ export default function JadwalMonitor() {
 
   // 🎯 AUTO-SLIDE: Pindah halaman otomatis setiap 7 detik
   useEffect(() => {
-    // Group jadwal by type and paginate each group
-    const perkuliahanData = jadwalData.filter((j) => j.type === 'perkuliahan');
-    const karyaAkhirData = jadwalData.filter((j) => j.type === 'karya_akhir');
-    const lainLainData = jadwalData.filter((j) => j.type === 'lain_lain');
-
-    // Calculate pages for each type (max 5 items per page)
-    const perkuliahanPages = Math.ceil(perkuliahanData.length / ITEMS_PER_PAGE);
-    const karyaAkhirPages = Math.ceil(karyaAkhirData.length / ITEMS_PER_PAGE);
-    const lainLainPages = Math.ceil(lainLainData.length / ITEMS_PER_PAGE);
-
-    const totalDataPages = perkuliahanPages + karyaAkhirPages + lainLainPages;
+    const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
     const totalPages = totalDataPages + SLIDE_IMAGES.length;
 
     if (totalPages <= 1) return; // Tidak perlu auto-slide jika hanya 1 halaman
@@ -455,18 +445,8 @@ export default function JadwalMonitor() {
     );
   }
 
-  // 🎯 PAGINATION LOGIC - Group by type with max 5 items per page
-  // Group jadwal by type
-  const perkuliahanData = jadwalData.filter((j) => j.type === 'perkuliahan');
-  const karyaAkhirData = jadwalData.filter((j) => j.type === 'karya_akhir');
-  const lainLainData = jadwalData.filter((j) => j.type === 'lain_lain');
-
-  // Calculate pages for each type (max 5 items per page)
-  const perkuliahanPages = Math.ceil(perkuliahanData.length / ITEMS_PER_PAGE);
-  const karyaAkhirPages = Math.ceil(karyaAkhirData.length / ITEMS_PER_PAGE);
-  const lainLainPages = Math.ceil(lainLainData.length / ITEMS_PER_PAGE);
-
-  const totalDataPages = perkuliahanPages + karyaAkhirPages + lainLainPages;
+  // 🎯 PAGINATION LOGIC - All types combined, ordered: perkuliahan → karya_akhir → lain_lain
+  const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
   const totalPages = totalDataPages + SLIDE_IMAGES.length;
 
   // Determine if current page is showing image or data
@@ -476,27 +456,8 @@ export default function JadwalMonitor() {
   // Get current page data (only for data pages)
   let currentPageData = [];
   if (!isImageSlide) {
-    if (currentPage < perkuliahanPages) {
-      // Page is in perkuliahan group
-      const startIdx = currentPage * ITEMS_PER_PAGE;
-      currentPageData = perkuliahanData.slice(
-        startIdx,
-        startIdx + ITEMS_PER_PAGE
-      );
-    } else if (currentPage < perkuliahanPages + karyaAkhirPages) {
-      // Page is in karya akhir group
-      const pageInGroup = currentPage - perkuliahanPages;
-      const startIdx = pageInGroup * ITEMS_PER_PAGE;
-      currentPageData = karyaAkhirData.slice(
-        startIdx,
-        startIdx + ITEMS_PER_PAGE
-      );
-    } else {
-      // Page is in lain-lain group
-      const pageInGroup = currentPage - perkuliahanPages - karyaAkhirPages;
-      const startIdx = pageInGroup * ITEMS_PER_PAGE;
-      currentPageData = lainLainData.slice(startIdx, startIdx + ITEMS_PER_PAGE);
-    }
+    const startIdx = currentPage * ITEMS_PER_PAGE;
+    currentPageData = jadwalData.slice(startIdx, startIdx + ITEMS_PER_PAGE);
   }
 
   const clock = formatClockTime();
