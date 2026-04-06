@@ -442,7 +442,7 @@ export default function LoginPageOTP() {
           </p>
         </div>
         <div>
-          <p className="text-center text-gray-400 text-xs">Version 1.0.0</p>
+          <p className="text-center text-gray-400 text-xs">Version 1.0.2</p>
         </div>
       </div>
     </div>
