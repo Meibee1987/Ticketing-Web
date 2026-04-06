@@ -31,7 +31,7 @@ jobs:
           port: ${{ secrets.FTP_PORT || 21 }}
           local-dir: ./dist/ #folder hasil build (React/Vite)
           server-dir: /wanda.anbyaali.com/ #folder di server
-          dangerous-cleam-slate: true
+          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.git*/**
