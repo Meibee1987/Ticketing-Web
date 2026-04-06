@@ -25,10 +25,10 @@ jobs:
       - name: Upload via FTP
         uses: SamKirland/FTP-Deploy-Action@v4.3.4
         with:
-          server: ${{ secret.FTP_SERVER }}
-          username: ${{ secret.FTP_USERNAME }}
-          password: ${{ secret.FTP_PASSWORD }}
-          port: ${{ secret.FTP_PORT || 21 }}
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT || 21 }}
           local-dir: ./dst/ #folder hasil build (React/Vite)
           server-dir: /wanda.anbyaali.com/ #folder di server
           dangerous-cleam-slate: true
