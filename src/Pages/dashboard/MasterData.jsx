@@ -336,7 +336,7 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
         return [
           { key: 'id', label: 'ID' },
           { key: 'nama_dosen', label: 'Nama Dosen' },
-          { key: 'nip', label: 'NIP' },
+          { key: 'id_dosen', label: 'ID Dosen' },
           { key: 'email', label: 'Email' },
           { key: 'telepon', label: 'Telepon' },
           { key: 'role_name', label: 'Role', type: 'role' },
@@ -348,6 +348,7 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
         return [
           { key: 'id', label: 'ID' },
           { key: 'nama_angkatan', label: 'Nama Angkatan' },
+          { key: 'strata', label: 'Strata' },
           { key: 'jumlah_mahasiswa', label: 'Jumlah Mahasiswa' },
           ...(hasStatusColumn
             ? [{ key: 'aktif_nonaktif', label: 'Status', type: 'status' }]
@@ -457,14 +458,14 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
         case 'dosen':
           setFormData({
             nama_dosen: '',
-            nip: '',
+            id_dosen: '',
             email: '',
             telepon: '',
             roles_id: '',
           });
           break;
         case 'angkatan':
-          setFormData({ nama_angkatan: '', jumlah_mahasiswa: '' });
+          setFormData({ nama_angkatan: '', strata: '', jumlah_mahasiswa: '' });
           break;
         case 'matakuliah':
           setFormData({ kode_mata_kuliah: '', mata_kuliah: '' });
@@ -580,9 +581,9 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
               required
             />
             <FormField
-              label="NIP"
-              name="nip"
-              value={formData.nip || ''}
+              label="ID Dosen"
+              name="id_dosen"
+              value={formData.id_dosen || ''}
               onChange={handleChange}
               disabled={isReadOnly}
             />
@@ -649,6 +650,13 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
               onChange={handleChange}
               disabled={isReadOnly}
               required
+            />
+            <FormField
+              label="Strata"
+              name="strata"
+              value={formData.strata || ''}
+              onChange={handleChange}
+              disabled={isReadOnly}
             />
             <FormField
               label="Jumlah Mahasiswa"
@@ -830,8 +838,8 @@ function FormField({
         placeholder={
           name === 'nama_dosen'
             ? 'Masukan Nama Dosen'
-            : name === 'nip'
-              ? 'Masukan NIP'
+            : name === 'id_dosen'
+              ? 'Masukan ID_Dosen'
               : name === 'email'
                 ? 'Masukan Email'
                 : name === 'telepon'

@@ -20,6 +20,7 @@ import SearchBar from '../../components/SearchBar';
 import ActionButtons from '../../components/ActionButtons';
 import Pagination from '../../components/Pagination';
 import SearchableSelect from '../../components/SearchableSelect';
+import ImportJadwal from '../../components/ImportJadwal';
 
 // ================================================================================
 // KOMPONEN MULTI-DOSEN SELECT (max 8 dosen)
@@ -487,6 +488,10 @@ export default function JadwalPageAdmin() {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
 
+  // Import states
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importJenisTab, setImportJenisTab] = useState('perkuliahan');
+
   // Download states
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [downloadJenisTab, setDownloadJenisTab] = useState(null); // untuk menyimpan jenis tab yang akan didownload
@@ -556,6 +561,43 @@ export default function JadwalPageAdmin() {
         last_modified: r.updated_at || r.created_at || new Date().toISOString(),
         created_by: r.created_by || '-',
         updated_by: r.updated_by || '-',
+        // New fields from spreadsheet
+        paralel: r.paralel || '-',
+        real_perkuliahan: r.real_perkuliahan || '-',
+        petugas_zoom: r.petugas_zoom || '-',
+        moderator: r.moderator || '-',
+        dosen_ids: r.dosen_ids || [],
+        penguji_ids: r.penguji_ids || [],
+        pintang_sps: r.pintang_sps || '-',
+        // Map dosen_ids to names for display
+        dosen_tambahan_names: (() => {
+          let ids = [];
+          if (r.dosen_ids) {
+            try {
+              ids =
+                typeof r.dosen_ids === 'string'
+                  ? JSON.parse(r.dosen_ids)
+                  : r.dosen_ids;
+            } catch {
+              ids = [];
+            }
+          }
+          return ids.map((id) => dosenMap[id]).filter(Boolean);
+        })(),
+        penguji_names: (() => {
+          let ids = [];
+          if (r.penguji_ids) {
+            try {
+              ids =
+                typeof r.penguji_ids === 'string'
+                  ? JSON.parse(r.penguji_ids)
+                  : r.penguji_ids;
+            } catch {
+              ids = [];
+            }
+          }
+          return ids.map((id) => dosenMap[id]).filter(Boolean);
+        })(),
       }));
       setJadwalPerkuliahan(mergedPerkuliahan);
 
@@ -601,6 +643,38 @@ export default function JadwalPageAdmin() {
             j.updated_at || j.created_at || new Date().toISOString(),
           created_by: j.created_by || '-',
           updated_by: j.updated_by || '-',
+          // New fields from spreadsheet
+          petugas_zoom: j.petugas_zoom || '-',
+          moderator: j.moderator || '-',
+          penguji_ids: (() => {
+            let ids = [];
+            if (j.penguji_ids) {
+              try {
+                ids =
+                  typeof j.penguji_ids === 'string'
+                    ? JSON.parse(j.penguji_ids)
+                    : j.penguji_ids;
+              } catch {
+                ids = [];
+              }
+            }
+            return ids;
+          })(),
+          penguji_names: (() => {
+            let ids = [];
+            if (j.penguji_ids) {
+              try {
+                ids =
+                  typeof j.penguji_ids === 'string'
+                    ? JSON.parse(j.penguji_ids)
+                    : j.penguji_ids;
+              } catch {
+                ids = [];
+              }
+            }
+            return ids.map((id) => dosenMap[id]).filter(Boolean);
+          })(),
+          pintang_sps: j.pintang_sps || '-',
         };
       });
       setJadwalKaryaAkhir(mergedKaryaAkhir);
@@ -622,6 +696,8 @@ export default function JadwalPageAdmin() {
         last_modified: j.updated_at || j.created_at || new Date().toISOString(),
         created_by: j.created_by || '-',
         updated_by: j.updated_by || '-',
+        // New fields from spreadsheet
+        petugas_zoom: j.petugas_zoom || '-',
       }));
       setJadwalLainLain(mergedLainLain);
 
@@ -683,6 +759,13 @@ export default function JadwalPageAdmin() {
         zoom_id: '',
         zoom_password: '',
         note: '',
+        paralel: '',
+        real_perkuliahan: '',
+        petugas_zoom: '',
+        moderator: '',
+        dosen_ids: [],
+        penguji_ids: [],
+        pintang_sps: '',
       };
     } else if (type === 'karya_akhir') {
       return {
@@ -697,6 +780,10 @@ export default function JadwalPageAdmin() {
         zoom_id: '',
         zoom_password: '',
         note: '',
+        petugas_zoom: '',
+        moderator: '',
+        penguji_ids: [],
+        pintang_sps: '',
       };
     } else {
       return {
@@ -710,6 +797,7 @@ export default function JadwalPageAdmin() {
         zoom_id: '',
         zoom_password: '',
         note: '',
+        petugas_zoom: '',
       };
     }
   };
@@ -734,9 +822,14 @@ export default function JadwalPageAdmin() {
       setDownloadMonth('');
       setDownloadModalOpen(true);
     };
+    window.openImportModal = (jenis) => {
+      setImportJenisTab(jenis);
+      setImportModalOpen(true);
+    };
     return () => {
       delete window.handleDownloadJadwal;
       delete window.openDownloadModal;
+      delete window.openImportModal;
     };
   }, [
     jadwalPerkuliahan,
@@ -763,6 +856,13 @@ export default function JadwalPageAdmin() {
         mulai_jadwal: toDatetimeLocal(row.mulai_jadwal),
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
         jenis_pertemuan: row.jenis_pertemuan || 'luring',
+        paralel: row.paralel || '',
+        real_perkuliahan: row.real_perkuliahan || '',
+        petugas_zoom: row.petugas_zoom || '',
+        moderator: row.moderator || '',
+        dosen_ids: row.dosen_ids || [],
+        penguji_ids: row.penguji_ids || [],
+        pintang_sps: row.pintang_sps || '',
       });
     } else if (row.jenis === 'karya_akhir') {
       setForm({
@@ -774,6 +874,10 @@ export default function JadwalPageAdmin() {
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
         dosen_ids: row.dosen_ids || [],
         jenis_pertemuan: row.jenis_pertemuan || 'luring',
+        petugas_zoom: row.petugas_zoom || '',
+        moderator: row.moderator || '',
+        penguji_ids: row.penguji_ids || [],
+        pintang_sps: row.pintang_sps || '',
       });
     } else {
       setForm({
@@ -784,6 +888,7 @@ export default function JadwalPageAdmin() {
         mulai_jadwal: toDatetimeLocal(row.mulai_jadwal),
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
         jenis_pertemuan: row.jenis_pertemuan || 'luring',
+        petugas_zoom: row.petugas_zoom || '',
       });
     }
     setModalOpen(true);
@@ -915,14 +1020,35 @@ export default function JadwalPageAdmin() {
         if (formData.dosen_id === '' || formData.dosen_id === null) {
           formData.dosen_id = null;
         }
+        // Convert numeric fields
+        if (formData.paralel === '') formData.paralel = null;
+        else if (formData.paralel)
+          formData.paralel = parseInt(formData.paralel);
+        if (formData.real_perkuliahan === '') formData.real_perkuliahan = null;
+        else if (formData.real_perkuliahan)
+          formData.real_perkuliahan = parseInt(formData.real_perkuliahan);
+        if (formData.moderator === '') formData.moderator = null;
+        if (formData.petugas_zoom === '') formData.petugas_zoom = null;
+        if (formData.pintang_sps === '') formData.pintang_sps = null;
+        // Stringify JSONB arrays
+        if (formData.dosen_ids)
+          formData.dosen_ids = JSON.stringify(formData.dosen_ids);
+        if (formData.penguji_ids)
+          formData.penguji_ids = JSON.stringify(formData.penguji_ids);
       } else if (modalType === 'karya_akhir' || modalType === 'lain_lain') {
         if (formData.nama_ruangan === '' || formData.nama_ruangan === null) {
           formData.nama_ruangan = null;
         }
+        if (formData.petugas_zoom === '') formData.petugas_zoom = null;
       }
 
-      if (modalType === 'karya_akhir' && formData.dosen_ids) {
-        formData.dosen_ids = JSON.stringify(formData.dosen_ids);
+      if (modalType === 'karya_akhir') {
+        if (formData.dosen_ids)
+          formData.dosen_ids = JSON.stringify(formData.dosen_ids);
+        if (formData.penguji_ids)
+          formData.penguji_ids = JSON.stringify(formData.penguji_ids);
+        if (formData.moderator === '') formData.moderator = null;
+        if (formData.pintang_sps === '') formData.pintang_sps = null;
       }
 
       // 🔐 Tambahkan info user yang membuat/mengedit
@@ -1006,6 +1132,54 @@ export default function JadwalPageAdmin() {
       fetchAllData();
     } catch (err) {
       console.error('Error deleting:', err);
+      alert(`Gagal menghapus: ${err.message}`);
+    }
+  };
+
+  // Bulk delete handler
+  const handleBulkDelete = async (ids, jenis) => {
+    if (!ids.length) return;
+    if (
+      !confirm(
+        `Yakin ingin menghapus ${ids.length} data jadwal yang dipilih? Proses ini tidak bisa dibatalkan.`
+      )
+    )
+      return;
+
+    try {
+      const tableMap = {
+        perkuliahan: 'jadwal_perkuliahan',
+        karya_akhir: 'jadwal_karya_akhir',
+        lain_lain: 'jadwal_lain_lain',
+      };
+
+      // Batch delete 200 IDs per request to avoid query size limits
+      const BATCH_SIZE = 200;
+      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const batch = ids.slice(i, i + BATCH_SIZE);
+        const { error } = await supabase
+          .from(tableMap[jenis])
+          .delete()
+          .in('id', batch);
+        if (error) throw error;
+      }
+
+      const tableLabels = {
+        perkuliahan: 'Perkuliahan',
+        karya_akhir: 'Karya Akhir',
+        lain_lain: 'Lain-lain',
+      };
+      addNotification({
+        type: 'hapus',
+        tag: 'HAPUS',
+        title: 'Jadwal Dihapus (Bulk)',
+        description: `${tableLabels[jenis]}: ${ids.length} data jadwal telah dihapus.`,
+      });
+
+      alert(`${ids.length} data berhasil dihapus!`);
+      fetchAllData();
+    } catch (err) {
+      console.error('Error bulk deleting:', err);
       alert(`Gagal menghapus: ${err.message}`);
     }
   };
@@ -1181,19 +1355,54 @@ export default function JadwalPageAdmin() {
             }
             required
           />
+          <InputField
+            label="Paralel"
+            value={form.paralel || ''}
+            onChange={(v) => handleChange('paralel', v)}
+            placeholder="1, 2, 3..."
+            type="number"
+          />
+          <InputField
+            label="Real Perkuliahan"
+            value={form.real_perkuliahan || ''}
+            onChange={(v) => handleChange('real_perkuliahan', v)}
+            placeholder="Jumlah pertemuan yang sudah terlaksana"
+            type="number"
+          />
           <SearchableSelect
-            label="Dosen"
+            label="Dosen Utama"
             value={form.dosen_id}
             onChange={(v) => handleChange('dosen_id', v)}
             options={options.dosen}
             displayKey="nama_dosen"
+          />
+          <MultiDosenSelect
+            label="Dosen Tambahan (Dosen 2, 3, 4)"
+            values={form.dosen_ids || []}
+            onChange={(v) => handleChange('dosen_ids', v)}
+            options={options.dosen}
+            displayKey="nama_dosen"
+            maxSelections={3}
+          />
+          <InputField
+            label="Moderator"
+            value={form.moderator || ''}
+            onChange={(v) => handleChange('moderator', v)}
+            placeholder="Nama moderator"
+          />
+          <MultiDosenSelect
+            label="Penguji"
+            values={form.penguji_ids || []}
+            onChange={(v) => handleChange('penguji_ids', v)}
+            options={options.dosen}
+            displayKey="nama_dosen"
+            maxSelections={2}
           />
           <SelectField
             label="Jenis Pertemuan"
             value={form.jenis_pertemuan || 'luring'}
             onChange={(v) => {
               handleChange('jenis_pertemuan', v);
-              // Clear ruangan jika pilih daring
               if (v === 'daring') {
                 handleChange('ruangan_id', '');
               }
@@ -1213,7 +1422,14 @@ export default function JadwalPageAdmin() {
             displayKey="nama_ruangan"
             required={form.jenis_pertemuan !== 'daring'}
           />
-          {form.jenis_pertemuan === 'hybrid' && (
+          <InputField
+            label="Petugas Zoom"
+            value={form.petugas_zoom || ''}
+            onChange={(v) => handleChange('petugas_zoom', v)}
+            placeholder="Nama petugas/operator Zoom"
+          />
+          {(form.jenis_pertemuan === 'hybrid' ||
+            form.jenis_pertemuan === 'daring') && (
             <>
               <InputField
                 label="Zoom ID"
@@ -1229,6 +1445,12 @@ export default function JadwalPageAdmin() {
               />
             </>
           )}
+          <InputField
+            label="Pintang / SPs"
+            value={form.pintang_sps || ''}
+            onChange={(v) => handleChange('pintang_sps', v)}
+            placeholder="Info Pembimbing Tamu / SPs"
+          />
           <InputField
             label="Catatan / Permintaan"
             value={form.note || ''}
@@ -1256,19 +1478,32 @@ export default function JadwalPageAdmin() {
             required
           />
           <MultiDosenSelect
-            label="Dosen Penguji"
+            label="Dosen Pembimbing"
             values={form.dosen_ids || []}
             onChange={(v) => handleChange('dosen_ids', v)}
             options={options.dosen}
             displayKey="nama_dosen"
             maxSelections={8}
           />
+          <MultiDosenSelect
+            label="Penguji"
+            values={form.penguji_ids || []}
+            onChange={(v) => handleChange('penguji_ids', v)}
+            options={options.dosen}
+            displayKey="nama_dosen"
+            maxSelections={2}
+          />
+          <InputField
+            label="Moderator"
+            value={form.moderator || ''}
+            onChange={(v) => handleChange('moderator', v)}
+            placeholder="Nama moderator sidang"
+          />
           <SelectField
             label="Jenis Pertemuan"
             value={form.jenis_pertemuan || 'luring'}
             onChange={(v) => {
               handleChange('jenis_pertemuan', v);
-              // Clear ruangan jika pilih daring
               if (v === 'daring') {
                 handleChange('nama_ruangan', '');
               }
@@ -1288,7 +1523,14 @@ export default function JadwalPageAdmin() {
             displayKey="nama_ruangan"
             required={form.jenis_pertemuan !== 'daring'}
           />
-          {form.jenis_pertemuan === 'hybrid' && (
+          <InputField
+            label="Petugas Zoom"
+            value={form.petugas_zoom || ''}
+            onChange={(v) => handleChange('petugas_zoom', v)}
+            placeholder="Nama petugas/operator Zoom"
+          />
+          {(form.jenis_pertemuan === 'hybrid' ||
+            form.jenis_pertemuan === 'daring') && (
             <>
               <InputField
                 label="Zoom ID"
@@ -1304,6 +1546,12 @@ export default function JadwalPageAdmin() {
               />
             </>
           )}
+          <InputField
+            label="Pintang / SPs"
+            value={form.pintang_sps || ''}
+            onChange={(v) => handleChange('pintang_sps', v)}
+            placeholder="Info Pembimbing Tamu / SPs"
+          />
           <InputField
             label="Catatan / Permintaan"
             value={form.note || ''}
@@ -1332,7 +1580,6 @@ export default function JadwalPageAdmin() {
             value={form.jenis_pertemuan || 'luring'}
             onChange={(v) => {
               handleChange('jenis_pertemuan', v);
-              // Clear ruangan jika pilih daring
               if (v === 'daring') {
                 handleChange('nama_ruangan', '');
               }
@@ -1352,7 +1599,14 @@ export default function JadwalPageAdmin() {
             displayKey="nama_ruangan"
             required={form.jenis_pertemuan !== 'daring'}
           />
-          {form.jenis_pertemuan === 'hybrid' && (
+          <InputField
+            label="Petugas Zoom"
+            value={form.petugas_zoom || ''}
+            onChange={(v) => handleChange('petugas_zoom', v)}
+            placeholder="Nama petugas/operator Zoom"
+          />
+          {(form.jenis_pertemuan === 'hybrid' ||
+            form.jenis_pertemuan === 'daring') && (
             <>
               <InputField
                 label="Zoom ID"
@@ -1449,6 +1703,7 @@ export default function JadwalPageAdmin() {
               jenis="perkuliahan"
               onEdit={openEditModal}
               onDelete={handleDelete}
+              onBulkDelete={handleBulkDelete}
             />
           )}
           {activeTab === 'karya_akhir' && (
@@ -1459,6 +1714,7 @@ export default function JadwalPageAdmin() {
               jenis="karya_akhir"
               onEdit={openEditModal}
               onDelete={handleDelete}
+              onBulkDelete={handleBulkDelete}
             />
           )}
           {activeTab === 'lain_lain' && (
@@ -1469,6 +1725,7 @@ export default function JadwalPageAdmin() {
               jenis="lain_lain"
               onEdit={openEditModal}
               onDelete={handleDelete}
+              onBulkDelete={handleBulkDelete}
             />
           )}
         </div>
@@ -1516,6 +1773,16 @@ export default function JadwalPageAdmin() {
       )}
 
       {/* Download Modal */}
+      {/* Import Modal */}
+      <ImportJadwal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        jenis={importJenisTab}
+        options={options}
+        userName={userRole?.name || 'Unknown'}
+        onSuccess={fetchAllData}
+      />
+
       {downloadModalOpen && (
         <Modal
           onClose={() => {
@@ -1627,10 +1894,19 @@ export default function JadwalPageAdmin() {
 // ================================================================================
 // TAB COMPONENT
 // ================================================================================
-function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
+function JadwalTab({
+  data,
+  loading,
+  error,
+  jenis,
+  onEdit,
+  onDelete,
+  onBulkDelete,
+}) {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
 
   // Filter berdasarkan search saja (tanpa filter tanggal)
   const filteredData = useMemo(() => {
@@ -1753,12 +2029,35 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
             + Lain-lain
           </button>
         )}
+        {/* Import CSV/Excel */}
+        <button
+          onClick={() =>
+            window.openImportModal ? window.openImportModal(jenis) : null
+          }
+          className="px-4 py-2.5 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors"
+          type="button"
+        >
+          <svg
+            className="w-4 h-4 inline-block mr-1"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+            />
+          </svg>
+          Import
+        </button>
         {/* Download paling kanan, setelah CRUD - download sesuai tab aktif */}
         <button
           onClick={() =>
             window.openDownloadModal ? window.openDownloadModal(jenis) : null
           }
-          className="px-4 py-2.5 text-sm font-medium text-white bg-yellow-600 hover:bg--700 rounded-lg transition-colors"
+          className="px-4 py-2.5 text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 rounded-lg transition-colors"
         >
           <svg
             className="w-4 h-4 inline-block mr-1"
@@ -1776,6 +2075,41 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
           Download
         </button>
       </div>
+
+      {/* Bulk delete bar */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 flex-wrap">
+          <span className="text-sm font-medium text-red-700">
+            {selectedIds.length} dari {filteredData.length} data dipilih
+          </span>
+          {selectedIds.length < filteredData.length && (
+            <button
+              onClick={() => setSelectedIds(filteredData.map((r) => r.id))}
+              className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition-colors"
+              type="button"
+            >
+              ✅ Pilih Semua ({filteredData.length} data)
+            </button>
+          )}
+          <button
+            onClick={() => {
+              onBulkDelete(selectedIds, jenis);
+              setSelectedIds([]);
+            }}
+            className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+            type="button"
+          >
+            🗑️ Hapus {selectedIds.length} Data
+          </button>
+          <button
+            onClick={() => setSelectedIds([])}
+            className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+            type="button"
+          >
+            Batal Pilih
+          </button>
+        </div>
+      )}
 
       {/* Info hasil search */}
       {searchQuery && (
@@ -1799,6 +2133,31 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                  <th className="py-3 px-2 border border-slate-300 w-10">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded cursor-pointer accent-white"
+                      checked={
+                        paginatedData.length > 0 &&
+                        paginatedData.every((r) => selectedIds.includes(r.id))
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds((prev) => [
+                            ...new Set([
+                              ...prev,
+                              ...paginatedData.map((r) => r.id),
+                            ]),
+                          ]);
+                        } else {
+                          const pageIds = paginatedData.map((r) => r.id);
+                          setSelectedIds((prev) =>
+                            prev.filter((id) => !pageIds.includes(id))
+                          );
+                        }
+                      }}
+                    />
+                  </th>
                   {jenis === 'perkuliahan' && (
                     <>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
@@ -1808,13 +2167,16 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                         Waktu
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
-                        Agenda
+                        Mata Kuliah
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Tempat
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Jenis
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Dosen
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Dibuat/Diedit
@@ -1836,7 +2198,10 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                         Agenda
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
-                        Dosen Penguji
+                        Dosen Pembimbing
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Penguji / Moderator
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Ruangan
@@ -1883,8 +2248,24 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                 {paginatedData.map((row, idx) => (
                   <tr
                     key={idx}
-                    className="border-b border-slate-200 hover:bg-blue-100 transition-colors"
+                    className={`border-b border-slate-200 transition-colors ${selectedIds.includes(row.id) ? 'bg-red-50' : 'hover:bg-blue-100'}`}
                   >
+                    <td className="py-3 px-2 border border-slate-200 text-center">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded cursor-pointer accent-blue-600"
+                        checked={selectedIds.includes(row.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedIds((prev) => [...prev, row.id]);
+                          } else {
+                            setSelectedIds((prev) =>
+                              prev.filter((id) => id !== row.id)
+                            );
+                          }
+                        }}
+                      />
+                    </td>
                     {jenis === 'perkuliahan' && (
                       <>
                         <td className="py-3 px-4 border border-slate-200">
@@ -1907,9 +2288,11 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                           <div className="font-semibold text-slate-900">
                             {row.nama_matkul || row.agenda_display}
                           </div>
-                          <div className="text-xs text-slate-600">
-                            {row.nama_dosen || row.keterangan}
-                          </div>
+                          {row.paralel && row.paralel !== '-' && (
+                            <div className="text-xs text-slate-500">
+                              Paralel: {row.paralel}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="text-slate-800">
@@ -1931,16 +2314,61 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                             {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
                             {!row.jenis_pertemuan && '🏢 Luring'}
                           </span>
-                          {row.jenis_pertemuan === 'hybrid' && row.zoom_id && (
-                            <div className="mt-1 text-xs text-slate-600">
-                              <div className="font-semibold">
-                                Zoom ID: {row.zoom_id}
+                          {(row.jenis_pertemuan === 'hybrid' ||
+                            row.jenis_pertemuan === 'daring') &&
+                            row.zoom_id && (
+                              <div className="mt-1 text-xs text-slate-600">
+                                <div className="font-semibold">
+                                  Zoom ID: {row.zoom_id}
+                                </div>
+                                {row.zoom_password && (
+                                  <div>Pass: {row.zoom_password}</div>
+                                )}
                               </div>
-                              {row.zoom_password && (
-                                <div>Pass: {row.zoom_password}</div>
-                              )}
+                            )}
+                          {row.petugas_zoom && row.petugas_zoom !== '-' && (
+                            <div className="mt-1 text-xs text-slate-500">
+                              Petugas: {row.petugas_zoom}
                             </div>
                           )}
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <div className="max-w-[200px]">
+                            <div className="text-xs font-medium text-slate-800">
+                              {row.nama_dosen}
+                            </div>
+                            {row.dosen_tambahan_names &&
+                              row.dosen_tambahan_names.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {row.dosen_tambahan_names.map((name, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-indigo-50 text-indigo-600 rounded-full"
+                                    >
+                                      D{idx + 2}. {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            {row.moderator && row.moderator !== '-' && (
+                              <div className="text-[10px] text-slate-500 mt-1">
+                                Mod: {row.moderator}
+                              </div>
+                            )}
+                            {row.penguji_names &&
+                              row.penguji_names.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {row.penguji_names.map((name, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-orange-50 text-orange-600 rounded-full"
+                                    >
+                                      P{idx + 1}. {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                          </div>
                         </td>
                       </>
                     )}
@@ -1986,6 +2414,35 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                           </div>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
+                          <div className="max-w-[180px]">
+                            {row.penguji_names &&
+                              row.penguji_names.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {row.penguji_names.map((name, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-orange-50 text-orange-600 rounded-full"
+                                    >
+                                      P{idx + 1}. {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            {row.moderator && row.moderator !== '-' && (
+                              <div className="text-[10px] text-slate-500 mt-1">
+                                Mod: {row.moderator}
+                              </div>
+                            )}
+                            {(!row.penguji_names ||
+                              row.penguji_names.length === 0) &&
+                              (!row.moderator || row.moderator === '-') && (
+                                <span className="text-slate-400 text-xs">
+                                  -
+                                </span>
+                              )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
                           <span className="text-slate-800">
                             {row.nama_ruangan}
                           </span>
@@ -2005,14 +2462,21 @@ function JadwalTab({ data, loading, error, jenis, onEdit, onDelete }) {
                             {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
                             {!row.jenis_pertemuan && '🏢 Luring'}
                           </span>
-                          {row.jenis_pertemuan === 'hybrid' && row.zoom_id && (
-                            <div className="mt-1 text-xs text-slate-600">
-                              <div className="font-semibold">
-                                Zoom ID: {row.zoom_id}
+                          {(row.jenis_pertemuan === 'hybrid' ||
+                            row.jenis_pertemuan === 'daring') &&
+                            row.zoom_id && (
+                              <div className="mt-1 text-xs text-slate-600">
+                                <div className="font-semibold">
+                                  Zoom ID: {row.zoom_id}
+                                </div>
+                                {row.zoom_password && (
+                                  <div>Pass: {row.zoom_password}</div>
+                                )}
                               </div>
-                              {row.zoom_password && (
-                                <div>Pass: {row.zoom_password}</div>
-                              )}
+                            )}
+                          {row.petugas_zoom && row.petugas_zoom !== '-' && (
+                            <div className="mt-1 text-xs text-slate-500">
+                              Petugas: {row.petugas_zoom}
                             </div>
                           )}
                         </td>
