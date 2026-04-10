@@ -49,7 +49,7 @@ export default function UsersPage() {
     const { data, error } = await supabase
       .from('dosen')
       .select(
-        `id, nama_dosen, nip, email, telepon, auth_id, roles_id, aktif_nonaktif, foto_url, roles:roles_id(id, role)`
+        `id, nama_dosen, id_dosen, email, telepon, auth_id, roles_id, aktif_nonaktif, foto_url, roles:roles_id(id, role)`
       )
       .not('roles_id', 'is', null) // Hanya yang sudah punya role
       .order('id', { ascending: true });
@@ -618,7 +618,7 @@ export default function UsersPage() {
                   </th>
                   {activeTab === 'dosen' && (
                     <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      NIP
+                      ID Dosen
                     </th>
                   )}
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -681,7 +681,7 @@ export default function UsersPage() {
                     </td>
                     {activeTab === 'dosen' && (
                       <td className="px-6 py-4 text-sm text-slate-600">
-                        {user.nip || '-'}
+                        {user.id_dosen || '-'}
                       </td>
                     )}
                     <td className="px-6 py-4 text-sm text-slate-600">
@@ -858,7 +858,7 @@ export default function UsersPage() {
                           masterDosenList.map((dosen) => (
                             <option key={dosen.id} value={dosen.id}>
                               {dosen.nama_dosen}
-                              {dosen.nip ? ` (${dosen.nip})` : ''}
+                              {dosen.id_dosen ? ` (${dosen.id_dosen})` : ''}
                             </option>
                           ))
                         )}
@@ -901,13 +901,13 @@ export default function UsersPage() {
                         </p>
                         {masterDosenList.find(
                           (d) => d.id === parseInt(form.dosen_id)
-                        )?.nip && (
+                        )?.id_dosen && (
                           <p>
-                            <strong>NIP:</strong>{' '}
+                            <strong>ID Dosen:</strong>{' '}
                             {
                               masterDosenList.find(
                                 (d) => d.id === parseInt(form.dosen_id)
-                              )?.nip
+                              )?.id_dosen
                             }
                           </p>
                         )}

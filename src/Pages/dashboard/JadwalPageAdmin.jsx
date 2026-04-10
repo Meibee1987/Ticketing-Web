@@ -27,12 +27,13 @@ import ImportJadwal from '../../components/ImportJadwal';
 // ================================================================================
 function MultiDosenSelect({
   label,
-  values = [],
+  values: valuesProp = [],
   onChange,
   options = [],
   displayKey,
   maxSelections = 8,
 }) {
+  const values = Array.isArray(valuesProp) ? valuesProp : [];
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = React.useRef(null);
@@ -242,12 +243,18 @@ const formatTimestampShort = (ts) => {
 };
 
 // Helper untuk format timestamp ke input datetime-local (YYYY-MM-DDTHH:MM)
+// Gunakan local timezone agar jam yang tampil sesuai dengan jam yang disimpan
 const toDatetimeLocal = (ts) => {
   if (!ts || ts === '-') return '';
   try {
     const date = new Date(ts);
     if (isNaN(date.getTime())) return '';
-    return date.toISOString().slice(0, 16);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
   } catch {
     return '';
   }
@@ -511,7 +518,7 @@ export default function JadwalPageAdmin() {
         await Promise.all([
           supabase
             .from('dosen')
-            .select('id, nama_dosen, aktif_nonaktif')
+            .select('id, nama_dosen, id_dosen, aktif_nonaktif')
             .eq('aktif_nonaktif', true),
           supabase
             .from('ruangan')
@@ -566,8 +573,26 @@ export default function JadwalPageAdmin() {
         real_perkuliahan: r.real_perkuliahan || '-',
         petugas_zoom: r.petugas_zoom || '-',
         moderator: r.moderator || '-',
-        dosen_ids: r.dosen_ids || [],
-        penguji_ids: r.penguji_ids || [],
+        dosen_ids: (() => {
+          if (!r.dosen_ids) return [];
+          try {
+            return typeof r.dosen_ids === 'string'
+              ? JSON.parse(r.dosen_ids)
+              : r.dosen_ids;
+          } catch {
+            return [];
+          }
+        })(),
+        penguji_ids: (() => {
+          if (!r.penguji_ids) return [];
+          try {
+            return typeof r.penguji_ids === 'string'
+              ? JSON.parse(r.penguji_ids)
+              : r.penguji_ids;
+          } catch {
+            return [];
+          }
+        })(),
         pintang_sps: r.pintang_sps || '-',
         // Map dosen_ids to names for display
         dosen_tambahan_names: (() => {
@@ -1355,13 +1380,13 @@ export default function JadwalPageAdmin() {
             }
             required
           />
-          <InputField
+          {/* <InputField
             label="Paralel"
             value={form.paralel || ''}
             onChange={(v) => handleChange('paralel', v)}
             placeholder="1, 2, 3..."
             type="number"
-          />
+          /> */}
           <InputField
             label="Real Perkuliahan"
             value={form.real_perkuliahan || ''}
@@ -1377,27 +1402,27 @@ export default function JadwalPageAdmin() {
             displayKey="nama_dosen"
           />
           <MultiDosenSelect
-            label="Dosen Tambahan (Dosen 2, 3, 4)"
+            label="Dosen Tambahan (Dosen 2)"
             values={form.dosen_ids || []}
             onChange={(v) => handleChange('dosen_ids', v)}
             options={options.dosen}
             displayKey="nama_dosen"
-            maxSelections={3}
+            maxSelections={2}
           />
-          <InputField
+          {/* <InputField
             label="Moderator"
             value={form.moderator || ''}
             onChange={(v) => handleChange('moderator', v)}
             placeholder="Nama moderator"
-          />
-          <MultiDosenSelect
+          /> */}
+          {/* <MultiDosenSelect
             label="Penguji"
             values={form.penguji_ids || []}
             onChange={(v) => handleChange('penguji_ids', v)}
             options={options.dosen}
             displayKey="nama_dosen"
             maxSelections={2}
-          />
+          /> */}
           <SelectField
             label="Jenis Pertemuan"
             value={form.jenis_pertemuan || 'luring'}
@@ -1422,12 +1447,12 @@ export default function JadwalPageAdmin() {
             displayKey="nama_ruangan"
             required={form.jenis_pertemuan !== 'daring'}
           />
-          <InputField
+          {/* <InputField
             label="Petugas Zoom"
             value={form.petugas_zoom || ''}
             onChange={(v) => handleChange('petugas_zoom', v)}
             placeholder="Nama petugas/operator Zoom"
-          />
+          /> */}
           {(form.jenis_pertemuan === 'hybrid' ||
             form.jenis_pertemuan === 'daring') && (
             <>
@@ -1445,12 +1470,12 @@ export default function JadwalPageAdmin() {
               />
             </>
           )}
-          <InputField
+          {/* <InputField
             label="Pintang / SPs"
             value={form.pintang_sps || ''}
             onChange={(v) => handleChange('pintang_sps', v)}
             placeholder="Info Pembimbing Tamu / SPs"
-          />
+          /> */}
           <InputField
             label="Catatan / Permintaan"
             value={form.note || ''}
@@ -1483,7 +1508,7 @@ export default function JadwalPageAdmin() {
             onChange={(v) => handleChange('dosen_ids', v)}
             options={options.dosen}
             displayKey="nama_dosen"
-            maxSelections={8}
+            maxSelections={4}
           />
           <MultiDosenSelect
             label="Penguji"
@@ -1491,7 +1516,7 @@ export default function JadwalPageAdmin() {
             onChange={(v) => handleChange('penguji_ids', v)}
             options={options.dosen}
             displayKey="nama_dosen"
-            maxSelections={2}
+            maxSelections={4}
           />
           <InputField
             label="Moderator"
@@ -1523,12 +1548,12 @@ export default function JadwalPageAdmin() {
             displayKey="nama_ruangan"
             required={form.jenis_pertemuan !== 'daring'}
           />
-          <InputField
+          {/* <InputField
             label="Petugas Zoom"
             value={form.petugas_zoom || ''}
             onChange={(v) => handleChange('petugas_zoom', v)}
             placeholder="Nama petugas/operator Zoom"
-          />
+          /> */}
           {(form.jenis_pertemuan === 'hybrid' ||
             form.jenis_pertemuan === 'daring') && (
             <>
@@ -1546,12 +1571,12 @@ export default function JadwalPageAdmin() {
               />
             </>
           )}
-          <InputField
+          {/* <InputField
             label="Pintang / SPs"
             value={form.pintang_sps || ''}
             onChange={(v) => handleChange('pintang_sps', v)}
             placeholder="Info Pembimbing Tamu / SPs"
-          />
+          /> */}
           <InputField
             label="Catatan / Permintaan"
             value={form.note || ''}
@@ -1599,12 +1624,12 @@ export default function JadwalPageAdmin() {
             displayKey="nama_ruangan"
             required={form.jenis_pertemuan !== 'daring'}
           />
-          <InputField
+          {/* <InputField
             label="Petugas Zoom"
             value={form.petugas_zoom || ''}
             onChange={(v) => handleChange('petugas_zoom', v)}
             placeholder="Nama petugas/operator Zoom"
-          />
+          /> */}
           {(form.jenis_pertemuan === 'hybrid' ||
             form.jenis_pertemuan === 'daring') && (
             <>
@@ -2562,7 +2587,10 @@ function JadwalTab({
                             </div>
                           </div>
                         ) : null}
-                        {row.updated_by && row.updated_by !== '-' ? (
+                        {row.updated_by &&
+                        row.updated_by !== '-' &&
+                        row.updated_at &&
+                        row.updated_at !== row.created_at ? (
                           <div>
                             <div className="flex items-center gap-1">
                               <span className="text-blue-500 text-xs">✏️</span>
@@ -2571,16 +2599,17 @@ function JadwalTab({
                               </span>
                             </div>
                             <div className="text-[10px] text-slate-400 ml-4">
-                              {new Date(
-                                row.updated_at || row.last_modified
-                              ).toLocaleString('id-ID', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                hour12: false,
-                              })}
+                              {new Date(row.updated_at).toLocaleString(
+                                'id-ID',
+                                {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false,
+                                }
+                              )}
                             </div>
                           </div>
                         ) : null}

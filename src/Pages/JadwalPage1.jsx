@@ -148,7 +148,7 @@ function useJadwal() {
           { data: ruanganData },
           { data: angkatanData },
         ] = await Promise.all([
-          supabase.from('dosen').select('id, nama_dosen'),
+          supabase.from('dosen').select('id, nama_dosen, id_dosen'),
           supabase.from('ruangan').select('id, nama_ruangan'),
           supabase.from('angkatan').select('id, nama_angkatan'),
         ]);
@@ -307,7 +307,7 @@ function JadwalTable() {
           { data: angkatanData },
           { data: sampleJadwal },
         ] = await Promise.all([
-          supabase.from('dosen').select('id, nama_dosen'),
+          supabase.from('dosen').select('id, nama_dosen, id_dosen'),
           supabase.from('ruangan').select('id, nama_ruangan'),
           supabase.from('angkatan').select('id, nama_angkatan'),
           supabase.from('jadwal_perkuliahan').select('*').limit(1),

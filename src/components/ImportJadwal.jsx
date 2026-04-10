@@ -66,6 +66,8 @@ const PERKULIAHAN_MAP = {
   'dosen 1': '_lookup_dosen1',
   dosen1: '_lookup_dosen1',
   dosen: '_lookup_dosen1',
+  id_dosen: '_lookup_dosen1',
+  'id dosen': '_lookup_dosen1',
   'dosen 2': '_lookup_dosen_extra',
   dosen2: '_lookup_dosen_extra',
   'dosen 3': '_lookup_dosen_extra',
@@ -426,8 +428,10 @@ export default function ImportJadwal({
   // ──────────── Build lookup maps ────────────
   const buildLookups = useCallback(() => {
     const dosenByName = {};
+    const dosenByIdDosen = {};
     (options.dosen || []).forEach((d) => {
       dosenByName[d.nama_dosen.toLowerCase().trim()] = d.id;
+      if (d.id_dosen) dosenByIdDosen[d.id_dosen.toLowerCase().trim()] = d.id;
     });
     const ruanganByName = {};
     // Gunakan allRuangan (semua, tanpa filter aktif) agar ruangan non-aktif tetap bisa di-import
@@ -454,6 +458,7 @@ export default function ImportJadwal({
     });
     return {
       dosenByName,
+      dosenByIdDosen,
       ruanganByName,
       matkulByName,
       matkulByKode,
@@ -475,7 +480,15 @@ export default function ImportJadwal({
     }
     return null;
   };
-  const findDosen = (name, dosenByName) => fuzzyLookup(name, dosenByName);
+  const findDosen = (name, dosenByName, dosenByIdDosen) => {
+    if (!name) return null;
+    const val = String(name).toLowerCase().trim();
+    if (!val || val === '-') return null;
+    // Try id_dosen match first (most reliable)
+    if (dosenByIdDosen && dosenByIdDosen[val]) return dosenByIdDosen[val];
+    // Fallback to name lookup
+    return fuzzyLookup(name, dosenByName);
+  };
 
   // ──────────── STEP 3: Import to DB ────────────
   const handleImport = async () => {
@@ -667,22 +680,38 @@ export default function ImportJadwal({
               break;
             }
             case '_lookup_dosen1': {
-              const did = findDosen(val, lookups.dosenByName);
+              const did = findDosen(
+                val,
+                lookups.dosenByName,
+                lookups.dosenByIdDosen
+              );
               record.dosen_id = did || null;
               break;
             }
             case '_lookup_dosen_extra': {
-              const did = findDosen(val, lookups.dosenByName);
+              const did = findDosen(
+                val,
+                lookups.dosenByName,
+                lookups.dosenByIdDosen
+              );
               if (did) dosenExtraIds.push(did);
               break;
             }
             case '_lookup_dosen_ka': {
-              const did = findDosen(val, lookups.dosenByName);
+              const did = findDosen(
+                val,
+                lookups.dosenByName,
+                lookups.dosenByIdDosen
+              );
               if (did) dosenKaIds.push(did);
               break;
             }
             case '_lookup_penguji': {
-              const did = findDosen(val, lookups.dosenByName);
+              const did = findDosen(
+                val,
+                lookups.dosenByName,
+                lookups.dosenByIdDosen
+              );
               if (did) pengujiIds.push(did);
               break;
             }
