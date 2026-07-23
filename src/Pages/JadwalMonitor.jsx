@@ -1,5 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
-import { CalendarX2, Clock3, ImageOff } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  MonitorFooter,
+  MonitorHeader,
+  MonitorImageSlide,
+  MonitorScheduleCard,
+  MonitorScheduleEmptyState,
+  MonitorScheduleErrorState,
+  MonitorScheduleSkeleton,
+} from '../components/monitor/MonitorScheduleUI';
 import { supabase } from '../supabaseClient';
 import { assertSupabaseResults } from '../utils/supabaseResults';
 
@@ -13,11 +21,9 @@ export default function JadwalMonitor() {
   const [slideImages, setSlideImages] = useState([]);
   const [error, setError] = useState('');
 
-  // 🎯 KONFIGURASI - Ubah sesuai kebutuhan
-  const ITEMS_PER_PAGE = 5; // Maksimal 6 data per halaman
-  const AUTO_SLIDE_INTERVAL = 10000; // 7 detik per slide
+  const ITEMS_PER_PAGE = 5;
+  const AUTO_SLIDE_INTERVAL = 10000;
 
-  // 🖼️ Load gambar dari localStorage (dikelola via halaman MonitorSettings)
   useEffect(() => {
     const loadSlides = () => {
       try {
@@ -32,14 +38,12 @@ export default function JadwalMonitor() {
 
     loadSlides();
 
-    // Refresh gambar setiap 5 menit (sinkron dengan refresh jadwal)
     const interval = setInterval(loadSlides, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const SLIDE_IMAGES = slideImages; // Gunakan gambar dari localStorage
+  const SLIDE_IMAGES = slideImages;
 
-  // Update waktu setiap detik
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -47,12 +51,11 @@ export default function JadwalMonitor() {
     return () => clearInterval(timer);
   }, []);
 
-  // 🎯 AUTO-SLIDE: Pindah halaman otomatis setiap 7 detik
   useEffect(() => {
     const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
     const totalPages = totalDataPages + SLIDE_IMAGES.length;
 
-    if (totalPages <= 1) return; // Tidak perlu auto-slide jika hanya 1 halaman
+    if (totalPages <= 1) return;
 
     const slideTimer = setInterval(() => {
       setCurrentPage((prev) => (prev + 1) % totalPages);
@@ -66,7 +69,6 @@ export default function JadwalMonitor() {
       setLoading(true);
       setError('');
 
-      // Fetch semua data, filter tanggal dilakukan client-side (sama seperti JadwalPage)
       const [
         perkuliahanRes,
         karyaAkhirRes,
@@ -79,19 +81,16 @@ export default function JadwalMonitor() {
           .select('*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)')
           .order('mulai_jadwal', { ascending: true }),
 
-        // Jadwal Karya Akhir
         supabase
           .from('jadwal_karya_akhir')
           .select('*')
           .order('mulai_jadwal', { ascending: true }),
 
-        // Jadwal Lain-lain
         supabase
           .from('jadwal_lain_lain')
           .select('*')
           .order('mulai_jadwal', { ascending: true }),
 
-        // Reference data
         supabase.from('ruangan').select('id, nama_ruangan'),
         supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
       ]);
@@ -104,7 +103,6 @@ export default function JadwalMonitor() {
         ['Referensi agenda', agendaRes],
       ]);
 
-      // Create maps untuk reference data
       const ruanganMap = Object.fromEntries(
         (ruanganRes.data || []).map((r) => [r.id, r.nama_ruangan])
       );
@@ -112,10 +110,8 @@ export default function JadwalMonitor() {
         (agendaRes.data || []).map((a) => [a.id, a.agenda_karya_akhir])
       );
 
-      // Gabungkan dan format data menggunakan logika JadwalPage
       const allSchedules = [];
 
-      // Format Perkuliahan (sama dengan JadwalPage)
       if (perkuliahanRes.data) {
         perkuliahanRes.data.forEach((item) => {
           const merged = {
@@ -147,7 +143,6 @@ export default function JadwalMonitor() {
         });
       }
 
-      // Format Karya Akhir (sama dengan JadwalPage)
       if (karyaAkhirRes.data) {
         karyaAkhirRes.data.forEach((item) => {
           const merged = {
@@ -168,7 +163,6 @@ export default function JadwalMonitor() {
                 ? 'Daring (Online)'
                 : merged.display_ruangan || '-',
             dosen: merged.display_mahasiswa,
-
             status: getStatus(merged.mulai_jadwal, merged.akhir_jadwal),
             mulai: new Date(merged.mulai_jadwal),
             jenis_pertemuan: merged.jenis_pertemuan || 'luring',
@@ -176,7 +170,6 @@ export default function JadwalMonitor() {
         });
       }
 
-      // Format Lain-lain (sama dengan JadwalPage)
       if (lainLainRes.data) {
         lainLainRes.data.forEach((item) => {
           const merged = {
@@ -203,33 +196,26 @@ export default function JadwalMonitor() {
         });
       }
 
-      // Sort berdasarkan: 1) Jenis kegiatan, 2) Ruangan, 3) Waktu
       allSchedules.sort((a, b) => {
-        // 1. Urutan jenis kegiatan: perkuliahan -> karya_akhir -> lain_lain
         const typeOrder = { perkuliahan: 1, karya_akhir: 2, lain_lain: 3 };
         if (typeOrder[a.type] !== typeOrder[b.type]) {
           return typeOrder[a.type] - typeOrder[b.type];
         }
 
-        // 2. Urutan ruangan: Daring pertama, lalu alfabetis
         if (a.tempat !== b.tempat) {
-          // Daring selalu di atas
           if (a.tempat === 'Daring (Online)' && b.tempat !== 'Daring (Online)')
             return -1;
           if (b.tempat === 'Daring (Online)' && a.tempat !== 'Daring (Online)')
             return 1;
 
-          // Ruangan alfabetis
           return a.tempat.localeCompare(b.tempat, 'id', {
             sensitivity: 'base',
           });
         }
 
-        // 3. Urutan waktu dalam ruangan yang sama
         return a.mulai - b.mulai;
       });
 
-      // Filter client-side: hanya jadwal hari ini (compare tanggal lokal, sama seperti JadwalPage)
       const now = new Date();
       const todaySchedules = allSchedules.filter((item) => {
         return (
@@ -301,110 +287,12 @@ export default function JadwalMonitor() {
     };
   };
 
-  // Stats
   const totalJadwal = jadwalData.length;
-  const getTypeIconBg = (type) => {
-    switch (type) {
-      case 'perkuliahan':
-        return 'bg-blue-600';
-      case 'karya_akhir':
-        return 'bg-purple-600';
-      case 'lain_lain':
-        return 'bg-green-600';
-      default:
-        return 'bg-gray-600';
-    }
-  };
-
-  const getTypeBorderColor = (type) => {
-    switch (type) {
-      case 'perkuliahan':
-        return 'border-blue-500';
-      case 'karya_akhir':
-        return 'border-purple-500';
-      case 'lain_lain':
-        return 'border-green-500';
-      default:
-        return 'border-gray-400';
-    }
-  };
-
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'ongoing':
-        return {
-          bg: 'bg-blue-500',
-          text: 'text-white',
-          label: 'Berlangsung',
-        };
-      case 'upcoming':
-        return {
-          bg: 'bg-amber-500',
-          text: 'text-white',
-          label: 'Akan Datang',
-        };
-      case 'finished':
-        return {
-          bg: 'bg-emerald-500',
-          text: 'text-white',
-          label: 'Selesai',
-        };
-      default:
-        return { bg: 'bg-gray-400', text: 'text-white', label: '-', icon: '' };
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="monitor-page flex min-h-screen items-center justify-center overflow-hidden bg-primary-900">
-        {/* Floating patterns */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-20 -left-20 w-72 h-72 bg-white/5 rounded-full animate-pulse"></div>
-          <div className="absolute top-1/2 -right-16 w-56 h-56 bg-white/5 rounded-full animate-pulse delay-1000"></div>
-          <div className="absolute -bottom-10 left-1/3 w-40 h-40 bg-white/5 rounded-full animate-pulse delay-500"></div>
-        </div>
-        <div className="relative z-10 flex flex-col items-center gap-4">
-          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-          <div className="text-white text-xl font-medium">
-            Memuat jadwal hari ini...
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 🎯 PAGINATION LOGIC - All types combined, ordered: perkuliahan → karya_akhir → lain_lain
-  if (error) {
-    return (
-      <main className="min-h-screen bg-slate-100 px-4 flex items-center justify-center">
-        <section
-          className="w-full max-w-md rounded-xl border border-red-200 bg-white p-8 text-center shadow-sm"
-          role="alert"
-        >
-          <h1 className="text-xl font-bold text-slate-900">
-            Jadwal tidak dapat dimuat
-          </h1>
-          <p className="mt-3 text-sm text-slate-600">{error}</p>
-          <button
-            type="button"
-            onClick={fetchTodaySchedule}
-            className="mt-6 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            Coba Lagi
-          </button>
-        </section>
-      </main>
-    );
-  }
-
   const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
   const totalPages = totalDataPages + SLIDE_IMAGES.length;
-
-  // Determine if current page is showing image or data
   const isImageSlide = currentPage >= totalDataPages;
   const imageSlideIndex = currentPage - totalDataPages;
 
-  // Get current page data (only for data pages)
   let currentPageData = [];
   if (!isImageSlide) {
     const startIdx = currentPage * ITEMS_PER_PAGE;
@@ -412,594 +300,71 @@ export default function JadwalMonitor() {
   }
 
   const clock = formatClockTime();
+  const activeSlide = SLIDE_IMAGES[imageSlideIndex];
 
   return (
-    <div className="monitor-page relative flex min-h-screen flex-col overflow-x-hidden bg-slate-100">
-      {/* ═══════════════ HEADER ═══════════════ */}
-      <div className="monitor-header relative overflow-hidden bg-primary-800">
-        <div className="relative z-10 px-3 md:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-24 4xl:px-32 py-2 md:py-3 lg:py-4 3xl:py-6 4xl:py-8">
-          {/* ── Mobile Header (stacked, centered) ── */}
-          <div className="md:hidden flex flex-col items-center gap-1">
-            {/* Logo */}
-            <img
-              src="/logo_sb.png"
-              alt="Logo IPB University"
-              className="h-8 w-auto object-contain"
-            />
-            {/* Title */}
-            <h1 className="text-sm font-black text-white tracking-tight">
-              INFORMASI JADWAL
-            </h1>
-            {/* Date */}
-            <div className="bg-yellow-400/90 backdrop-blur-sm px-3 py-0.5 rounded-full border border-yellow-300/50">
-              <span className="text-blue-700 text-[10px] font-bold whitespace-nowrap">
-                {formatDateOnly()}
-              </span>
-            </div>
-          </div>
+    <div className="monitor-page flex min-h-screen flex-col overflow-x-hidden bg-background">
+      <MonitorHeader dateLabel={formatDateOnly()} clock={clock} />
 
-          {/* ── Desktop Header (single row) ── */}
-          <div className="hidden md:flex items-center justify-between gap-2">
-            {/* Left: Logo */}
-            <div className="flex-shrink-0">
-              <img
-                src="/logo_sb.png"
-                alt="Logo IPB University"
-                className="h-10 lg:h-12 xl:h-14 2xl:h-16 3xl:h-20 4xl:h-28 5xl:h-36 w-auto object-contain"
-              />
-            </div>
-
-            {/* Center: Title + Date */}
-            <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-              <h1 className="text-lg lg:text-2xl xl:text-3xl 2xl:text-4xl 3xl:text-5xl 4xl:text-7xl 5xl:text-9xl font-black text-white tracking-tight leading-tight text-center">
-                INFORMASI JADWAL
-              </h1>
-              <div className="mt-1 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 lg:px-6 3xl:px-8 4xl:px-12 py-1 lg:py-1.5 3xl:py-2 4xl:py-3 rounded-full border border-yellow-300/50">
-                <span className="text-blue-700 text-xs lg:text-sm 2xl:text-base 3xl:text-xl 4xl:text-3xl 5xl:text-4xl font-bold whitespace-nowrap">
-                  {formatDateOnly()}
-                </span>
-              </div>
-            </div>
-
-            {/* Right: Digital Clock */}
-            <div className="flex-shrink-0 bg-white/15 backdrop-blur-md rounded-xl px-3 lg:px-5 3xl:px-7 4xl:px-10 py-1.5 lg:py-2 3xl:py-3 4xl:py-5 border border-white/20">
-              <div className="flex items-center gap-1 3xl:gap-2 4xl:gap-3">
-                <Clock3
-                  className="text-yellow-300"
-                  size={20}
-                  aria-hidden="true"
-                />
-                <span className="text-white font-bold text-base lg:text-xl 2xl:text-2xl 3xl:text-4xl 4xl:text-6xl 5xl:text-7xl font-mono tracking-wider">
-                  {clock.hours}
-                </span>
-                <span className="text-yellow-300 font-bold text-base lg:text-xl 2xl:text-2xl 3xl:text-4xl 4xl:text-6xl 5xl:text-7xl animate-pulse">
-                  :
-                </span>
-                <span className="text-white font-bold text-base lg:text-xl 2xl:text-2xl 3xl:text-4xl 4xl:text-6xl 5xl:text-7xl font-mono tracking-wider">
-                  {clock.minutes}
-                </span>
-                <span className="text-white/50 font-bold text-xs lg:text-sm 2xl:text-base 3xl:text-2xl 4xl:text-4xl 5xl:text-5xl font-mono">
-                  : {clock.seconds}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ═══════════════ CONTENT ═══════════════ */}
-      <div className="flex-1 px-3 md:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-24 4xl:px-32 py-3 md:py-4 lg:py-5 3xl:py-8 4xl:py-12">
-        {jadwalData.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm md:p-12">
-              <CalendarX2
-                className="mx-auto mb-4 text-slate-400"
-                size={44}
-                aria-hidden="true"
-              />
-              <h2 className="text-base md:text-xl font-bold text-gray-800 mb-2">
-                Tidak Ada Jadwal
-              </h2>
-              <p className="text-xs md:text-sm text-gray-500">
-                Tidak ada kegiatan yang terjadwal untuk hari ini
-              </p>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* 🖼️ IMAGE SLIDE */}
-            {isImageSlide && SLIDE_IMAGES[imageSlideIndex] ? (
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="relative w-full h-[calc(100vh-200px)] sm:h-[calc(100vh-240px)] md:h-[calc(100vh-260px)] lg:h-[calc(100vh-280px)] xl:h-[calc(100vh-300px)] 3xl:h-[calc(100vh-340px)] 4xl:h-[calc(100vh-420px)] flex items-center justify-center bg-gray-50">
-                  <img
-                    src={SLIDE_IMAGES[imageSlideIndex].url}
-                    alt={SLIDE_IMAGES[imageSlideIndex].title || 'Slide Image'}
-                    className="max-w-full max-h-full object-contain"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.nextSibling.style.display = 'block';
-                    }}
-                  />
-                  <div className="hidden text-center p-8">
-                    <ImageOff
-                      className="mx-auto mb-4 text-slate-400"
-                      size={40}
-                      aria-hidden="true"
-                    />
-                    <p className="text-base text-gray-500">
-                      Gambar tidak dapat dimuat
-                    </p>
-                  </div>
-                </div>
-                {SLIDE_IMAGES[imageSlideIndex].title && (
-                  <div className="bg-primary-700 text-white text-center py-3 px-6">
-                    <h3 className="text-sm md:text-base lg:text-lg font-bold">
-                      {SLIDE_IMAGES[imageSlideIndex].title}
-                    </h3>
-                  </div>
+      <main className="flex-1">
+        <div className="mx-auto w-full max-w-[1720px] px-4 py-5 sm:px-6 lg:px-8">
+          {!loading && !error && jadwalData.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-semibold leading-7 text-slate-900 sm:text-xl">
+                  {isImageSlide ? 'Informasi Kampus' : 'Jadwal Hari Ini'}
+                </h2>
+                {!isImageSlide && (
+                  <p className="mt-0.5 text-sm leading-5 text-slate-500">
+                    Menampilkan {currentPageData.length} dari {totalJadwal}{' '}
+                    kegiatan.
+                  </p>
                 )}
               </div>
-            ) : (
-              /* 📋 DATA SLIDE */
-              <div className="space-y-2 md:space-y-3 lg:space-y-4 3xl:space-y-5 4xl:space-y-8">
-                {currentPageData.map((item) => {
-                  const statusBadge = getStatusBadge(item.status);
-
-                  return (
-                    <div key={item.id}>
-                      {/* ── Schedule Card ── */}
-                      <div
-                        className={`group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-colors duration-150 hover:border-slate-300 ${item.status === 'ongoing' ? 'ring-2 ring-green-400/50' : ''}`}
-                      >
-                        <div className="flex">
-                          {/* Left accent border */}
-                          <div
-                            className={`w-1 md:w-1.5 ${getTypeBorderColor(item.type)} bg-current flex-shrink-0`}
-                            style={{
-                              backgroundColor:
-                                item.type === 'perkuliahan'
-                                  ? '#3b82f6'
-                                  : item.type === 'karya_akhir'
-                                    ? '#a855f7'
-                                    : '#22c55e',
-                            }}
-                          ></div>
-
-                          {/* Card content */}
-                          <div className="flex-1 p-2.5 md:p-3 lg:p-4 xl:p-5 3xl:p-6 4xl:p-10">
-                            {/* Mobile Layout */}
-                            <div className="lg:hidden space-y-3">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <span className="bg-primary-600 text-white text-xs md:text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
-                                    {item.kode}
-                                  </span>
-                                  <div className="flex items-center gap-1.5 text-gray-500 text-xs">
-                                    <svg
-                                      className="w-4 h-4"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                                      />
-                                    </svg>
-                                    <span className="font-medium">
-                                      {item.jam}
-                                    </span>
-                                  </div>
-                                </div>
-                                <span
-                                  className={`${statusBadge.bg} ${statusBadge.text} text-[10px] font-semibold px-3 py-1.5 rounded-full shadow-sm`}
-                                >
-                                  {statusBadge.label}
-                                </span>
-                              </div>
-                              <div className="font-semibold text-gray-800 text-sm">
-                                {item.kegiatan}
-                              </div>
-                              {item.jenis_pertemuan && (
-                                <span
-                                  className={`monitor-meeting-badge inline-block px-2.5 py-1 text-[10px] rounded-full font-medium ${
-                                    item.jenis_pertemuan === 'daring'
-                                      ? 'bg-green-50 text-green-600'
-                                      : item.jenis_pertemuan === 'hybrid'
-                                        ? 'bg-orange-50 text-orange-600'
-                                        : 'bg-blue-50 text-blue-600'
-                                  }`}
-                                >
-                                  {item.jenis_pertemuan === 'daring' &&
-                                    'Daring'}
-                                  {item.jenis_pertemuan === 'luring' &&
-                                    'Luring'}
-                                  {item.jenis_pertemuan === 'hybrid' &&
-                                    'Hybrid'}
-                                </span>
-                              )}
-                              <div className="flex items-center justify-between text-xs text-gray-600">
-                                <span className="flex items-center gap-1.5">
-                                  <svg
-                                    className="w-4 h-4 text-red-400"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                    />
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                    />
-                                  </svg>
-                                  {item.tempat}
-                                </span>
-                                <span className="flex items-center gap-1.5">
-                                  <svg
-                                    className="w-4 h-4 text-purple-400"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                                    />
-                                  </svg>
-                                  {item.dosen}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Desktop Layout */}
-                            <div className="hidden lg:grid lg:grid-cols-12 items-center gap-2 lg:gap-3 xl:gap-4 3xl:gap-6 4xl:gap-10">
-                              {/* Kode + Jam */}
-                              <div className="col-span-2 flex items-center gap-2 xl:gap-4">
-                                <div className="flex flex-col items-center">
-                                  <span className="bg-primary-600 text-white text-xs xl:text-sm 3xl:text-base 4xl:text-2xl 5xl:text-3xl font-bold px-2.5 lg:px-3 xl:px-4 3xl:px-5 4xl:px-8 py-1.5 xl:py-2 3xl:py-3 4xl:py-4 rounded-lg shadow-sm">
-                                    {item.kode}
-                                  </span>
-                                  <div className="flex items-center gap-1.5 text-gray-400 text-xs mt-2"></div>
-                                </div>
-                              </div>
-
-                              {/* Kegiatan */}
-                              <div className="col-span-3 flex items-center gap-2 xl:gap-3 3xl:gap-4">
-                                <div
-                                  className={`w-6 h-6 xl:w-8 xl:h-8 3xl:w-10 3xl:h-10 4xl:w-16 4xl:h-16 ${getTypeIconBg(item.type)} rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm`}
-                                >
-                                  <svg
-                                    className="w-3 h-3 xl:w-4 xl:h-4 3xl:w-5 3xl:h-5 4xl:w-8 4xl:h-8 text-white"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                                    />
-                                  </svg>
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="font-semibold text-gray-700 text-sm lg:text-base xl:text-lg 2xl:text-xl 3xl:text-2xl 4xl:text-4xl 5xl:text-5xl leading-tight truncate">
-                                    {item.kegiatan}
-                                  </div>
-                                  {item.jenis_pertemuan && (
-                                    <span
-                                      className={`monitor-meeting-badge inline-block mt-1 px-2 xl:px-2.5 3xl:px-3 4xl:px-5 py-0.5 3xl:py-1 text-[10px] xl:text-xs 3xl:text-sm 4xl:text-xl rounded-full font-bold ${
-                                        item.jenis_pertemuan === 'daring'
-                                          ? 'bg-green-50 text-green-600'
-                                          : item.jenis_pertemuan === 'hybrid'
-                                            ? 'bg-orange-50 text-orange-600'
-                                            : 'bg-blue-50 text-blue-600'
-                                      }`}
-                                    >
-                                      {item.jenis_pertemuan === 'daring' &&
-                                        'Daring'}
-                                      {item.jenis_pertemuan === 'luring' &&
-                                        'Luring'}
-                                      {item.jenis_pertemuan === 'hybrid' &&
-                                        'Hybrid'}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Tempat */}
-                              <div className="col-span-3 flex items-center gap-2 3xl:gap-3">
-                                <svg
-                                  className="w-4 h-4 xl:w-6 xl:h-6 3xl:w-7 3xl:h-7 4xl:w-10 4xl:h-10 text-red-400 flex-shrink-0 self-start mt-1.5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                  />
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                  />
-                                </svg>
-                                <div className="min-w-0">
-                                  <div className="font-semibold text-gray-700 text-sm lg:text-base xl:text-lg 2xl:text-xl 3xl:text-2xl 4xl:text-4xl 5xl:text-5xl leading-tight truncate">
-                                    {item.tempat}
-                                  </div>
-                                  <span className="font-medium block text-center w-full text-xs xl:text-sm 3xl:text-base 4xl:text-2xl">
-                                    {item.jam}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Dosen */}
-                              <div className="col-span-2 flex items-center gap-2 3xl:gap-3">
-                                <svg
-                                  className="w-4 h-4 xl:w-5 xl:h-5 3xl:w-6 3xl:h-6 4xl:w-9 4xl:h-9 text-purple-400 flex-shrink-0"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                                  />
-                                </svg>
-                                <span className="text-gray-600 text-xs xl:text-sm 3xl:text-base 4xl:text-2xl 5xl:text-3xl font-bold truncate">
-                                  {item.dosen}
-                                </span>
-                              </div>
-
-                              {/* Status */}
-                              <div className="col-span-2 flex justify-end">
-                                <span
-                                  className={`${statusBadge.bg} ${statusBadge.text} text-[9px] xl:text-[10px] 3xl:text-xs 4xl:text-xl 5xl:text-2xl font-semibold px-2 xl:px-3 3xl:px-4 4xl:px-6 py-1 xl:py-1.5 3xl:py-2 4xl:py-3 rounded-full shadow-sm whitespace-nowrap`}
-                                >
-                                  {statusBadge.label}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      {/* ═══════════════ FOOTER ═══════════════ */}
-      <div className="px-3 md:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-24 4xl:px-32 pb-2 md:pb-3 lg:pb-4 3xl:pb-6 4xl:pb-8">
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl px-3 md:px-6 py-2 md:py-2.5 shadow-sm border border-gray-100">
-          {/* Desktop: single row | Mobile: stacked */}
-          <div className="hidden md:flex items-center justify-between gap-3">
-            {/* Legend */}
-            <div className="flex items-center gap-6 text-xs text-gray-600">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
-                <span>Perkuliahan</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-purple-500 rounded-sm"></div>
-                <span>Karya Akhir</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-green-500 rounded-sm"></div>
-                <span>Lain-lain</span>
-              </div>
-              <span className="text-gray-400">|</span>
-              <span className="text-gray-500">
-                Total: <strong>{totalJadwal}</strong> kegiatan
-              </span>
             </div>
+          )}
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() =>
-                    setCurrentPage(
-                      (prev) => (prev - 1 + totalPages) % totalPages
-                    )
-                  }
-                  className="bg-blue-50 hover:bg-blue-100 text-blue-600 p-1.5 rounded-lg transition-colors"
-                  aria-label="Slide sebelumnya"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 19l-7-7 7-7"
-                    />
-                  </svg>
-                </button>
-                <div className="flex gap-1.5">
-                  {Array.from({ length: totalPages }).map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setCurrentPage(index)}
-                      className={`transition-all duration-300 rounded-full ${
-                        currentPage === index
-                          ? 'w-6 bg-blue-500'
-                          : 'w-2.5 bg-gray-300 hover:bg-gray-400'
-                      } h-2.5`}
-                      title={`Halaman ${index + 1}${index >= totalDataPages ? ' (Gambar)' : ''}`}
-                      aria-label={`Tampilkan slide ${index + 1}`}
-                      aria-current={currentPage === index ? 'true' : undefined}
-                    />
-                  ))}
-                </div>
-                <button
-                  onClick={() =>
-                    setCurrentPage((prev) => (prev + 1) % totalPages)
-                  }
-                  className="bg-blue-50 hover:bg-blue-100 text-blue-600 p-1.5 rounded-lg transition-colors"
-                  aria-label="Slide berikutnya"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </button>
-                <span className="text-[10px] text-gray-500 ml-1">
-                  {currentPage + 1}/{totalPages}
-                </span>
-              </div>
-            )}
-
-            {/* Developer credit */}
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center shadow-sm">
-                <span className="text-white text-[8px] font-bold">W</span>
-              </div>
-              <span className="text-[12px] text-gray-400">
-                Developed by{' '}
-                <span className="font-bold text-gray-500">Wanda Saputra</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Mobile layout: 2 compact rows */}
-          <div className="md:hidden space-y-1.5">
-            {/* Row 1: Legend + Total */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[9px] text-gray-600">
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-blue-500 rounded-sm"></div>
-                  <span>Perkuliahan</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-purple-500 rounded-sm"></div>
-                  <span>Karya Akhir</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-sm"></div>
-                  <span>Lain-lain</span>
-                </div>
-              </div>
-              <span className="text-[9px] text-gray-500">
-                Total: <strong>{totalJadwal}</strong>
-              </span>
-            </div>
-            {/* Row 2: Pagination + Dev credit */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded-full bg-primary-600 flex items-center justify-center">
-                  <span className="text-white text-[6px] font-bold">W</span>
-                </div>
-                <span className="text-[9px] text-gray-400">
-                  by{' '}
-                  <span className="font-bold text-gray-500">Wanda Saputra</span>
-                </span>
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() =>
-                      setCurrentPage(
-                        (prev) => (prev - 1 + totalPages) % totalPages
-                      )
-                    }
-                    className="bg-blue-50 text-blue-600 p-0.5 rounded transition-colors"
-                    aria-label="Slide sebelumnya"
-                  >
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 19l-7-7 7-7"
-                      />
-                    </svg>
-                  </button>
-                  <div className="flex gap-1">
-                    {Array.from({ length: totalPages }).map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setCurrentPage(index)}
-                        className={`transition-all duration-300 rounded-full h-1.5 ${
-                          currentPage === index
-                            ? 'w-4 bg-blue-500'
-                            : 'w-1.5 bg-gray-300'
-                        }`}
-                        aria-label={`Tampilkan slide ${index + 1}`}
-                        aria-current={
-                          currentPage === index ? 'true' : undefined
-                        }
-                      />
-                    ))}
-                  </div>
-                  <button
-                    onClick={() =>
-                      setCurrentPage((prev) => (prev + 1) % totalPages)
-                    }
-                    className="bg-blue-50 text-blue-600 p-0.5 rounded transition-colors"
-                    aria-label="Slide berikutnya"
-                  >
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
-                  <span className="text-[9px] text-gray-500">
-                    {currentPage + 1}/{totalPages}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+          {loading ? (
+            <MonitorScheduleSkeleton />
+          ) : error ? (
+            <MonitorScheduleErrorState
+              message={error}
+              onRetry={fetchTodaySchedule}
+            />
+          ) : jadwalData.length === 0 ? (
+            <MonitorScheduleEmptyState />
+          ) : isImageSlide && activeSlide ? (
+            <MonitorImageSlide slide={activeSlide} />
+          ) : (
+            <section
+              className="space-y-3 sm:space-y-4"
+              aria-label="Daftar jadwal hari ini"
+            >
+              {currentPageData.map((item) => (
+                <MonitorScheduleCard key={item.id} item={item} />
+              ))}
+            </section>
+          )}
         </div>
-      </div>
+      </main>
+
+      {!loading && !error && (
+        <MonitorFooter
+          totalSchedules={totalJadwal}
+          totalPages={totalPages}
+          totalDataPages={totalDataPages}
+          currentPage={currentPage}
+          onPrevious={() =>
+            setCurrentPage(
+              (previous) => (previous - 1 + totalPages) % totalPages
+            )
+          }
+          onNext={() =>
+            setCurrentPage((previous) => (previous + 1) % totalPages)
+          }
+          onPageChange={setCurrentPage}
+        />
+      )}
     </div>
   );
 }
