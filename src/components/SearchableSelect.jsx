@@ -4,7 +4,8 @@
 // 🎯 Dropdown dengan search functionality - bisa filter options dengan mengetik
 // Bisa dipakai untuk dropdown dengan banyak options (dosen, mahasiswa, etc)
 
-import { useState, useRef, useEffect } from 'react';
+import { ChevronDown, Search } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function SearchableSelect({
   label,
@@ -67,77 +68,71 @@ export default function SearchableSelect({
       </label>
 
       {/* Input Display */}
-      <div
+      <button
+        type="button"
         onClick={handleInputClick}
-        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white cursor-pointer hover:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 flex items-center justify-between"
+        className="ui-field flex items-center justify-between text-left hover:border-primary-500"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-label={label}
       >
         <span className={selectedText ? 'text-slate-900' : 'text-slate-400'}>
           {selectedText || placeholder}
         </span>
-        <svg
-          className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
-      </div>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-slate-400 transition-transform ${
+            isOpen ? 'rotate-180' : ''
+          }`}
+          aria-hidden="true"
+        />
+      </button>
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
           {/* Search Input */}
           <div className="p-2 border-b border-slate-200">
             <div className="relative">
-              <svg
-                className="absolute left-2 top-2.5 w-4 h-4 text-slate-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-2 top-2.5 text-slate-400"
+                aria-hidden="true"
+              />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={`Cari ${label.toLowerCase()}...`}
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="ui-field min-h-9 w-full py-1.5 pl-8"
                 autoFocus
+                aria-label={`Cari ${label}`}
               />
             </div>
           </div>
 
           {/* Options List */}
-          <div className="overflow-y-auto max-h-48">
+          <div className="max-h-48 overflow-y-auto" role="listbox">
             {filteredOptions.length === 0 ? (
               <div className="px-3 py-2 text-sm text-slate-500 text-center">
                 Tidak ada hasil
               </div>
             ) : (
               filteredOptions.map((option) => (
-                <div
+                <button
+                  type="button"
                   key={option.id}
                   onClick={() => handleSelect(option.id)}
-                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 ${
+                  className={`block w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-primary-50 ${
                     option.id === value
-                      ? 'bg-indigo-100 text-indigo-700 font-medium'
+                      ? 'bg-primary-100 text-primary-700 font-medium'
                       : 'text-slate-700'
                   }`}
+                  role="option"
+                  aria-selected={option.id === value}
                 >
                   {getDisplayText(option)}
-                </div>
+                </button>
               ))
             )}
           </div>

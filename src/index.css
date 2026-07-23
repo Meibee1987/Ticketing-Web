@@ -2,12 +2,11 @@
 @import 'tailwindcss';
 
 /* ============================================================
-   DESIGN TOKENS – K-Integrated System (KIS) Dashboard
-   Mapping Figma tokens → CSS Variables → Tailwind
+   DESIGN TOKENS - K-Integrated System (KIS)
    ============================================================ */
 
 @theme {
-  /* ── Primary palette ── */
+  /* IPB blue is an accent, while surfaces stay neutral. */
   --color-primary-50: #eff6ff;
   --color-primary-100: #dbeafe;
   --color-primary-200: #bfdbfe;
@@ -16,15 +15,15 @@
   --color-primary-500: #3b82f6;
   --color-primary-600: #2563eb;
   --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
 
-  /* ── Secondary (indigo) ── */
   --color-secondary-50: #eef2ff;
   --color-secondary-100: #e0e7ff;
   --color-secondary-500: #6366f1;
   --color-secondary-600: #4f46e5;
   --color-secondary-700: #4338ca;
 
-  /* ── Semantic colors ── */
   --color-success-50: #f0fdf4;
   --color-success-100: #dcfce7;
   --color-success-500: #22c55e;
@@ -35,73 +34,445 @@
   --color-warning-100: #fef3c7;
   --color-warning-500: #f59e0b;
   --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
 
   --color-danger-50: #fef2f2;
   --color-danger-100: #fee2e2;
   --color-danger-500: #ef4444;
   --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
 
-  /* ── Sidebar ── */
+  /* Semantic surfaces. */
+  --color-background: #f6f8fb;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+  --color-input: #cbd5e1;
+  --color-ring: #2563eb;
+  --color-surface: #ffffff;
+
+  /* Sidebar. */
   --color-sidebar-bg: #0f172a;
   --color-sidebar-hover: #1e293b;
-  --color-sidebar-active: #3b82f6;
-  --color-sidebar-text: #94a3b8;
+  --color-sidebar-active: #2563eb;
+  --color-sidebar-text: #cbd5e1;
   --color-sidebar-text-active: #ffffff;
 
-  /* ── Surface / Background ── */
-  --color-surface: #ffffff;
-  --color-background: #f8fafc;
-
-  /* ── Radius ── */
-  --radius-card: 16px;
+  /* Shape. */
+  --radius-card: 12px;
   --radius-badge: 9999px;
-  --radius-button: 10px;
-  --radius-input: 10px;
+  --radius-button: 8px;
+  --radius-input: 8px;
 
-  /* ── Shadow ── */
-  --shadow-card:
-    0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  /* Subtle elevation. */
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.05);
   --shadow-card-hover:
-    0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    0 6px 16px -8px rgb(15 23 42 / 0.18), 0 2px 5px rgb(15 23 42 / 0.06);
 
-  /* ── Custom breakpoints untuk monitor besar ── */
-  --breakpoint-3xl: 1920px; /* Full HD */
-  --breakpoint-4xl: 2560px; /* 2K / QHD */
-  --breakpoint-5xl: 3840px; /* 4K / UHD */
+  --breakpoint-3xl: 1920px;
+  --breakpoint-4xl: 2560px;
+  --breakpoint-5xl: 3840px;
 }
 
-/* ── Base styles ── */
-body {
-  font-family:
-    'Inter',
-    system-ui,
-    -apple-system,
-    sans-serif;
-  background-color: var(--color-background);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    background: var(--color-background);
+    color: var(--color-foreground);
+  }
+
+  body {
+    min-width: 320px;
+    margin: 0;
+    font-family:
+      'Inter',
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      sans-serif;
+    font-size: 14px;
+    line-height: 1.5715;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button,
+  [role='button'],
+  a,
+  input,
+  select,
+  textarea {
+    outline: none;
+  }
+
+  button:focus-visible,
+  [role='button']:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  button:disabled,
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    cursor: not-allowed;
+  }
+
+  ::selection {
+    background: var(--color-primary-100);
+    color: var(--color-primary-900);
+  }
 }
 
-/* ── Scrollbar styling ── */
+@layer components {
+  .app-page {
+    width: 100%;
+    max-width: 1600px;
+    margin-inline: auto;
+  }
+
+  .ui-page {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .ui-page-intro {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .ui-page-title {
+    color: var(--color-foreground);
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 32px;
+  }
+
+  .ui-section-title {
+    color: var(--color-foreground);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    line-height: 28px;
+  }
+
+  .ui-card-title {
+    color: var(--color-card-foreground);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 24px;
+  }
+
+  .ui-description {
+    margin-top: 2px;
+    color: var(--color-muted-foreground);
+    font-size: 13px;
+    line-height: 20px;
+  }
+
+  .ui-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .ui-toolbar {
+    display: flex;
+    min-height: 64px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-card);
+    padding: 12px 16px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .ui-tabs {
+    display: flex;
+    min-width: max-content;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .ui-tab {
+    position: relative;
+    display: inline-flex;
+    min-height: 46px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-bottom: 2px solid transparent;
+    padding: 0 16px;
+    color: var(--color-muted-foreground);
+    font-size: 14px;
+    font-weight: 500;
+    transition:
+      border-color 150ms ease,
+      background-color 150ms ease,
+      color 150ms ease;
+  }
+
+  .ui-tab:hover {
+    background: var(--color-primary-50);
+    color: var(--color-primary-700);
+  }
+
+  .ui-tab[aria-selected='true'],
+  .ui-tab.is-active {
+    border-bottom-color: var(--color-primary-600);
+    color: var(--color-primary-700);
+  }
+
+  .ui-button {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: var(--radius-button);
+    padding: 0 16px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+    white-space: nowrap;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease,
+      opacity 150ms ease;
+  }
+
+  .ui-button-primary {
+    border: 1px solid var(--color-primary-600);
+    background: var(--color-primary-600);
+    color: white;
+  }
+
+  .ui-button-primary:hover {
+    border-color: var(--color-primary-700);
+    background: var(--color-primary-700);
+  }
+
+  .ui-button-secondary {
+    border: 1px solid var(--color-border);
+    background: var(--color-card);
+    color: #334155;
+  }
+
+  .ui-button-secondary:hover {
+    background: var(--color-muted);
+  }
+
+  .ui-icon-button {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-button);
+    background: var(--color-card);
+    color: #475569;
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
+  }
+
+  .ui-icon-button:hover {
+    background: var(--color-muted);
+    color: var(--color-foreground);
+  }
+
+  .ui-table-wrap {
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-card);
+  }
+
+  .ui-field {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid var(--color-input);
+    border-radius: var(--radius-input);
+    background: var(--color-card);
+    padding: 8px 12px;
+    color: var(--color-foreground);
+    font-size: 14px;
+    line-height: 22px;
+  }
+
+  .ui-field::placeholder {
+    color: #94a3b8;
+  }
+
+  .ui-field:focus {
+    border-color: var(--color-primary-500);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.12);
+  }
+
+  .ui-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: var(--radius-badge);
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+}
+
+/*
+ * Compatibility baseline for legacy page markup. This scopes visual
+ * normalization to the authenticated shell and does not alter component logic.
+ */
+.app-page input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.app-page select,
+.app-page textarea {
+  min-height: 40px;
+  border-radius: var(--radius-input);
+}
+
+.app-page label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.app-page table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #334155;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.app-page table thead tr {
+  background: var(--color-muted) !important;
+  background-image: none !important;
+  color: #475569 !important;
+}
+
+.app-page table th {
+  height: 44px;
+  border-width: 0 0 1px !important;
+  border-style: solid !important;
+  border-color: var(--color-border) !important;
+  padding: 10px 16px !important;
+  color: #475569 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.025em;
+  line-height: 18px;
+  text-transform: none;
+  vertical-align: middle;
+}
+
+.app-page table td {
+  border-width: 0 0 1px !important;
+  border-style: solid !important;
+  border-color: #eef2f7 !important;
+  padding: 12px 16px !important;
+  vertical-align: middle;
+}
+
+.app-page table tbody tr {
+  transition: background-color 150ms ease;
+}
+
+.app-page table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.app-page table tbody tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+.monitor-page .animate-pulse {
+  animation-duration: 2s;
+}
+
+@media (max-width: 639px) {
+  .ui-page {
+    gap: 20px;
+  }
+
+  .ui-page-intro {
+    flex-direction: column;
+  }
+
+  .ui-page-title {
+    font-size: 22px;
+    line-height: 30px;
+  }
+
+  .ui-toolbar {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .app-page table th,
+  .app-page table td {
+    padding-inline: 12px !important;
+  }
+}
+
+/* Scrollbar styling. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
 
-/* Sidebar scrollbar */
 .sidebar-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgb(255 255 255 / 0.15);
 }
+
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgb(255 255 255 / 0.25);
 }

@@ -6,6 +6,14 @@
  */
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  BookOpen,
+  ClipboardList,
+  Download,
+  GraduationCap,
+  Plus,
+  Upload,
+} from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -16,6 +24,7 @@ import Pagination from '../../components/Pagination';
 import { assertSupabaseResults } from '../../utils/supabaseResults';
 import SearchableSelect from '../../components/SearchableSelect';
 import ImportJadwal from '../../components/ImportJadwal';
+import StatePanel from '../../components/ui/StatePanel';
 
 // ================================================================================
 // KOMPONEN MULTI-DOSEN SELECT (max 8 dosen)
@@ -99,6 +108,7 @@ function MultiDosenSelect({
                 type="button"
                 onClick={() => handleRemove(dosen.id)}
                 className="ml-1 text-indigo-400 hover:text-indigo-600"
+                aria-label={`Hapus ${getDisplayText(dosen)} dari pilihan`}
               >
                 ×
               </button>
@@ -108,11 +118,16 @@ function MultiDosenSelect({
       )}
 
       {/* Input Display */}
-      <div
+      <button
+        type="button"
         onClick={() => values.length < maxSelections && setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white cursor-pointer hover:border-indigo-500 flex items-center justify-between ${
+        className={`ui-field flex w-full cursor-pointer items-center justify-between text-left hover:border-primary-500 ${
           values.length >= maxSelections ? 'bg-slate-50 cursor-not-allowed' : ''
         }`}
+        disabled={values.length >= maxSelections}
+        aria-label={label}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
       >
         <span className="text-slate-400">
           {values.length >= maxSelections
@@ -132,7 +147,7 @@ function MultiDosenSelect({
             d="M19 9l-7 7-7-7"
           />
         </svg>
-      </div>
+      </button>
 
       {/* Dropdown Menu */}
       {isOpen && values.length < maxSelections && (
@@ -144,26 +159,30 @@ function MultiDosenSelect({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari dosen..."
-              className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500"
+              className="ui-field min-h-9 w-full py-1.5"
               autoFocus
+              aria-label={`Cari ${label}`}
             />
           </div>
 
           {/* Options List */}
-          <div className="overflow-y-auto max-h-48">
+          <div className="overflow-y-auto max-h-48" role="listbox">
             {filteredOptions.length === 0 ? (
               <div className="px-3 py-2 text-sm text-slate-500 text-center">
                 Tidak ada hasil
               </div>
             ) : (
               filteredOptions.map((option) => (
-                <div
+                <button
+                  type="button"
                   key={option.id}
                   onClick={() => handleSelect(option.id)}
-                  className="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 text-slate-700"
+                  className="block w-full cursor-pointer px-3 py-2 text-left text-sm text-slate-700 hover:bg-primary-50"
+                  role="option"
+                  aria-selected="false"
                 >
                   {getDisplayText(option)}
-                </div>
+                </button>
               ))
             )}
           </div>
@@ -282,9 +301,9 @@ const JenisBadge = ({ jenis }) => {
     lain_lain: 'bg-green-100 text-green-800 border-green-200',
   };
   const labels = {
-    perkuliahan: '📚 Perkuliahan',
-    karya_akhir: '🎓 Karya Akhir',
-    lain_lain: '📋 Lain-lain',
+    perkuliahan: 'Perkuliahan',
+    karya_akhir: 'Karya Akhir',
+    lain_lain: 'Lain-lain',
   };
   return (
     <span
@@ -1432,9 +1451,9 @@ export default function JadwalPageAdmin() {
               }
             }}
             options={[
-              { id: 'daring', label: '🌐 Daring (Online)' },
-              { id: 'luring', label: '🏢 Luring (Offline)' },
-              { id: 'hybrid', label: '🔄 Hybrid' },
+              { id: 'daring', label: 'Daring (Online)' },
+              { id: 'luring', label: 'Luring (Offline)' },
+              { id: 'hybrid', label: 'Hybrid' },
             ]}
             displayKey="label"
           />
@@ -1533,9 +1552,9 @@ export default function JadwalPageAdmin() {
               }
             }}
             options={[
-              { id: 'daring', label: '🌐 Daring (Online)' },
-              { id: 'luring', label: '🏢 Luring (Offline)' },
-              { id: 'hybrid', label: '🔄 Hybrid' },
+              { id: 'daring', label: 'Daring (Online)' },
+              { id: 'luring', label: 'Luring (Offline)' },
+              { id: 'hybrid', label: 'Hybrid' },
             ]}
             displayKey="label"
           />
@@ -1609,9 +1628,9 @@ export default function JadwalPageAdmin() {
               }
             }}
             options={[
-              { id: 'daring', label: '🌐 Daring (Online)' },
-              { id: 'luring', label: '🏢 Luring (Offline)' },
-              { id: 'hybrid', label: '🔄 Hybrid' },
+              { id: 'daring', label: 'Daring (Online)' },
+              { id: 'luring', label: 'Luring (Offline)' },
+              { id: 'hybrid', label: 'Hybrid' },
             ]}
             displayKey="label"
           />
@@ -1673,52 +1692,62 @@ export default function JadwalPageAdmin() {
   };
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="ui-page">
       <PageHeader title="Kelola Jadwal" />
       {/* Download Button dipindah ke baris search & CRUD (lihat JadwalTab) */}
 
       {/* Tabs */}
-      <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="ui-card overflow-hidden">
         <div className="border-b border-slate-200">
-          <div className="flex gap-1 p-1.5 md:p-2">
+          <div
+            className="flex min-w-max gap-1 overflow-x-auto px-2"
+            role="tablist"
+            aria-label="Kategori jadwal admin"
+          >
             <button
+              type="button"
               onClick={() => setActiveTab('perkuliahan')}
-              className={`flex-1 px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium rounded-lg transition-colors ${
-                activeTab === 'perkuliahan'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              className={`ui-tab ${
+                activeTab === 'perkuliahan' ? 'is-active' : ''
               }`}
+              aria-selected={activeTab === 'perkuliahan'}
+              aria-label="Perkuliahan"
+              role="tab"
             >
-              <span className="hidden sm:inline">📚 Perkuliahan</span>
-              <span className="sm:hidden">📚</span>
+              <BookOpen size={16} aria-hidden="true" />
+              <span>Perkuliahan</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('karya_akhir')}
-              className={`flex-1 px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium rounded-lg transition-colors ${
-                activeTab === 'karya_akhir'
-                  ? 'bg-purple-600 text-white shadow-md'
-                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              className={`ui-tab ${
+                activeTab === 'karya_akhir' ? 'is-active' : ''
               }`}
+              aria-selected={activeTab === 'karya_akhir'}
+              aria-label="Karya Akhir"
+              role="tab"
             >
-              <span className="hidden sm:inline">🎓 Karya Akhir</span>
-              <span className="sm:hidden">🎓</span>
+              <GraduationCap size={16} aria-hidden="true" />
+              <span>Karya Akhir</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('lain_lain')}
-              className={`flex-1 px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium rounded-lg transition-colors ${
-                activeTab === 'lain_lain'
-                  ? 'bg-green-600 text-white shadow-md'
-                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              className={`ui-tab ${
+                activeTab === 'lain_lain' ? 'is-active' : ''
               }`}
+              aria-selected={activeTab === 'lain_lain'}
+              aria-label="Lain-lain"
+              role="tab"
             >
-              <span className="hidden sm:inline">📋 Lain-lain</span>
-              <span className="sm:hidden">📋</span>
+              <ClipboardList size={16} aria-hidden="true" />
+              <span>Lain-lain</span>
             </button>
           </div>
         </div>
 
         {/* Tab Content */}
-        <div className="p-3 md:p-6">
+        <div className="p-4 sm:p-5" role="tabpanel">
           {activeTab === 'perkuliahan' && (
             <JadwalTab
               data={jadwalPerkuliahan}
@@ -1992,7 +2021,7 @@ function JadwalTab({
   return (
     <div className="space-y-4">
       {/* Search Box & CRUD Add Button */}
-      <div className="flex items-center gap-2 w-full">
+      <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         {/* 🎯 Menggunakan komponen SearchBar yang reusable */}
         <SearchBar
           value={searchInput}
@@ -2008,13 +2037,11 @@ function JadwalTab({
             onClick={() =>
               window.openAddModal ? window.openAddModal('perkuliahan') : null
             }
-            className="px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            className="ui-button ui-button-primary"
             type="button"
           >
-            <span role="img" aria-label="Perkuliahan">
-              📚
-            </span>{' '}
-            + Perkuliahan
+            <Plus size={16} aria-hidden="true" />
+            Tambah Perkuliahan
           </button>
         )}
         {jenis === 'karya_akhir' && (
@@ -2022,13 +2049,11 @@ function JadwalTab({
             onClick={() =>
               window.openAddModal ? window.openAddModal('karya_akhir') : null
             }
-            className="px-4 py-2.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+            className="ui-button ui-button-primary"
             type="button"
           >
-            <span role="img" aria-label="Karya Akhir">
-              🎓
-            </span>{' '}
-            + Karya Akhir
+            <Plus size={16} aria-hidden="true" />
+            Tambah Karya Akhir
           </button>
         )}
         {jenis === 'lain_lain' && (
@@ -2036,13 +2061,11 @@ function JadwalTab({
             onClick={() =>
               window.openAddModal ? window.openAddModal('lain_lain') : null
             }
-            className="px-4 py-2.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+            className="ui-button ui-button-primary"
             type="button"
           >
-            <span role="img" aria-label="Lain-lain">
-              📋
-            </span>{' '}
-            + Lain-lain
+            <Plus size={16} aria-hidden="true" />
+            Tambah Lain-lain
           </button>
         )}
         {/* Import CSV/Excel */}
@@ -2050,22 +2073,10 @@ function JadwalTab({
           onClick={() =>
             window.openImportModal ? window.openImportModal(jenis) : null
           }
-          className="px-4 py-2.5 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors"
+          className="ui-button ui-button-secondary text-primary-700"
           type="button"
         >
-          <svg
-            className="w-4 h-4 inline-block mr-1"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-            />
-          </svg>
+          <Upload size={16} aria-hidden="true" />
           Import
         </button>
         {/* Download paling kanan, setelah CRUD - download sesuai tab aktif */}
@@ -2073,21 +2084,10 @@ function JadwalTab({
           onClick={() =>
             window.openDownloadModal ? window.openDownloadModal(jenis) : null
           }
-          className="px-4 py-2.5 text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 rounded-lg transition-colors"
+          className="ui-button ui-button-secondary text-primary-700"
+          type="button"
         >
-          <svg
-            className="w-4 h-4 inline-block mr-1"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
+          <Download size={16} aria-hidden="true" />
           Download
         </button>
       </div>
@@ -2104,7 +2104,7 @@ function JadwalTab({
               className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition-colors"
               type="button"
             >
-              ✅ Pilih Semua ({filteredData.length} data)
+              Pilih Semua ({filteredData.length} data)
             </button>
           )}
           <button
@@ -2115,7 +2115,7 @@ function JadwalTab({
             className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
             type="button"
           >
-            🗑️ Hapus {selectedIds.length} Data
+            Hapus {selectedIds.length} Data
           </button>
           <button
             onClick={() => setSelectedIds([])}
@@ -2145,13 +2145,14 @@ function JadwalTab({
         />
       ) : (
         <>
-          <div className="overflow-x-auto">
+          <div className="ui-table-wrap overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                <tr>
                   <th className="py-3 px-2 border border-slate-300 w-10">
                     <input
                       type="checkbox"
+                      aria-label="Pilih semua data pada halaman ini"
                       className="w-4 h-4 rounded cursor-pointer accent-white"
                       checked={
                         paginatedData.length > 0 &&
@@ -2269,6 +2270,7 @@ function JadwalTab({
                     <td className="py-3 px-2 border border-slate-200 text-center">
                       <input
                         type="checkbox"
+                        aria-label={`Pilih jadwal ${row.agenda_display || row.nama_matkul || row.agenda || row.id}`}
                         className="w-4 h-4 rounded cursor-pointer accent-blue-600"
                         checked={selectedIds.includes(row.id)}
                         onChange={(e) => {
@@ -2317,7 +2319,7 @@ function JadwalTab({
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span
-                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+                            className={`meeting-badge inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
                               row.jenis_pertemuan === 'daring'
                                 ? 'bg-blue-100 text-blue-700'
                                 : row.jenis_pertemuan === 'hybrid'
@@ -2325,10 +2327,10 @@ function JadwalTab({
                                   : 'bg-green-100 text-green-700'
                             }`}
                           >
-                            {row.jenis_pertemuan === 'daring' && '🌐 Daring'}
-                            {row.jenis_pertemuan === 'luring' && '🏢 Luring'}
-                            {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
-                            {!row.jenis_pertemuan && '🏢 Luring'}
+                            {row.jenis_pertemuan === 'daring' && 'Daring'}
+                            {row.jenis_pertemuan === 'luring' && 'Luring'}
+                            {row.jenis_pertemuan === 'hybrid' && 'Hybrid'}
+                            {!row.jenis_pertemuan && 'Luring'}
                           </span>
                           {(row.jenis_pertemuan === 'hybrid' ||
                             row.jenis_pertemuan === 'daring') &&
@@ -2465,7 +2467,7 @@ function JadwalTab({
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span
-                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+                            className={`meeting-badge inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
                               row.jenis_pertemuan === 'daring'
                                 ? 'bg-blue-100 text-blue-700'
                                 : row.jenis_pertemuan === 'hybrid'
@@ -2473,10 +2475,10 @@ function JadwalTab({
                                   : 'bg-green-100 text-green-700'
                             }`}
                           >
-                            {row.jenis_pertemuan === 'daring' && '🌐 Daring'}
-                            {row.jenis_pertemuan === 'luring' && '🏢 Luring'}
-                            {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
-                            {!row.jenis_pertemuan && '🏢 Luring'}
+                            {row.jenis_pertemuan === 'daring' && 'Daring'}
+                            {row.jenis_pertemuan === 'luring' && 'Luring'}
+                            {row.jenis_pertemuan === 'hybrid' && 'Hybrid'}
+                            {!row.jenis_pertemuan && 'Luring'}
                           </span>
                           {(row.jenis_pertemuan === 'hybrid' ||
                             row.jenis_pertemuan === 'daring') &&
@@ -2528,7 +2530,7 @@ function JadwalTab({
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span
-                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+                            className={`meeting-badge inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
                               row.jenis_pertemuan === 'daring'
                                 ? 'bg-blue-100 text-blue-700'
                                 : row.jenis_pertemuan === 'hybrid'
@@ -2536,10 +2538,10 @@ function JadwalTab({
                                   : 'bg-green-100 text-green-700'
                             }`}
                           >
-                            {row.jenis_pertemuan === 'daring' && '🌐 Daring'}
-                            {row.jenis_pertemuan === 'luring' && '🏢 Luring'}
-                            {row.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
-                            {!row.jenis_pertemuan && '🏢 Luring'}
+                            {row.jenis_pertemuan === 'daring' && 'Daring'}
+                            {row.jenis_pertemuan === 'luring' && 'Luring'}
+                            {row.jenis_pertemuan === 'hybrid' && 'Hybrid'}
+                            {!row.jenis_pertemuan && 'Luring'}
                           </span>
                           {row.jenis_pertemuan === 'hybrid' && row.zoom_id && (
                             <div className="mt-1 text-xs text-slate-600">
@@ -2559,7 +2561,9 @@ function JadwalTab({
                         {row.created_by && row.created_by !== '-' ? (
                           <div>
                             <div className="flex items-center gap-1">
-                              <span className="text-green-500 text-xs">➕</span>
+                              <span className="text-[10px] font-semibold uppercase text-success-600">
+                                Dibuat
+                              </span>
                               <span className="text-xs font-semibold text-slate-700">
                                 {parseDisplayName(row.created_by)}
                               </span>
@@ -2584,7 +2588,9 @@ function JadwalTab({
                         row.updated_at !== row.created_at ? (
                           <div>
                             <div className="flex items-center gap-1">
-                              <span className="text-blue-500 text-xs">✏️</span>
+                              <span className="text-[10px] font-semibold uppercase text-primary-600">
+                                Diubah
+                              </span>
                               <span className="text-xs font-semibold text-slate-700">
                                 {parseDisplayName(row.updated_by)}
                               </span>
@@ -2641,34 +2647,34 @@ function JadwalTab({
 // ================================================================================
 function PageHeader({ title }) {
   return (
-    <header>
-      <h1 className="text-2xl font-semibold text-slate-800">{title}</h1>
+    <header className="ui-page-intro">
+      <div>
+        <h2 className="ui-section-title">{title}</h2>
+        <p className="ui-description">
+          Tambah, impor, ubah, dan kelola seluruh kategori jadwal.
+        </p>
+      </div>
     </header>
   );
 }
 
 function LoadingState() {
   return (
-    <div className="flex items-center justify-center py-12">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-      <span className="ml-3 text-sm text-slate-600">Memuat data...</span>
-    </div>
+    <StatePanel
+      type="loading"
+      title="Memuat data jadwal"
+      description="Data jadwal sedang disiapkan."
+    />
   );
 }
 
 function ErrorState({ message }) {
-  return (
-    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-      <p className="text-sm text-red-600">⚠️ {message}</p>
-    </div>
-  );
+  return <StatePanel type="error" description={message} />;
 }
 
 function EmptyState({ text }) {
   return (
-    <div className="bg-slate-50 rounded-xl p-8 text-center">
-      <p className="text-slate-500">{text}</p>
-    </div>
+    <StatePanel type="empty" title="Belum ada jadwal" description={text} />
   );
 }
 
@@ -2677,6 +2683,9 @@ function Modal({ children, onClose }) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Form jadwal"
     >
       <div
         className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6"
@@ -2703,6 +2712,7 @@ function InputField({
       </label>
       <input
         type={type}
+        aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -2720,6 +2730,7 @@ function SelectField({ label, value, onChange, options, displayKey }) {
         {label}
       </label>
       <select
+        aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
@@ -2745,6 +2756,7 @@ function DateTimeField({ label, value, onChange }) {
       </label>
       <input
         type="datetime-local"
+        aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"

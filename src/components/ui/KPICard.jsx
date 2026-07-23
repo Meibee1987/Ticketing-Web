@@ -58,20 +58,32 @@ export default function KPICard({
     <div
       onClick={onClick}
       className={`
-        bg-white rounded-[var(--radius-card)] border-t-4 ${colors.border}
+        min-h-[154px] bg-white rounded-[var(--radius-card)] border border-slate-200 border-t-[3px] ${colors.border}
         shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)]
-        transition-shadow duration-200 p-5 md:p-6
+        transition-shadow duration-200 p-5
         ${onClick ? 'cursor-pointer hover:ring-2 hover:ring-primary-300 hover:ring-offset-1 select-none' : ''}
       `}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
     >
       <div className="flex items-start justify-between">
-        <div className="space-y-3 flex-1">
+        <div className="flex-1 space-y-2">
           <p className="text-[13px] font-medium text-slate-500">{title}</p>
 
           {loading ? (
             <div className="h-9 w-24 bg-slate-100 animate-pulse rounded-lg" />
           ) : (
-            <p className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">
+            <p className="text-3xl font-bold tracking-tight text-slate-900">
               {value}
             </p>
           )}
@@ -81,7 +93,7 @@ export default function KPICard({
               <span
                 className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${trendColor}`}
               >
-                <TrendIcon size={12} />
+                <TrendIcon size={12} aria-hidden="true" />
                 {trend}
               </span>
               <span className="text-xs text-slate-400">{trendLabel}</span>
@@ -92,9 +104,14 @@ export default function KPICard({
         {/* Icon */}
         {Icon && (
           <div
-            className={`w-12 h-12 rounded-2xl ${colors.iconBg} flex items-center justify-center shrink-0`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colors.iconBg}`}
           >
-            <Icon size={22} className={colors.iconColor} strokeWidth={1.8} />
+            <Icon
+              size={20}
+              className={colors.iconColor}
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
           </div>
         )}
       </div>

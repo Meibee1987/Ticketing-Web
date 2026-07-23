@@ -6,14 +6,22 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { BookOpen, ClipboardList, GraduationCap } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 import { assertSupabaseResults } from '../../utils/supabaseResults';
+import DateNavigator from '../../components/ui/DateNavigator';
+import StatePanel from '../../components/ui/StatePanel';
 
 // ================================================================================
 // HELPER FUNCTIONS & CONSTANTS
 // ================================================================================
 
 const INITIAL_STATE = { jadwal: [], loading: true, error: null };
+const TAB_ICONS = {
+  perkuliahan: BookOpen,
+  karya_akhir: GraduationCap,
+  lain_lain: ClipboardList,
+};
 
 // Helper untuk format timestamp ke tampilan "DD MMM YYYY, HH:MM"
 const formatTimestamp = (ts) => {
@@ -71,16 +79,11 @@ export default function JadwalPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   const tabs = [
-    { id: 'perkuliahan', label: 'Jadwal Perkuliahan', icon: '📚' },
-    { id: 'karya_akhir', label: 'Jadwal Karya Akhir', icon: '🎓' },
-    { id: 'lain_lain', label: 'Jadwal Lain-lain', icon: '📋' },
+    { id: 'perkuliahan', label: 'Jadwal Perkuliahan' },
+    { id: 'karya_akhir', label: 'Jadwal Karya Akhir' },
+    { id: 'lain_lain', label: 'Jadwal Lain-lain' },
   ];
 
-  const tabTitles = {
-    perkuliahan: 'Jadwal Perkuliahan',
-    karya_akhir: 'Jadwal Karya Akhir',
-    lain_lain: 'Jadwal Lain-lain',
-  };
   const TabComponent = {
     perkuliahan: JadwalTable,
     karya_akhir: JadwalKaryaAkhirTable,
@@ -100,95 +103,48 @@ export default function JadwalPage() {
   const isToday = isSameDate(selectedDate, new Date());
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <PageHeader title={tabTitles[activeTab] || 'Jadwal'} />
-
+    <div className="ui-page">
       {/* Date Filter */}
-      <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-200 p-3 md:p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={goToPrevDay}
-              className="p-1.5 md:p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-            >
-              <svg
-                className="w-4 h-4 md:w-5 md:h-5 text-slate-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 19l-7-7 7-7"
-                />
-              </svg>
-            </button>
-            <input
-              type="date"
-              value={formatDateInput(selectedDate)}
-              onChange={handleDateChange}
-              className="border border-slate-200 rounded-lg px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            />
-            <button
-              onClick={goToNextDay}
-              className="p-1.5 md:p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-            >
-              <svg
-                className="w-4 h-4 md:w-5 md:h-5 text-slate-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-            </button>
-          </div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-            <button
-              onClick={goToToday}
-              className={`px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-lg transition-colors ${
-                isToday
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Hari Ini
-            </button>
-            <span className="text-xs md:text-sm font-medium text-slate-700">
-              {formatDate(selectedDate)}
-            </span>
-          </div>
-        </div>
-      </div>
+      <DateNavigator
+        value={formatDateInput(selectedDate)}
+        label={formatDate(selectedDate)}
+        isToday={isToday}
+        onChange={handleDateChange}
+        onPrevious={goToPrevDay}
+        onNext={goToNextDay}
+        onToday={goToToday}
+      />
 
-      <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="ui-card overflow-hidden">
         <div className="border-b border-slate-200">
-          <nav className="flex -mb-px overflow-x-auto">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-3 md:py-4 text-xs md:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600 bg-blue-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-                }`}
-              >
-                <span>{tab.icon}</span>
-                <span className="hidden sm:inline">{tab.label}</span>
-                <span className="sm:hidden">{tab.label.split(' ')[1]}</span>
-              </button>
-            ))}
+          <nav className="overflow-x-auto" aria-label="Kategori jadwal">
+            <div className="ui-tabs" role="tablist">
+              {tabs.map((tab) => {
+                const Icon = TAB_ICONS[tab.id];
+                const tabIsActive = activeTab === tab.id;
+                return (
+                  <button
+                    type="button"
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`ui-tab ${tabIsActive ? 'is-active' : ''}`}
+                    role="tab"
+                    aria-selected={tabIsActive}
+                    aria-controls={`jadwal-panel-${tab.id}`}
+                  >
+                    <Icon size={16} aria-hidden="true" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </nav>
         </div>
-        <div className="p-3 md:p-6">
+        <div
+          id={`jadwal-panel-${activeTab}`}
+          className="p-4 sm:p-5"
+          role="tabpanel"
+        >
           {TabComponent && <TabComponent selectedDate={selectedDate} />}
         </div>
       </div>
@@ -199,32 +155,19 @@ export default function JadwalPage() {
 // ================================================================================
 // KOMPONEN: PageHeader
 // ================================================================================
-function PageHeader({ title }) {
-  return (
-    <header className="text-center">
-      <h1 className="text-xl md:text-2xl font-semibold text-slate-800">
-        {title}
-      </h1>
-    </header>
-  );
-}
-
 // ================================================================================
 // KOMPONEN UI SHARED
 // ================================================================================
 const LoadingState = () => (
-  <div className="flex items-center justify-center py-8">
-    <div className="text-center">
-      <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent" />
-      <p className="text-sm text-slate-500 mt-2">Memuat jadwal...</p>
-    </div>
-  </div>
+  <StatePanel
+    type="loading"
+    title="Memuat jadwal"
+    description="Data jadwal sedang disiapkan."
+  />
 );
 
 const ErrorState = ({ message }) => (
-  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-    <p className="text-sm text-red-600">⚠️ {message}</p>
-  </div>
+  <StatePanel type="error" description={message} />
 );
 
 const EmptyState = ({ text = 'Belum ada data jadwal.' }) => (
@@ -249,12 +192,12 @@ const EmptyState = ({ text = 'Belum ada data jadwal.' }) => (
 // Table Wrapper (View Only - tanpa tombol tambah)
 function TableWrapper({ title, children }) {
   return (
-    <div className="bg-white rounded-xl md:rounded-2xl shadow-md border border-slate-200 p-3 md:p-6">
-      <div className="flex items-center justify-between mb-4 md:mb-6">
-        <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+    <section>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="ui-card-title">{title}</h2>
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -263,14 +206,14 @@ function ViewDataTable({ data, columns }) {
   return (
     <>
       {/* Desktop Table View */}
-      <div className="hidden lg:block overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
+      <div className="ui-table-wrap hidden overflow-x-auto lg:block">
+        <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+            <tr>
               {columns.map((col, i) => (
                 <th
                   key={i}
-                  className={`py-3 px-4 font-semibold ${col.center ? 'text-center' : 'text-left'} border border-slate-300`}
+                  className={col.center ? 'text-center' : 'text-left'}
                 >
                   {col.label}
                 </th>
@@ -279,12 +222,9 @@ function ViewDataTable({ data, columns }) {
           </thead>
           <tbody>
             {data.map((row) => (
-              <tr
-                key={row.id}
-                className="border-b border-slate-200 hover:bg-blue-50 transition-colors"
-              >
+              <tr key={row.id} className="hover:bg-slate-50">
                 {columns.map((col, i) => (
-                  <td key={i} className="py-3 px-4 border border-slate-200">
+                  <td key={i}>
                     {col.render ? col.render(row) : row[col.key] || '-'}
                   </td>
                 ))}
@@ -299,7 +239,7 @@ function ViewDataTable({ data, columns }) {
         {data.map((row) => (
           <div
             key={row.id}
-            className="bg-gradient-to-br from-blue-50 to-white border-l-4 border-blue-600 rounded-lg p-3 shadow-sm"
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
           >
             {columns.map((col, i) => (
               <div key={i} className="mb-2 last:mb-0">
@@ -428,7 +368,7 @@ function JadwalTable({ selectedDate }) {
       label: 'Jenis',
       render: (r) => (
         <span
-          className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+          className={`meeting-badge inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
             r.jenis_pertemuan === 'daring'
               ? 'bg-blue-100 text-blue-700'
               : r.jenis_pertemuan === 'hybrid'
@@ -436,10 +376,10 @@ function JadwalTable({ selectedDate }) {
                 : 'bg-green-100 text-green-700'
           }`}
         >
-          {r.jenis_pertemuan === 'daring' && '🌐 Daring'}
-          {r.jenis_pertemuan === 'luring' && '🏢 Luring'}
-          {r.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
-          {!r.jenis_pertemuan && '🏢 Luring'}
+          {r.jenis_pertemuan === 'daring' && 'Daring'}
+          {r.jenis_pertemuan === 'luring' && 'Luring'}
+          {r.jenis_pertemuan === 'hybrid' && 'Hybrid'}
+          {!r.jenis_pertemuan && 'Luring'}
         </span>
       ),
     },
@@ -585,7 +525,7 @@ function JadwalKaryaAkhirTable({ selectedDate }) {
       label: 'Jenis',
       render: (r) => (
         <span
-          className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+          className={`meeting-badge inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
             r.jenis_pertemuan === 'daring'
               ? 'bg-blue-100 text-blue-700'
               : r.jenis_pertemuan === 'hybrid'
@@ -593,10 +533,10 @@ function JadwalKaryaAkhirTable({ selectedDate }) {
                 : 'bg-green-100 text-green-700'
           }`}
         >
-          {r.jenis_pertemuan === 'daring' && '🌐 Daring'}
-          {r.jenis_pertemuan === 'luring' && '🏢 Luring'}
-          {r.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
-          {!r.jenis_pertemuan && '🏢 Luring'}
+          {r.jenis_pertemuan === 'daring' && 'Daring'}
+          {r.jenis_pertemuan === 'luring' && 'Luring'}
+          {r.jenis_pertemuan === 'hybrid' && 'Hybrid'}
+          {!r.jenis_pertemuan && 'Luring'}
         </span>
       ),
     },
@@ -734,7 +674,7 @@ function JadwalLainLainTable({ selectedDate }) {
       label: 'Jenis',
       render: (r) => (
         <span
-          className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+          className={`meeting-badge inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
             r.jenis_pertemuan === 'daring'
               ? 'bg-blue-100 text-blue-700'
               : r.jenis_pertemuan === 'hybrid'
@@ -742,10 +682,10 @@ function JadwalLainLainTable({ selectedDate }) {
                 : 'bg-green-100 text-green-700'
           }`}
         >
-          {r.jenis_pertemuan === 'daring' && '🌐 Daring'}
-          {r.jenis_pertemuan === 'luring' && '🏢 Luring'}
-          {r.jenis_pertemuan === 'hybrid' && '🔄 Hybrid'}
-          {!r.jenis_pertemuan && '🏢 Luring'}
+          {r.jenis_pertemuan === 'daring' && 'Daring'}
+          {r.jenis_pertemuan === 'luring' && 'Luring'}
+          {r.jenis_pertemuan === 'hybrid' && 'Hybrid'}
+          {!r.jenis_pertemuan && 'Luring'}
         </span>
       ),
     },

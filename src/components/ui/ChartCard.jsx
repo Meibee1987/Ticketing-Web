@@ -13,25 +13,19 @@ export default function ChartCard({
   return (
     <div
       className={`
-        bg-white rounded-[var(--radius-card)]
+        h-full bg-white rounded-[var(--radius-card)]
         shadow-[var(--shadow-card)]
-        border border-slate-100
-        p-5 md:p-6
+        border border-slate-200
+        p-5
         ${className}
       `}
     >
       {/* Header */}
       {(title || action) && (
-        <div className="flex items-start justify-between mb-4">
+        <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            {title && (
-              <h3 className="text-[15px] font-semibold text-slate-900">
-                {title}
-              </h3>
-            )}
-            {subtitle && (
-              <p className="text-[12px] text-slate-500 mt-0.5">{subtitle}</p>
-            )}
+            {title && <h3 className="ui-card-title">{title}</h3>}
+            {subtitle && <p className="ui-description">{subtitle}</p>}
           </div>
           {action && <div>{action}</div>}
         </div>

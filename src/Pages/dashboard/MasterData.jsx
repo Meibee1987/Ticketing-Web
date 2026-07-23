@@ -1,11 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
+import {
+  Building2,
+  CalendarRange,
+  GraduationCap,
+  LibraryBig,
+  Plus,
+} from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 // 🎯 Import komponen reusable
 import SearchBar from '../../components/SearchBar';
 import ActionButtons from '../../components/ActionButtons';
+import PageHeader from '../../components/ui/PageHeader';
+import StatePanel from '../../components/ui/StatePanel';
 
 const hasOwn = (object, key) =>
   Object.prototype.hasOwnProperty.call(object, key);
+const TAB_ICONS = {
+  dosen: GraduationCap,
+  angkatan: CalendarRange,
+  matakuliah: LibraryBig,
+  ruangan: Building2,
+};
 
 export default function MasterData() {
   const [activeTab, setActiveTab] = useState('dosen');
@@ -172,86 +187,79 @@ export default function MasterData() {
   });
 
   const tabs = [
-    { id: 'dosen', label: 'Dosen', icon: '👨‍🏫' },
-    { id: 'angkatan', label: 'Angkatan', icon: '📅' },
-    { id: 'matakuliah', label: 'Mata Kuliah', icon: '📚' },
-    { id: 'ruangan', label: 'Ruangan', icon: '🏢' },
+    { id: 'dosen', label: 'Dosen' },
+    { id: 'angkatan', label: 'Angkatan' },
+    { id: 'matakuliah', label: 'Mata Kuliah' },
+    { id: 'ruangan', label: 'Ruangan' },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="ui-page">
       {/* Page Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Master Data</h1>
-        <p className="text-slate-600">
-          Kelola data master: Dosen, Angkatan, Mata Kuliah, dan Ruangan
-        </p>
-      </div>
+      <PageHeader
+        title="Kelola Data Akademik"
+        description="Kelola data dosen, angkatan, mata kuliah, dan ruangan dalam satu tempat."
+      />
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="ui-card overflow-hidden">
         <div className="border-b border-slate-200">
-          <div className="flex items-center justify-between px-4">
-            <nav className="flex -mb-px overflow-x-auto">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setSearchInput('');
-                    setSearchQuery('');
-                    setStatusFilter('all');
-                  }}
-                  className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'border-blue-600 text-blue-600 bg-blue-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                </button>
-              ))}
+          <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-0">
+            <nav className="overflow-x-auto" aria-label="Kategori master data">
+              <div className="ui-tabs" role="tablist">
+                {tabs.map((tab) => {
+                  const Icon = TAB_ICONS[tab.id];
+                  const tabIsActive = activeTab === tab.id;
+                  return (
+                    <button
+                      type="button"
+                      key={tab.id}
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        setSearchInput('');
+                        setSearchQuery('');
+                        setStatusFilter('all');
+                      }}
+                      className={`ui-tab ${tabIsActive ? 'is-active' : ''}`}
+                      role="tab"
+                      aria-selected={tabIsActive}
+                    >
+                      <Icon size={16} aria-hidden="true" />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </nav>
             {/* Tombol CRUD di kanan sejajar tab */}
             <button
+              type="button"
               onClick={() => {
                 setShowModal(true);
                 setModalMode('create');
                 setSelectedItem(null);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
+              className="ui-button ui-button-primary w-full sm:w-auto"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
+              <Plus size={16} aria-hidden="true" />
               Tambah {tabs.find((t) => t.id === activeTab)?.label}
             </button>
           </div>
         </div>
 
         {/* 🎯 Search dengan Dropdown Filter Status */}
-        <div className="px-4 py-4 border-b border-slate-200 bg-slate-50">
-          <div className="flex items-center gap-2">
+        <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             {/* Dropdown Filter Status */}
             <select
+              aria-label="Filter status"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+              className="ui-field w-full bg-white sm:w-auto"
             >
               <option value="all">Semua Status</option>
-              <option value="aktif">✅ Aktif</option>
-              <option value="nonaktif">❌ Non-Aktif</option>
+              <option value="aktif">Aktif</option>
+              <option value="nonaktif">Non-Aktif</option>
             </select>
 
             {/* Search Bar */}
@@ -280,16 +288,17 @@ export default function MasterData() {
         {/* Table Content */}
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="p-12 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-slate-600">Loading...</p>
-            </div>
+            <StatePanel
+              type="loading"
+              title="Memuat master data"
+              className="m-4"
+            />
           ) : filteredData.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="text-slate-600">
-                Tidak ada data {tabs.find((t) => t.id === activeTab)?.label}
-              </p>
-            </div>
+            <StatePanel
+              type={searchQuery ? 'search' : 'empty'}
+              title={`Tidak ada data ${tabs.find((t) => t.id === activeTab)?.label}`}
+              className="m-4"
+            />
           ) : (
             <DataTable
               activeTab={activeTab}
@@ -414,10 +423,10 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
                     }`}
                   >
                     {item[col.key] === true
-                      ? '✅ Aktif'
+                      ? 'Aktif'
                       : item[col.key] === false
-                        ? '❌ Non-Aktif'
-                        : '⚪ Belum diset'}
+                        ? 'Non-Aktif'
+                        : 'Belum diset'}
                   </span>
                 ) : col.type === 'role' ? (
                   <span
@@ -427,7 +436,7 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
                         : 'bg-gray-100 text-gray-500'
                     }`}
                   >
-                    {item[col.key] || '⚪ Belum ada role'}
+                    {item[col.key] || 'Belum ada role'}
                   </span>
                 ) : (
                   item[col.key] || '-'
@@ -616,6 +625,7 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
                 Role (Akses Login)
               </label>
               <select
+                aria-label="Role dosen"
                 name="roles_id"
                 value={formData.roles_id || ''}
                 onChange={handleChange}
@@ -775,13 +785,20 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={getTitle()}
+    >
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
         <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-slate-900">{getTitle()}</h2>
+          <h2 className="ui-section-title">{getTitle()}</h2>
           <button
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Tutup modal"
           >
             <svg
               className="w-6 h-6"
@@ -804,7 +821,7 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              className="ui-button ui-button-secondary"
             >
               {isReadOnly ? 'Tutup' : 'Batal'}
             </button>
@@ -812,7 +829,7 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 transition-colors"
+                className="ui-button ui-button-primary disabled:opacity-50"
               >
                 {submitting
                   ? 'Menyimpan...'
@@ -840,10 +857,14 @@ function FormField({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">
+      <label
+        htmlFor={`master-field-${name}`}
+        className="block text-sm font-medium text-slate-700 mb-1"
+      >
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <input
+        id={`master-field-${name}`}
         type={type}
         name={name}
         value={value}
@@ -876,6 +897,9 @@ function StatusToggle({ label, checked, onChange, disabled }) {
         type="button"
         onClick={() => !disabled && onChange(!checked)}
         disabled={disabled}
+        role="switch"
+        aria-checked={checked}
+        aria-label={`${label}: ${checked ? 'Aktif' : 'Non-Aktif'}`}
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
           checked ? 'bg-green-500' : 'bg-gray-300'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
@@ -887,9 +911,10 @@ function StatusToggle({ label, checked, onChange, disabled }) {
         />
       </button>
       <span
-        className={`text-sm font-medium ${checked ? 'text-green-600' : 'text-red-600'}`}
+        className={`master-status-label text-sm font-medium ${checked ? 'text-green-600' : 'text-red-600'}`}
+        data-status={checked ? 'Aktif' : 'Non-Aktif'}
       >
-        {checked ? '✅ Aktif' : '❌ Non-Aktif'}
+        {checked ? 'Aktif' : 'Non-Aktif'}
       </span>
     </div>
   );

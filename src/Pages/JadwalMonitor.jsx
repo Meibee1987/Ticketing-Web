@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { CalendarX2, Clock3, ImageOff } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { assertSupabaseResults } from '../utils/supabaseResults';
 
@@ -136,7 +137,7 @@ export default function JadwalMonitor() {
             kegiatan: merged.nama_matkul,
             tempat:
               merged.jenis_pertemuan === 'daring'
-                ? '🌐 Daring'
+                ? 'Daring (Online)'
                 : merged.nama_ruangan || '-',
             dosen: merged.nama_dosen || '-',
             status: getStatus(merged.mulai_jadwal, merged.akhir_jadwal),
@@ -164,7 +165,7 @@ export default function JadwalMonitor() {
             kegiatan: `${merged.display_agenda}`,
             tempat:
               merged.jenis_pertemuan === 'daring'
-                ? '🌐 Daring'
+                ? 'Daring (Online)'
                 : merged.display_ruangan || '-',
             dosen: merged.display_mahasiswa,
 
@@ -192,7 +193,7 @@ export default function JadwalMonitor() {
             kegiatan: merged.agenda || 'Kegiatan Lain',
             tempat:
               merged.jenis_pertemuan === 'daring'
-                ? '🌐 Daring'
+                ? 'Daring (Online)'
                 : merged.ruangan_display || '-',
             dosen: merged.user_display || '-',
             status: getStatus(merged.mulai_jadwal, merged.akhir_jadwal),
@@ -213,8 +214,10 @@ export default function JadwalMonitor() {
         // 2. Urutan ruangan: Daring pertama, lalu alfabetis
         if (a.tempat !== b.tempat) {
           // Daring selalu di atas
-          if (a.tempat === '🌐 Daring' && b.tempat !== '🌐 Daring') return -1;
-          if (b.tempat === '🌐 Daring' && a.tempat !== '🌐 Daring') return 1;
+          if (a.tempat === 'Daring (Online)' && b.tempat !== 'Daring (Online)')
+            return -1;
+          if (b.tempat === 'Daring (Online)' && a.tempat !== 'Daring (Online)')
+            return 1;
 
           // Ruangan alfabetis
           return a.tempat.localeCompare(b.tempat, 'id', {
@@ -303,13 +306,13 @@ export default function JadwalMonitor() {
   const getTypeIconBg = (type) => {
     switch (type) {
       case 'perkuliahan':
-        return 'from-blue-500 to-blue-600';
+        return 'bg-blue-600';
       case 'karya_akhir':
-        return 'from-purple-500 to-purple-600';
+        return 'bg-purple-600';
       case 'lain_lain':
-        return 'from-green-500 to-green-600';
+        return 'bg-green-600';
       default:
-        return 'from-gray-500 to-gray-600';
+        return 'bg-gray-600';
     }
   };
 
@@ -333,21 +336,18 @@ export default function JadwalMonitor() {
           bg: 'bg-blue-500',
           text: 'text-white',
           label: 'Berlangsung',
-          icon: '🟢',
         };
       case 'upcoming':
         return {
           bg: 'bg-amber-500',
           text: 'text-white',
           label: 'Akan Datang',
-          icon: '⏰',
         };
       case 'finished':
         return {
           bg: 'bg-emerald-500',
           text: 'text-white',
           label: 'Selesai',
-          icon: '✅',
         };
       default:
         return { bg: 'bg-gray-400', text: 'text-white', label: '-', icon: '' };
@@ -356,7 +356,7 @@ export default function JadwalMonitor() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900 flex items-center justify-center relative overflow-hidden">
+      <div className="monitor-page flex min-h-screen items-center justify-center overflow-hidden bg-primary-900">
         {/* Floating patterns */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute -top-20 -left-20 w-72 h-72 bg-white/5 rounded-full animate-pulse"></div>
@@ -378,7 +378,7 @@ export default function JadwalMonitor() {
     return (
       <main className="min-h-screen bg-slate-100 px-4 flex items-center justify-center">
         <section
-          className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-xl"
+          className="w-full max-w-md rounded-xl border border-red-200 bg-white p-8 text-center shadow-sm"
           role="alert"
         >
           <h1 className="text-xl font-bold text-slate-900">
@@ -414,23 +414,9 @@ export default function JadwalMonitor() {
   const clock = formatClockTime();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 flex flex-col relative overflow-hidden">
+    <div className="monitor-page relative flex min-h-screen flex-col overflow-x-hidden bg-slate-100">
       {/* ═══════════════ HEADER ═══════════════ */}
-      <div className="relative bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 overflow-hidden ">
-        {/* Animated floating patterns */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-10 -left-10 w-48 h-48 bg-white/10 rounded-full blur-2xl animate-pulse"></div>
-          <div
-            className="absolute top-4 right-20 w-32 h-32 bg-white/5 rounded-full blur-xl animate-pulse"
-            style={{ animationDelay: '1s' }}
-          ></div>
-          <div
-            className="absolute -bottom-8 left-1/2 w-64 h-24 bg-white/5 rounded-full blur-2xl animate-pulse"
-            style={{ animationDelay: '2s' }}
-          ></div>
-          <div className="absolute bottom-0 right-0 w-96 h-32 bg-gradient-to-tl from-blue-800/30 to-transparent rounded-tl-full"></div>
-        </div>
-
+      <div className="monitor-header relative overflow-hidden bg-primary-800">
         <div className="relative z-10 px-3 md:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-24 4xl:px-32 py-2 md:py-3 lg:py-4 3xl:py-6 4xl:py-8">
           {/* ── Mobile Header (stacked, centered) ── */}
           <div className="md:hidden flex flex-col items-center gap-1">
@@ -441,11 +427,11 @@ export default function JadwalMonitor() {
               className="h-8 w-auto object-contain"
             />
             {/* Title */}
-            <h1 className="text-sm font-black text-white tracking-tight drop-shadow-lg">
+            <h1 className="text-sm font-black text-white tracking-tight">
               INFORMASI JADWAL
             </h1>
             {/* Date */}
-            <div className="bg-yellow-400/90 backdrop-blur-sm px-3 py-0.5 rounded-full shadow-lg border border-yellow-300/50">
+            <div className="bg-yellow-400/90 backdrop-blur-sm px-3 py-0.5 rounded-full border border-yellow-300/50">
               <span className="text-blue-700 text-[10px] font-bold whitespace-nowrap">
                 {formatDateOnly()}
               </span>
@@ -465,10 +451,10 @@ export default function JadwalMonitor() {
 
             {/* Center: Title + Date */}
             <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-              <h1 className="text-lg lg:text-2xl xl:text-3xl 2xl:text-4xl 3xl:text-5xl 4xl:text-7xl 5xl:text-9xl font-black text-white tracking-tight drop-shadow-lg leading-tight text-center">
+              <h1 className="text-lg lg:text-2xl xl:text-3xl 2xl:text-4xl 3xl:text-5xl 4xl:text-7xl 5xl:text-9xl font-black text-white tracking-tight leading-tight text-center">
                 INFORMASI JADWAL
               </h1>
-              <div className="mt-1 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 lg:px-6 3xl:px-8 4xl:px-12 py-1 lg:py-1.5 3xl:py-2 4xl:py-3 rounded-full shadow-lg border border-yellow-300/50">
+              <div className="mt-1 inline-block bg-yellow-400/90 backdrop-blur-sm px-4 lg:px-6 3xl:px-8 4xl:px-12 py-1 lg:py-1.5 3xl:py-2 4xl:py-3 rounded-full border border-yellow-300/50">
                 <span className="text-blue-700 text-xs lg:text-sm 2xl:text-base 3xl:text-xl 4xl:text-3xl 5xl:text-4xl font-bold whitespace-nowrap">
                   {formatDateOnly()}
                 </span>
@@ -476,11 +462,13 @@ export default function JadwalMonitor() {
             </div>
 
             {/* Right: Digital Clock */}
-            <div className="flex-shrink-0 bg-white/15 backdrop-blur-md rounded-xl px-3 lg:px-5 3xl:px-7 4xl:px-10 py-1.5 lg:py-2 3xl:py-3 4xl:py-5 border border-white/20 shadow-lg">
+            <div className="flex-shrink-0 bg-white/15 backdrop-blur-md rounded-xl px-3 lg:px-5 3xl:px-7 4xl:px-10 py-1.5 lg:py-2 3xl:py-3 4xl:py-5 border border-white/20">
               <div className="flex items-center gap-1 3xl:gap-2 4xl:gap-3">
-                <span className="text-yellow-300 text-xs lg:text-sm 3xl:text-xl 4xl:text-3xl">
-                  ⏱
-                </span>
+                <Clock3
+                  className="text-yellow-300"
+                  size={20}
+                  aria-hidden="true"
+                />
                 <span className="text-white font-bold text-base lg:text-xl 2xl:text-2xl 3xl:text-4xl 4xl:text-6xl 5xl:text-7xl font-mono tracking-wider">
                   {clock.hours}
                 </span>
@@ -503,8 +491,12 @@ export default function JadwalMonitor() {
       <div className="flex-1 px-3 md:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-24 4xl:px-32 py-3 md:py-4 lg:py-5 3xl:py-8 4xl:py-12">
         {jadwalData.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="bg-white rounded-2xl p-8 md:p-12 max-w-md mx-auto shadow-xl text-center">
-              <div className="text-4xl md:text-5xl mb-4">📅</div>
+            <div className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm md:p-12">
+              <CalendarX2
+                className="mx-auto mb-4 text-slate-400"
+                size={44}
+                aria-hidden="true"
+              />
               <h2 className="text-base md:text-xl font-bold text-gray-800 mb-2">
                 Tidak Ada Jadwal
               </h2>
@@ -517,7 +509,7 @@ export default function JadwalMonitor() {
           <>
             {/* 🖼️ IMAGE SLIDE */}
             {isImageSlide && SLIDE_IMAGES[imageSlideIndex] ? (
-              <div className="bg-white rounded-2xl overflow-hidden shadow-xl">
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div className="relative w-full h-[calc(100vh-200px)] sm:h-[calc(100vh-240px)] md:h-[calc(100vh-260px)] lg:h-[calc(100vh-280px)] xl:h-[calc(100vh-300px)] 3xl:h-[calc(100vh-340px)] 4xl:h-[calc(100vh-420px)] flex items-center justify-center bg-gray-50">
                   <img
                     src={SLIDE_IMAGES[imageSlideIndex].url}
@@ -529,14 +521,18 @@ export default function JadwalMonitor() {
                     }}
                   />
                   <div className="hidden text-center p-8">
-                    <div className="text-4xl mb-4">🖼️</div>
+                    <ImageOff
+                      className="mx-auto mb-4 text-slate-400"
+                      size={40}
+                      aria-hidden="true"
+                    />
                     <p className="text-base text-gray-500">
                       Gambar tidak dapat dimuat
                     </p>
                   </div>
                 </div>
                 {SLIDE_IMAGES[imageSlideIndex].title && (
-                  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-center py-3 px-6">
+                  <div className="bg-primary-700 text-white text-center py-3 px-6">
                     <h3 className="text-sm md:text-base lg:text-lg font-bold">
                       {SLIDE_IMAGES[imageSlideIndex].title}
                     </h3>
@@ -553,7 +549,7 @@ export default function JadwalMonitor() {
                     <div key={item.id}>
                       {/* ── Schedule Card ── */}
                       <div
-                        className={`bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden group hover:-translate-y-0.5 ${item.status === 'ongoing' ? 'ring-2 ring-green-400/50' : ''}`}
+                        className={`group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-colors duration-150 hover:border-slate-300 ${item.status === 'ongoing' ? 'ring-2 ring-green-400/50' : ''}`}
                       >
                         <div className="flex">
                           {/* Left accent border */}
@@ -575,7 +571,7 @@ export default function JadwalMonitor() {
                             <div className="lg:hidden space-y-3">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                  <span className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs md:text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
+                                  <span className="bg-primary-600 text-white text-xs md:text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
                                     {item.kode}
                                   </span>
                                   <div className="flex items-center gap-1.5 text-gray-500 text-xs">
@@ -600,7 +596,7 @@ export default function JadwalMonitor() {
                                 <span
                                   className={`${statusBadge.bg} ${statusBadge.text} text-[10px] font-semibold px-3 py-1.5 rounded-full shadow-sm`}
                                 >
-                                  {statusBadge.icon} {statusBadge.label}
+                                  {statusBadge.label}
                                 </span>
                               </div>
                               <div className="font-semibold text-gray-800 text-sm">
@@ -608,7 +604,7 @@ export default function JadwalMonitor() {
                               </div>
                               {item.jenis_pertemuan && (
                                 <span
-                                  className={`inline-block px-2.5 py-1 text-[10px] rounded-full font-medium ${
+                                  className={`monitor-meeting-badge inline-block px-2.5 py-1 text-[10px] rounded-full font-medium ${
                                     item.jenis_pertemuan === 'daring'
                                       ? 'bg-green-50 text-green-600'
                                       : item.jenis_pertemuan === 'hybrid'
@@ -617,11 +613,11 @@ export default function JadwalMonitor() {
                                   }`}
                                 >
                                   {item.jenis_pertemuan === 'daring' &&
-                                    '🌐 Daring'}
+                                    'Daring'}
                                   {item.jenis_pertemuan === 'luring' &&
-                                    '🏢 Luring'}
+                                    'Luring'}
                                   {item.jenis_pertemuan === 'hybrid' &&
-                                    '🔄 Hybrid'}
+                                    'Hybrid'}
                                 </span>
                               )}
                               <div className="flex items-center justify-between text-xs text-gray-600">
@@ -671,7 +667,7 @@ export default function JadwalMonitor() {
                               {/* Kode + Jam */}
                               <div className="col-span-2 flex items-center gap-2 xl:gap-4">
                                 <div className="flex flex-col items-center">
-                                  <span className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs xl:text-sm 3xl:text-base 4xl:text-2xl 5xl:text-3xl font-bold px-2.5 lg:px-3 xl:px-4 3xl:px-5 4xl:px-8 py-1.5 xl:py-2 3xl:py-3 4xl:py-4 rounded-lg shadow-sm">
+                                  <span className="bg-primary-600 text-white text-xs xl:text-sm 3xl:text-base 4xl:text-2xl 5xl:text-3xl font-bold px-2.5 lg:px-3 xl:px-4 3xl:px-5 4xl:px-8 py-1.5 xl:py-2 3xl:py-3 4xl:py-4 rounded-lg shadow-sm">
                                     {item.kode}
                                   </span>
                                   <div className="flex items-center gap-1.5 text-gray-400 text-xs mt-2"></div>
@@ -681,7 +677,7 @@ export default function JadwalMonitor() {
                               {/* Kegiatan */}
                               <div className="col-span-3 flex items-center gap-2 xl:gap-3 3xl:gap-4">
                                 <div
-                                  className={`w-6 h-6 xl:w-8 xl:h-8 3xl:w-10 3xl:h-10 4xl:w-16 4xl:h-16 bg-gradient-to-br ${getTypeIconBg(item.type)} rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm`}
+                                  className={`w-6 h-6 xl:w-8 xl:h-8 3xl:w-10 3xl:h-10 4xl:w-16 4xl:h-16 ${getTypeIconBg(item.type)} rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm`}
                                 >
                                   <svg
                                     className="w-3 h-3 xl:w-4 xl:h-4 3xl:w-5 3xl:h-5 4xl:w-8 4xl:h-8 text-white"
@@ -703,7 +699,7 @@ export default function JadwalMonitor() {
                                   </div>
                                   {item.jenis_pertemuan && (
                                     <span
-                                      className={`inline-block mt-1 px-2 xl:px-2.5 3xl:px-3 4xl:px-5 py-0.5 3xl:py-1 text-[10px] xl:text-xs 3xl:text-sm 4xl:text-xl rounded-full font-bold ${
+                                      className={`monitor-meeting-badge inline-block mt-1 px-2 xl:px-2.5 3xl:px-3 4xl:px-5 py-0.5 3xl:py-1 text-[10px] xl:text-xs 3xl:text-sm 4xl:text-xl rounded-full font-bold ${
                                         item.jenis_pertemuan === 'daring'
                                           ? 'bg-green-50 text-green-600'
                                           : item.jenis_pertemuan === 'hybrid'
@@ -712,11 +708,11 @@ export default function JadwalMonitor() {
                                       }`}
                                     >
                                       {item.jenis_pertemuan === 'daring' &&
-                                        '🌐 Daring'}
+                                        'Daring'}
                                       {item.jenis_pertemuan === 'luring' &&
-                                        '🏢 Luring'}
+                                        'Luring'}
                                       {item.jenis_pertemuan === 'hybrid' &&
-                                        '🔄 Hybrid'}
+                                        'Hybrid'}
                                     </span>
                                   )}
                                 </div>
@@ -778,7 +774,7 @@ export default function JadwalMonitor() {
                                 <span
                                   className={`${statusBadge.bg} ${statusBadge.text} text-[9px] xl:text-[10px] 3xl:text-xs 4xl:text-xl 5xl:text-2xl font-semibold px-2 xl:px-3 3xl:px-4 4xl:px-6 py-1 xl:py-1.5 3xl:py-2 4xl:py-3 rounded-full shadow-sm whitespace-nowrap`}
                                 >
-                                  {statusBadge.icon} {statusBadge.label}
+                                  {statusBadge.label}
                                 </span>
                               </div>
                             </div>
@@ -828,6 +824,7 @@ export default function JadwalMonitor() {
                     )
                   }
                   className="bg-blue-50 hover:bg-blue-100 text-blue-600 p-1.5 rounded-lg transition-colors"
+                  aria-label="Slide sebelumnya"
                 >
                   <svg
                     className="w-4 h-4"
@@ -854,6 +851,8 @@ export default function JadwalMonitor() {
                           : 'w-2.5 bg-gray-300 hover:bg-gray-400'
                       } h-2.5`}
                       title={`Halaman ${index + 1}${index >= totalDataPages ? ' (Gambar)' : ''}`}
+                      aria-label={`Tampilkan slide ${index + 1}`}
+                      aria-current={currentPage === index ? 'true' : undefined}
                     />
                   ))}
                 </div>
@@ -862,6 +861,7 @@ export default function JadwalMonitor() {
                     setCurrentPage((prev) => (prev + 1) % totalPages)
                   }
                   className="bg-blue-50 hover:bg-blue-100 text-blue-600 p-1.5 rounded-lg transition-colors"
+                  aria-label="Slide berikutnya"
                 >
                   <svg
                     className="w-4 h-4"
@@ -885,7 +885,7 @@ export default function JadwalMonitor() {
 
             {/* Developer credit */}
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-sm">
+              <div className="w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center shadow-sm">
                 <span className="text-white text-[8px] font-bold">W</span>
               </div>
               <span className="text-[12px] text-gray-400">
@@ -920,7 +920,7 @@ export default function JadwalMonitor() {
             {/* Row 2: Pagination + Dev credit */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
+                <div className="w-4 h-4 rounded-full bg-primary-600 flex items-center justify-center">
                   <span className="text-white text-[6px] font-bold">W</span>
                 </div>
                 <span className="text-[9px] text-gray-400">
@@ -937,6 +937,7 @@ export default function JadwalMonitor() {
                       )
                     }
                     className="bg-blue-50 text-blue-600 p-0.5 rounded transition-colors"
+                    aria-label="Slide sebelumnya"
                   >
                     <svg
                       className="w-3 h-3"
@@ -962,6 +963,10 @@ export default function JadwalMonitor() {
                             ? 'w-4 bg-blue-500'
                             : 'w-1.5 bg-gray-300'
                         }`}
+                        aria-label={`Tampilkan slide ${index + 1}`}
+                        aria-current={
+                          currentPage === index ? 'true' : undefined
+                        }
                       />
                     ))}
                   </div>
@@ -970,6 +975,7 @@ export default function JadwalMonitor() {
                       setCurrentPage((prev) => (prev + 1) % totalPages)
                     }
                     className="bg-blue-50 text-blue-600 p-0.5 rounded transition-colors"
+                    aria-label="Slide berikutnya"
                   >
                     <svg
                       className="w-3 h-3"

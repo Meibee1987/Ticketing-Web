@@ -65,16 +65,13 @@ export default function Badge({
   const v = VARIANTS[variant?.toLowerCase()] || VARIANTS.default;
 
   return (
-    <span
-      className={`
-        inline-flex items-center gap-1.5
-        px-2.5 py-1 rounded-full
-        text-xs font-semibold
-        ${v.bg} ${v.text}
-        ${className}
-      `}
-    >
-      {showDot && <span className={`w-1.5 h-1.5 rounded-full ${v.dot}`} />}
+    <span className={`ui-badge ${v.bg} ${v.text} ${className}`}>
+      {showDot && (
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${v.dot}`}
+          aria-hidden="true"
+        />
+      )}
       {children}
     </span>
   );

@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatNotificationTime } from '../../utils/notifications';
+import StatePanel from './StatePanel';
 
 const ALERT_CONFIG = {
   peringatan: {
@@ -90,6 +91,7 @@ function AlertCard({ notification, onDismiss }) {
         <button
           onClick={() => onDismiss(notification.id)}
           className="absolute top-3 right-3 p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition"
+          aria-label={`Tutup notifikasi ${notification.title}`}
         >
           <X size={14} />
         </button>
@@ -139,18 +141,14 @@ export default function NotificationPanel({
   const activeCount = notifications.length;
 
   return (
-    <div className="bg-white rounded-[var(--radius-card)] shadow-[var(--shadow-card)] border border-slate-100 p-5 md:p-6">
+    <div className="h-full rounded-[var(--radius-card)] border border-slate-200 bg-white p-5 shadow-[var(--shadow-card)]">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-[15px] font-semibold text-slate-900">
-            Notifikasi Sistem
-          </h3>
-          <p className="text-[12px] text-slate-500 mt-0.5">
-            {activeCount} notifikasi aktif
-          </p>
+          <h3 className="ui-card-title">Notifikasi Sistem</h3>
+          <p className="ui-description">{activeCount} notifikasi aktif</p>
         </div>
-        <span className="w-8 h-8 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center">
+        <span className="ui-badge bg-primary-50 text-primary-700">
           {activeCount}
         </span>
       </div>
@@ -166,9 +164,12 @@ export default function NotificationPanel({
           ))}
         </div>
       ) : notifications.length === 0 ? (
-        <p className="text-sm text-slate-500 text-center py-8">
-          Tidak ada notifikasi.
-        </p>
+        <StatePanel
+          type="empty"
+          title="Tidak ada notifikasi"
+          description="Aktivitas dan perubahan jadwal akan muncul di sini."
+          compact
+        />
       ) : (
         <div className="space-y-3">
           {notifications.map((notif) => (

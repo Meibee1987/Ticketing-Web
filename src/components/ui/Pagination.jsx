@@ -83,7 +83,10 @@ export default function Pagination({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-200">
+    <nav
+      className="flex flex-col gap-4 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between"
+      aria-label="Pagination"
+    >
       {showTotalItems && totalItems > 0 && (
         <div className="text-sm text-slate-600">
           Menampilkan{' '}
@@ -94,7 +97,7 @@ export default function Pagination({
         </div>
       )}
 
-      <div className="flex items-center gap-4">
+      <div className="flex max-w-full flex-wrap items-center gap-3">
         {showPageSizeSelector && (
           <div className="flex items-center gap-2">
             <label htmlFor="pageSize" className="text-sm text-slate-600">
@@ -104,7 +107,7 @@ export default function Pagination({
               id="pageSize"
               value={pageSize}
               onChange={handlePageSizeChange}
-              className="text-sm border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="ui-field min-h-9 w-auto py-1.5"
             >
               <option value="5">5</option>
               <option value="10">10</option>
@@ -115,12 +118,13 @@ export default function Pagination({
           </div>
         )}
 
-        <div className="flex items-center gap-1">
+        <div className="flex max-w-full items-center gap-1 overflow-x-auto pb-1">
           <button
+            type="button"
             onClick={() => onPageChange && onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            aria-label="Previous page"
+            className="ui-button ui-button-secondary min-h-9 px-3 disabled:opacity-50"
+            aria-label="Halaman sebelumnya"
           >
             &lt;
           </button>
@@ -139,14 +143,15 @@ export default function Pagination({
 
             return (
               <button
+                type="button"
                 key={pageNumber}
                 onClick={() => onPageChange && onPageChange(pageNumber)}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                   currentPage === pageNumber
-                    ? 'bg-blue-600 text-white border border-blue-600'
+                    ? 'border border-primary-600 bg-primary-600 text-white'
                     : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
                 }`}
-                aria-label={`Page ${pageNumber}`}
+                aria-label={`Halaman ${pageNumber}`}
                 aria-current={currentPage === pageNumber ? 'page' : undefined}
               >
                 {pageNumber}
@@ -155,15 +160,16 @@ export default function Pagination({
           })}
 
           <button
+            type="button"
             onClick={() => onPageChange && onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            aria-label="Next page"
+            className="ui-button ui-button-secondary min-h-9 px-3 disabled:opacity-50"
+            aria-label="Halaman berikutnya"
           >
             &gt;
           </button>
         </div>
       </div>
-    </div>
+    </nav>
   );
 }

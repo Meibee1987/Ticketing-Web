@@ -1,6 +1,19 @@
 import { useState, useEffect } from 'react';
+import { AlertTriangle, GraduationCap, UserCog, UserPlus } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../hooks/useAuth';
+import PageHeader from '../../components/ui/PageHeader';
+import StatePanel from '../../components/ui/StatePanel';
+
+const TAB_ICONS = {
+  teknisi: UserCog,
+  dosen: GraduationCap,
+};
+
+function UserTabIcon({ tabKey }) {
+  const Icon = TAB_ICONS[tabKey];
+  return <Icon size={16} aria-hidden="true" />;
+}
 
 export default function UsersPage() {
   // Get current user role
@@ -489,44 +502,44 @@ export default function UsersPage() {
   const getRoleBadge = (roleName) => {
     const r = (roleName || '').toLowerCase();
     if (r === 'super admin' || r === 'super_admin')
-      return 'bg-purple-100 text-purple-700';
-    if (r === 'admin') return 'bg-blue-100 text-blue-700';
-    if (r === 'dosen') return 'bg-indigo-100 text-indigo-700';
+      return 'bg-primary-100 text-primary-700';
+    if (r === 'admin') return 'bg-secondary-100 text-secondary-700';
+    if (r === 'dosen') return 'bg-success-100 text-success-700';
     return 'bg-slate-100 text-slate-600';
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <header>
-        <h1 className="text-xl md:text-2xl font-semibold text-slate-800">
-          👥 Manajemen Users
-        </h1>
-        <p className="text-xs md:text-sm text-slate-500 mt-1">
-          Kelola User Admin dan Dosen beserta hak akses role mereka.
-        </p>
-      </header>
+    <div className="ui-page">
+      <PageHeader
+        title="Direktori Pengguna"
+        description="Kelola user admin dan dosen beserta hak akses mereka."
+      />
 
       {/* Card */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="ui-card overflow-hidden">
         {/* Tab + Tombol Tambah */}
         <div className="border-b border-slate-200">
-          <div className="flex items-center justify-between px-4">
-            <nav className="flex -mb-px overflow-x-auto">
+          <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-0">
+            <nav
+              className="flex overflow-x-auto"
+              aria-label="Kategori pengguna"
+              role="tablist"
+            >
               {[
-                { key: 'teknisi', label: 'User Admin', icon: '🔧' },
-                { key: 'dosen', label: 'User Dosen', icon: '🎓' },
+                { key: 'teknisi', label: 'User Admin' },
+                { key: 'dosen', label: 'User Dosen' },
               ].map((tab) => (
                 <button
+                  type="button"
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab.key
-                      ? 'border-blue-600 text-blue-600 bg-blue-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                  className={`ui-tab ${
+                    activeTab === tab.key ? 'is-active' : ''
                   }`}
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
                 >
-                  <span>{tab.icon}</span>
+                  <UserTabIcon tabKey={tab.key} />
                   <span>{tab.label}</span>
                   <span
                     className={`ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
@@ -543,22 +556,11 @@ export default function UsersPage() {
               ))}
             </nav>
             <button
+              type="button"
               onClick={openAddModal}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
+              className="ui-button ui-button-primary w-full sm:w-auto"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
+              <UserPlus size={16} aria-hidden="true" />
               {activeTab === 'teknisi' ? 'Tambah User' : 'Assign Role Dosen'}
             </button>
           </div>
@@ -588,21 +590,26 @@ export default function UsersPage() {
         {/* Table */}
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="p-12 text-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto" />
-              <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
-            </div>
+            <StatePanel
+              type="loading"
+              title="Memuat pengguna"
+              className="m-4"
+            />
           ) : currentUserList.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="text-slate-400 text-3xl mb-3">
-                {activeTab === 'teknisi' ? '🔧' : '🎓'}
-              </p>
-              <p className="text-sm text-slate-500">
-                {activeTab === 'dosen'
-                  ? 'Belum ada dosen yang di-assign role.'
-                  : 'Belum ada data user teknisi.'}
-              </p>
-            </div>
+            <StatePanel
+              type="empty"
+              title={
+                activeTab === 'dosen'
+                  ? 'Belum ada user dosen'
+                  : 'Belum ada user admin'
+              }
+              description={
+                activeTab === 'dosen'
+                  ? 'Belum ada dosen yang diberi role.'
+                  : 'Tambahkan user admin untuk mulai mengelola akses.'
+              }
+              className="m-4"
+            />
           ) : (
             <table className="min-w-full">
               <thead>
@@ -701,12 +708,18 @@ export default function UsersPage() {
                     </td>
                     <td className="px-6 py-4">
                       {user.auth_id ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">
-                          ✅ Sudah Login
+                        <span
+                          className="user-login-status inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium"
+                          data-label="Sudah Login"
+                        >
+                          Sudah Login
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">
-                          ⏳ Belum Login
+                        <span
+                          className="user-login-status inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-medium"
+                          data-label="Belum Login"
+                        >
+                          Belum Login
                         </span>
                       )}
                     </td>
@@ -746,19 +759,26 @@ export default function UsersPage() {
 
       {/* Modal Add/Edit User */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            modalMode === 'edit' ? 'Edit pengguna' : 'Tambah pengguna'
+          }
+        >
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div>
                 <h3 className="text-base font-semibold text-slate-800">
                   {activeTab === 'teknisi'
                     ? modalMode === 'edit'
-                      ? '✏️ Edit User Teknisi'
-                      : '➕ Tambah User Teknisi'
+                      ? 'Edit User Teknisi'
+                      : 'Tambah User Teknisi'
                     : modalMode === 'edit'
-                      ? '✏️ Edit Role Dosen'
-                      : '🎓 Assign Role ke Dosen'}
+                      ? 'Edit Role Dosen'
+                      : 'Assign Role ke Dosen'}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {activeTab === 'teknisi'
@@ -767,8 +787,10 @@ export default function UsersPage() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={closeModal}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+                aria-label="Tutup modal"
               >
                 <svg
                   className="w-5 h-5"
@@ -796,6 +818,7 @@ export default function UsersPage() {
                     </label>
                     <input
                       type="text"
+                      aria-label="Nama teknisi"
                       value={form.nama}
                       onChange={(e) =>
                         setForm({ ...form, nama: e.target.value })
@@ -811,6 +834,7 @@ export default function UsersPage() {
                     </label>
                     <input
                       type="email"
+                      aria-label="Email teknisi"
                       value={form.email}
                       onChange={(e) =>
                         setForm({ ...form, email: e.target.value })
@@ -826,7 +850,8 @@ export default function UsersPage() {
                     />
                     {modalMode === 'edit' && form.auth_id ? (
                       <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
-                        ⚠️ Email tidak dapat diubah karena user sudah login
+                        <AlertTriangle size={14} aria-hidden="true" />
+                        Email tidak dapat diubah karena user sudah login
                       </p>
                     ) : (
                       <p className="text-xs text-slate-400 mt-1.5">
@@ -844,6 +869,7 @@ export default function UsersPage() {
                         <span className="text-red-500">*</span>
                       </label>
                       <select
+                        aria-label="Pilih dosen dari master data"
                         value={form.dosen_id}
                         onChange={(e) => handleSelectDosen(e.target.value)}
                         required
@@ -864,9 +890,16 @@ export default function UsersPage() {
                         )}
                       </select>
                       {masterDosenList.length === 0 && (
-                        <p className="text-xs text-amber-600 mt-1.5">
-                          ⚠️ Semua dosen sudah di-assign role. Tambah dosen baru
-                          di Master Data.
+                        <p className="mt-1.5 flex items-start gap-1 text-xs text-amber-600">
+                          <AlertTriangle
+                            size={14}
+                            className="mt-0.5 shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span>
+                            Semua dosen sudah di-assign role. Tambah dosen baru
+                            di Master Data.
+                          </span>
                         </p>
                       )}
                     </div>
@@ -877,6 +910,7 @@ export default function UsersPage() {
                       </label>
                       <input
                         type="text"
+                        aria-label="Nama dosen"
                         value={form.nama}
                         disabled
                         className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-slate-100 cursor-not-allowed text-slate-500"
@@ -890,7 +924,7 @@ export default function UsersPage() {
                   {form.dosen_id && modalMode === 'add' && (
                     <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
                       <p className="text-xs font-semibold text-blue-700 mb-2">
-                        📋 Info Dosen Terpilih
+                        Info Dosen Terpilih
                       </p>
                       <div className="text-xs text-blue-700 space-y-1">
                         <p>
@@ -922,6 +956,7 @@ export default function UsersPage() {
                       </label>
                       <input
                         type="email"
+                        aria-label="Email dosen"
                         value={form.email}
                         disabled
                         className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-slate-100 cursor-not-allowed text-slate-500"
@@ -981,6 +1016,7 @@ export default function UsersPage() {
                       {fotoFile ? 'Ganti Foto' : 'Pilih Foto'}
                       <input
                         type="file"
+                        aria-label="Foto profil"
                         accept="image/jpeg,image/png,image/webp"
                         onChange={handleFotoChange}
                         className="hidden"
@@ -991,7 +1027,7 @@ export default function UsersPage() {
                     </p>
                     {fotoFile && (
                       <p className="text-xs text-green-600 mt-0.5">
-                        ✅ {fotoFile.name}
+                        {fotoFile.name}
                       </p>
                     )}
                   </div>
@@ -1004,6 +1040,7 @@ export default function UsersPage() {
                   Role <span className="text-red-500">*</span>
                 </label>
                 <select
+                  aria-label="Role pengguna"
                   value={form.roles_id}
                   onChange={(e) =>
                     setForm({ ...form, roles_id: e.target.value })
@@ -1029,7 +1066,11 @@ export default function UsersPage() {
 
               {error && (
                 <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
-                  <span className="text-red-500 mt-0.5">⚠️</span>
+                  <AlertTriangle
+                    size={16}
+                    className="mt-0.5 shrink-0 text-red-500"
+                    aria-hidden="true"
+                  />
                   <p className="text-sm text-red-600">{error}</p>
                 </div>
               )}

@@ -30,7 +30,7 @@ export default function NewDashboardLayout() {
 
   return (
     <NotificationProvider>
-      <div className="min-h-screen bg-[var(--color-background)]">
+      <div className="min-h-screen bg-background">
         {/* Sidebar */}
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -38,8 +38,8 @@ export default function NewDashboardLayout() {
         <Topbar title={title} onMenuClick={() => setSidebarOpen((v) => !v)} />
 
         {/* Main content area */}
-        <main className="lg:ml-[260px] pt-[72px] min-h-screen">
-          <div className="p-4 md:p-6 lg:p-8">
+        <main className="min-h-screen pt-[68px] lg:ml-[236px]">
+          <div className="app-page px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
             <Outlet />
           </div>
         </main>

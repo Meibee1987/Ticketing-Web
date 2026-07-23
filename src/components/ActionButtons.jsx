@@ -19,9 +19,11 @@ export default function ActionButtons({ onEdit, onDelete, row }) {
     <div className="flex items-center justify-center gap-1">
       {/* Edit Button */}
       <button
+        type="button"
         onClick={() => onEdit(row)}
-        className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+        className="rounded-lg p-2 text-primary-600 transition-colors hover:bg-primary-50"
         title="Edit"
+        aria-label="Edit data"
       >
         <svg
           className="w-4 h-4"
@@ -39,9 +41,11 @@ export default function ActionButtons({ onEdit, onDelete, row }) {
       </button>
       {/* Delete Button */}
       <button
+        type="button"
         onClick={handleDelete}
-        className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+        className="rounded-lg p-2 text-danger-600 transition-colors hover:bg-danger-50"
         title="Hapus"
+        aria-label="Hapus data"
       >
         <svg
           className="w-4 h-4"

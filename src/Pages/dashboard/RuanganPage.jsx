@@ -5,11 +5,24 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import {
+  Building2,
+  CalendarClock,
+  ChevronDown,
+  ChevronUp,
+  CircleCheck,
+  CircleDot,
+  Clock3,
+  UsersRound,
+} from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 import {
   assertSupabaseResults,
   getErrorMessage,
 } from '../../utils/supabaseResults';
+import DateNavigator from '../../components/ui/DateNavigator';
+import PageHeader from '../../components/ui/PageHeader';
+import StatePanel from '../../components/ui/StatePanel';
 
 // ============= HELPERS =============
 const formatDate = (d) =>
@@ -51,18 +64,15 @@ const STATUS_CONFIG = {
     bg: 'bg-red-50',
     border: 'border-red-200',
     badge: 'bg-red-100 text-red-700',
-    icon: '🔴',
     text: 'Sedang Digunakan',
   },
   tersedia: {
     bg: 'bg-green-50',
     border: 'border-green-200',
     badge: 'bg-green-100 text-green-700',
-    icon: '✅',
     text: 'Tersedia',
   },
 };
-
 // ============= MAIN COMPONENT =============
 export default function RuanganPage() {
   const [searchParams] = useSearchParams();
@@ -80,51 +90,24 @@ export default function RuanganPage() {
   const goTo = (fn) => () => setSelectedDate(fn);
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <header>
-        <h1 className="text-xl md:text-2xl font-semibold text-slate-800">
-          📍 Ketersediaan Ruangan
-        </h1>
-        <p className="text-xs md:text-sm text-slate-500 mt-1">
-          Lihat ketersediaan ruangan berdasarkan tanggal. Ruangan "Tersedia"
-          hanya berkurang jika sedang digunakan.
-        </p>
-      </header>
+    <div className="ui-page">
+      <PageHeader
+        title="Status Ketersediaan"
+        description="Pantau penggunaan dan jadwal setiap ruangan pada tanggal yang dipilih."
+      />
 
       {/* Date Filter */}
-      <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-200 p-3 md:p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
-          <div className="flex items-center gap-2">
-            <NavButton
-              onClick={goTo(new Date(selectedDate.getTime() - 86400000))}
-              icon="M15 19l-7-7 7-7"
-            />
-            <input
-              type="date"
-              value={formatDateInput(selectedDate)}
-              onChange={(e) =>
-                setSelectedDate(new Date(e.target.value + 'T00:00:00'))
-              }
-              className="border border-slate-200 rounded-lg px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            />
-            <NavButton
-              onClick={goTo(new Date(selectedDate.getTime() + 86400000))}
-              icon="M9 5l7 7-7 7"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={goTo(new Date())}
-              className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-            >
-              Hari Ini
-            </button>
-            <span className="text-sm font-medium text-slate-700">
-              {formatDate(selectedDate)}
-            </span>
-          </div>
-        </div>
-      </div>
+      <DateNavigator
+        value={formatDateInput(selectedDate)}
+        label={formatDate(selectedDate)}
+        isToday={isToday}
+        onChange={(event) =>
+          setSelectedDate(new Date(event.target.value + 'T00:00:00'))
+        }
+        onPrevious={goTo(new Date(selectedDate.getTime() - 86400000))}
+        onNext={goTo(new Date(selectedDate.getTime() + 86400000))}
+        onToday={goTo(new Date())}
+      />
 
       <RuanganStats selectedDate={selectedDate} currentTime={currentTime} />
       <RuanganList
@@ -135,28 +118,6 @@ export default function RuanganPage() {
     </div>
   );
 }
-
-// Nav Button Component
-const NavButton = ({ onClick, icon }) => (
-  <button
-    onClick={onClick}
-    className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-  >
-    <svg
-      className="w-5 h-5 text-slate-600"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d={icon}
-      />
-    </svg>
-  </button>
-);
 
 // ============= DATA HOOK =============
 function useRuanganData(selectedDate) {
@@ -379,14 +340,14 @@ function RuanganStats({ selectedDate, currentTime }) {
     {
       title: 'Total Ruangan',
       value: stats.total,
-      icon: '🏢',
+      iconComponent: Building2,
       bg: 'bg-slate-50',
       color: 'text-slate-700',
     },
     {
       title: 'Tersedia',
       value: stats.tersedia,
-      icon: '✅',
+      iconComponent: CircleCheck,
       bg: 'bg-green-50',
       color: 'text-green-600',
       sub: 'Tidak sedang digunakan',
@@ -394,14 +355,14 @@ function RuanganStats({ selectedDate, currentTime }) {
     {
       title: 'Sedang Digunakan',
       value: stats.sedangDigunakan,
-      icon: '🔴',
+      iconComponent: CircleDot,
       bg: 'bg-red-50',
       color: 'text-red-600',
     },
     {
       title: 'Ada Jadwal',
       value: stats.adaJadwal,
-      icon: '📅',
+      iconComponent: CalendarClock,
       bg: 'bg-amber-50',
       color: 'text-amber-600',
       sub: 'Sudah di-booking',
@@ -411,17 +372,18 @@ function RuanganStats({ selectedDate, currentTime }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {cards.map((c, i) => (
-        <div
-          key={i}
-          className={`${c.bg} rounded-xl shadow-sm border border-slate-200 p-5`}
-        >
+        <div key={i} className="ui-card min-h-[142px] p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500">{c.title}</p>
               <p className={`text-3xl font-bold ${c.color} mt-1`}>{c.value}</p>
               {c.sub && <p className="text-xs text-slate-400 mt-1">{c.sub}</p>}
             </div>
-            <span className="text-3xl">{c.icon}</span>
+            <span
+              className={`flex h-10 w-10 items-center justify-center rounded-xl ${c.bg} ${c.color}`}
+            >
+              <c.iconComponent size={20} aria-hidden="true" />
+            </span>
           </div>
         </div>
       ))}
@@ -507,14 +469,7 @@ function RuanganList({ selectedDate, currentTime, initialFilter = 'all' }) {
       </div>
     );
 
-  if (error)
-    return (
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-600">⚠️ {error}</p>
-        </div>
-      </div>
-    );
+  if (error) return <StatePanel type="error" description={error} />;
 
   const filterBtns = [
     { key: 'all', label: 'Semua', count: enhancedRuangan.length },
@@ -543,9 +498,11 @@ function RuanganList({ selectedDate, currentTime, initialFilter = 'all' }) {
       <div className="flex flex-wrap gap-2">
         {filterBtns.map((b) => (
           <button
+            type="button"
             key={b.key}
             onClick={() => setFilter(b.key)}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${filter === b.key ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+            className={`ui-button ${filter === b.key ? 'ui-button-primary' : 'ui-button-secondary'}`}
+            aria-pressed={filter === b.key}
           >
             {b.label} ({b.count})
           </button>
@@ -559,12 +516,11 @@ function RuanganList({ selectedDate, currentTime, initialFilter = 'all' }) {
       </div>
 
       {!filteredRuangan.length && (
-        <div className="bg-slate-50 rounded-xl p-8 text-center">
-          <p className="text-slate-500">
-            Tidak ada ruangan dengan filter ini pada tanggal{' '}
-            {formatDate(selectedDate)}
-          </p>
-        </div>
+        <StatePanel
+          type="empty"
+          title="Ruangan tidak ditemukan"
+          description={`Tidak ada ruangan dengan filter ini pada ${formatDate(selectedDate)}.`}
+        />
       )}
     </div>
   );
@@ -576,6 +532,8 @@ function RuanganCard({ ruangan, selectedDate }) {
   const isToday = isSameDate(selectedDate, new Date());
   const now = new Date();
   const cfg = STATUS_CONFIG[ruangan.status];
+  const StatusIcon =
+    ruangan.status === 'sedang_digunakan' ? CircleDot : CircleCheck;
 
   // Pisahkan jadwal aktif dan selesai
   const allBookings = ruangan.scheduledBookings;
@@ -586,9 +544,7 @@ function RuanganCard({ ruangan, selectedDate }) {
     : 0;
 
   return (
-    <div
-      className={`${cfg.bg} ${cfg.border} border rounded-xl p-4 transition-all hover:shadow-md`}
-    >
+    <div className="ui-card p-4 transition-shadow hover:shadow-[var(--shadow-card-hover)]">
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="text-lg font-semibold text-slate-800">
@@ -597,14 +553,16 @@ function RuanganCard({ ruangan, selectedDate }) {
           <span
             className={`${cfg.badge} text-xs font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
           >
-            <span>{cfg.icon}</span>
+            <StatusIcon size={13} aria-hidden="true" />
             {cfg.text}
           </span>
           <div className="flex flex-wrap gap-2 mt-2">
             {ruangan.kapasitas_ruangan && (
-              <span className="inline-flex items-center gap-1 text-xs text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
-                👥{' '}
-                <span className="font-medium">{ruangan.kapasitas_ruangan}</span>{' '}
+              <span className="room-capacity-badge inline-flex items-center gap-1 text-xs text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
+                <UsersRound size={13} aria-hidden="true" />
+                <span className="font-medium">
+                  {ruangan.kapasitas_ruangan}
+                </span>{' '}
                 orang
               </span>
             )}
@@ -621,8 +579,9 @@ function RuanganCard({ ruangan, selectedDate }) {
       {showCurrent && (
         <div className="bg-red-100/50 rounded-lg p-3 mb-3">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-red-600">
-              🔴 SEDANG BERLANGSUNG
+            <span className="room-running-label inline-flex items-center gap-1 text-xs font-medium text-red-600">
+              <CircleDot size={12} aria-hidden="true" />
+              Sedang berlangsung
             </span>
             <span
               className={`${SOURCE_COLORS[ruangan.currentBooking.sourceColor]} text-xs px-2 py-0.5 rounded-full`}
@@ -638,8 +597,9 @@ function RuanganCard({ ruangan, selectedDate }) {
               {ruangan.currentBooking.detail}
             </p>
           )}
-          <p className="text-xs text-slate-600 mt-1">
-            ⏰ {formatTime(ruangan.currentBooking.mulai)} -{' '}
+          <p className="mt-1 flex items-center gap-1 text-xs text-slate-600">
+            <Clock3 size={12} aria-hidden="true" />
+            {formatTime(ruangan.currentBooking.mulai)} -{' '}
             {formatTime(ruangan.currentBooking.akhir)}
             {timeLeft > 0 && (
               <span className="ml-2 text-red-600 font-medium">
@@ -675,7 +635,7 @@ function RuanganCard({ ruangan, selectedDate }) {
                 </span>
                 {b.isFinished && (
                   <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">
-                    ✓ Selesai
+                    Selesai
                   </span>
                 )}
                 <span className="text-xs text-slate-400">
@@ -704,12 +664,24 @@ function RuanganCard({ ruangan, selectedDate }) {
           ))}
           {allBookings.length > 2 && (
             <button
+              type="button"
               onClick={() => setExpanded(!expanded)}
-              className="w-full text-xs text-indigo-600 hover:text-indigo-800 font-medium py-1"
+              className="room-expand-button inline-flex w-full items-center justify-center gap-1 py-1 text-xs font-medium text-primary-700 hover:text-primary-800"
+              data-label={
+                expanded
+                  ? 'Tutup'
+                  : `Lihat ${allBookings.length - 2} jadwal lainnya`
+              }
+              aria-expanded={expanded}
             >
+              {expanded ? (
+                <ChevronUp size={14} aria-hidden="true" />
+              ) : (
+                <ChevronDown size={14} aria-hidden="true" />
+              )}
               {expanded
-                ? '⬆️ Tutup'
-                : `⬇️ Lihat ${allBookings.length - 2} jadwal lainnya`}
+                ? 'Tutup'
+                : `Lihat ${allBookings.length - 2} jadwal lainnya`}
             </button>
           )}
         </div>
@@ -717,8 +689,9 @@ function RuanganCard({ ruangan, selectedDate }) {
 
       {/* No Schedule */}
       {ruangan.status === 'tersedia' && !allBookings.length && (
-        <p className="text-sm text-green-600 font-medium">
-          ✨ Tidak ada jadwal pada tanggal ini
+        <p className="room-no-schedule inline-flex items-center gap-1 text-sm text-green-600 font-medium">
+          <CircleCheck size={14} aria-hidden="true" />
+          Tidak ada jadwal pada tanggal ini
         </p>
       )}
     </div>

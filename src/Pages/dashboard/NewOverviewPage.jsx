@@ -27,8 +27,6 @@ import {
   DoorOpen,
   GraduationCap,
   ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
   AlertCircle,
 } from 'lucide-react';
 
@@ -39,6 +37,7 @@ import BarChartWidget from '../../components/ui/BarChartWidget';
 import DonutChartWidget from '../../components/ui/DonutChartWidget';
 import DataTable from '../../components/ui/DataTable';
 import NotificationPanel from '../../components/ui/NotificationPanel';
+import DateNavigator from '../../components/ui/DateNavigator';
 
 // Notification context
 import { useNotifications } from '../../hooks/useNotifications';
@@ -236,7 +235,7 @@ export default function NewOverviewPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="ui-page">
       {dataError && (
         <section
           className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800 sm:flex-row sm:items-center sm:justify-between"
@@ -248,13 +247,13 @@ export default function NewOverviewPage() {
               <p className="text-sm font-semibold">
                 Sebagian data gagal dimuat
               </p>
-              <p className="mt-0.5 text-xs text-red-700">{dataError}</p>
+              <p className="mt-0.5 text-xs text-danger-700">{dataError}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={retryLoad}
-            className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+            className="ui-button min-h-9 border border-danger-600 bg-danger-600 px-3 text-[13px] text-white hover:bg-danger-700"
           >
             Coba Lagi
           </button>
@@ -262,49 +261,18 @@ export default function NewOverviewPage() {
       )}
 
       {/* ── Date Picker Bar ── */}
-      <section className="sticky top-[72px] z-20 bg-white rounded-[var(--radius-card)] shadow-[var(--shadow-card)] border border-slate-100 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={goToPrev}
-              className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-            >
-              <ChevronLeft size={18} className="text-slate-600" />
-            </button>
-            <input
-              type="date"
-              value={formatDateInput(selectedDate)}
-              onChange={(e) =>
-                setSelectedDate(new Date(e.target.value + 'T00:00:00'))
-              }
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-            />
-            <button
-              onClick={goToNext}
-              className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-            >
-              <ChevronRight size={18} className="text-slate-600" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={goToToday}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isToday
-                  ? 'bg-primary-500 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Hari Ini
-            </button>
-
-            <span className="text-sm font-medium text-slate-700">
-              {dateDisplay}
-            </span>
-          </div>
-        </div>
-      </section>
+      <DateNavigator
+        value={formatDateInput(selectedDate)}
+        label={dateDisplay}
+        isToday={isToday}
+        onChange={(event) =>
+          setSelectedDate(new Date(event.target.value + 'T00:00:00'))
+        }
+        onPrevious={goToPrev}
+        onNext={goToNext}
+        onToday={goToToday}
+        sticky
+      />
 
       {/* ── 4 KPI Cards ── */}
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
@@ -357,7 +325,10 @@ export default function NewOverviewPage() {
             title="Statistik Jadwal Minggu Ini"
             subtitle={`Total ${weeklyData.reduce((a, b) => a + (b.luring ?? 0) + (b.online ?? 0) + (b.hybrid ?? 0), 0)} jadwal minggu ini`}
             action={
-              <button className="px-3 py-1.5 rounded-lg bg-primary-50 text-primary-600 text-xs font-semibold hover:bg-primary-100 transition">
+              <button
+                type="button"
+                className="ui-button min-h-8 bg-primary-50 px-3 text-xs text-primary-700 hover:bg-primary-100"
+              >
                 Mingguan
               </button>
             }
@@ -386,14 +357,14 @@ export default function NewOverviewPage() {
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-5">
         {/* Jadwal table: 3/5 width */}
         <div className="lg:col-span-3">
-          <div className="bg-white rounded-[var(--radius-card)] shadow-[var(--shadow-card)] border border-slate-100 p-5 md:p-6">
+          <div className="ui-card h-full p-5">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-[15px] font-semibold text-slate-900">
+                <h3 className="ui-card-title">
                   {isToday ? 'Jadwal Hari Ini' : `Jadwal ${dateDisplay}`}
                 </h3>
-                <p className="text-[12px] text-slate-500 mt-0.5">
+                <p className="ui-description">
                   {filteredJadwal.length === jadwalHariIni.length
                     ? `${jadwalHariIni.length} sesi`
                     : `${filteredJadwal.length} dari ${jadwalHariIni.length} sesi`}
@@ -433,7 +404,8 @@ export default function NewOverviewPage() {
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  aria-label="Bersihkan pencarian"
                 >
                   <svg
                     className="w-4 h-4"
