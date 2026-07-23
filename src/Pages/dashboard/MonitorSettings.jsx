@@ -82,7 +82,7 @@ export default function MonitorSettings() {
       const fileName = `slide-${Date.now()}.${fileExt}`;
       const filePath = `monitor-slides/${fileName}`;
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('public-files')
         .upload(filePath, file, {
           cacheControl: '3600',

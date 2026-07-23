@@ -5,6 +5,8 @@
  * Realtime subscription with notification builder
  */
 import { supabase } from '../supabaseClient';
+import { assertSupabaseResults } from '../utils/supabaseResults';
+import { buildScheduleNotification } from '../utils/notifications';
 
 // ────────────────────────────────────────
 // HELPERS
@@ -61,6 +63,12 @@ export async function fetchAllBookingsForDate(date = new Date()) {
       .lte('mulai_jadwal', end),
   ]);
 
+  assertSupabaseResults([
+    ['Jadwal perkuliahan', r1],
+    ['Jadwal karya akhir', r2],
+    ['Jadwal lain-lain', r3],
+  ]);
+
   return [
     ...(r1.data || []).map((j) => ({
       id: `perkuliahan-${j.id}`,
@@ -104,6 +112,11 @@ export async function fetchDashboardKPI(date = new Date()) {
     fetchAllBookingsForDate(date),
   ]);
 
+  assertSupabaseResults([
+    ['Data ruangan', ruanganRes],
+    ['Data dosen', dosenRes],
+  ]);
+
   const totalRuangan = ruanganRes.count || 0;
   const dosenAktif = dosenRes.count || 0;
   const totalJadwal = bookings.length;
@@ -126,31 +139,6 @@ export async function fetchDashboardKPI(date = new Date()) {
     tersedia: totalRuangan - sedangDigunakan.size,
     dosenAktif,
   };
-}
-
-/** Count total jadwal for a specific date (used by weekly chart) */
-async function fetchTotalJadwalForDate(date = new Date()) {
-  const { start, end } = dayRange(date);
-
-  const [p, k, l] = await Promise.all([
-    supabase
-      .from('jadwal_perkuliahan')
-      .select('id', { count: 'exact', head: true })
-      .gte('mulai_jadwal', start)
-      .lte('mulai_jadwal', end),
-    supabase
-      .from('jadwal_karya_akhir')
-      .select('id', { count: 'exact', head: true })
-      .gte('mulai_jadwal', start)
-      .lte('mulai_jadwal', end),
-    supabase
-      .from('jadwal_lain_lain')
-      .select('id', { count: 'exact', head: true })
-      .gte('mulai_jadwal', start)
-      .lte('mulai_jadwal', end),
-  ]);
-
-  return (p.count || 0) + (k.count || 0) + (l.count || 0);
 }
 
 // ────────────────────────────────────────
@@ -268,6 +256,16 @@ export async function fetchJadwalHariIni(date = new Date()) {
   ]);
 
   // Build lookup maps (id → name) – same as JadwalPageAdmin's createMap
+  assertSupabaseResults([
+    ['Referensi ruangan', ruanganRes],
+    ['Referensi angkatan', angkatanRes],
+    ['Referensi agenda', agendaRes],
+    ['Referensi dosen', dosenAllRes],
+    ['Jadwal perkuliahan', perkuliahanRes],
+    ['Jadwal karya akhir', karyaAkhirRes],
+    ['Jadwal lain-lain', lainLainRes],
+  ]);
+
   const toMap = (arr, key) =>
     Object.fromEntries((arr || []).map((x) => [x.id, x[key]]));
   const ruanganMap = toMap(ruanganRes.data, 'nama_ruangan');
@@ -342,51 +340,6 @@ export async function fetchJadwalHariIni(date = new Date()) {
 // REALTIME + NOTIFICATION BUILDER
 // ────────────────────────────────────────
 
-const TABLE_LABELS = {
-  jadwal_perkuliahan: 'Perkuliahan',
-  jadwal_karya_akhir: 'Karya Akhir',
-  jadwal_lain_lain: 'Lain-lain',
-};
-
-const EVENT_CONFIG = {
-  INSERT: { type: 'sukses', tag: 'BARU', title: 'Jadwal Baru Ditambahkan' },
-  UPDATE: { type: 'info', tag: 'UPDATE', title: 'Jadwal Diperbarui' },
-  DELETE: { type: 'peringatan', tag: 'HAPUS', title: 'Jadwal Dihapus' },
-};
-
-/** Build a notification object from a Supabase realtime payload */
-function buildNotification(payload) {
-  const { eventType, table, new: newRow, old: oldRow } = payload;
-  const config = EVENT_CONFIG[eventType] || EVENT_CONFIG.UPDATE;
-  const tableLabel = TABLE_LABELS[table] || table;
-  const row = newRow || oldRow || {};
-
-  // Try to extract a meaningful description
-  const agenda =
-    row.agenda ||
-    row.nama_matkul ||
-    row.agenda_jadwal_karya_akhir ||
-    row.id_mata_kuliah ||
-    '';
-
-  const verb =
-    eventType === 'INSERT'
-      ? 'ditambahkan'
-      : eventType === 'UPDATE'
-        ? 'diperbarui'
-        : 'dihapus';
-
-  return {
-    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    type: config.type,
-    tag: config.tag,
-    title: config.title,
-    description: `${tableLabel}: ${agenda || 'Data jadwal'} telah ${verb}.`,
-    time: 'Baru saja',
-    timestamp: Date.now(),
-  };
-}
-
 /**
  * Subscribe to jadwal changes with notification support.
  * @param {Function} onChange - Called on any change (for data refresh)
@@ -396,7 +349,7 @@ function buildNotification(payload) {
 export function subscribeJadwalChanges(onChange, onNotification) {
   const handler = (payload) => {
     onChange();
-    if (onNotification) onNotification(buildNotification(payload));
+    if (onNotification) onNotification(buildScheduleNotification(payload));
   };
 
   // Unique channel name to avoid conflicts if multiple subscribers exist

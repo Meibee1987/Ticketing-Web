@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../../supabaseClient';
+import { useState } from 'react';
 
 export default function TicketingPage() {
   return (
@@ -48,7 +47,7 @@ function PageHeader() {
 
 // Stats Cards Component
 function StatsCards() {
-  const [stats, setStats] = useState({
+  const [stats] = useState({
     total: 1248,
     open: 156,
     inProgress: 89,

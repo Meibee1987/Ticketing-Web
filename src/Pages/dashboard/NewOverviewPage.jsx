@@ -29,6 +29,7 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  AlertCircle,
 } from 'lucide-react';
 
 // UI components
@@ -40,7 +41,7 @@ import DataTable from '../../components/ui/DataTable';
 import NotificationPanel from '../../components/ui/NotificationPanel';
 
 // Notification context
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useNotifications } from '../../hooks/useNotifications';
 
 // Data layer
 import {
@@ -102,6 +103,7 @@ export default function NewOverviewPage() {
   // ── Table state ──
   const [jadwalHariIni, setJadwalHariIni] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dataError, setDataError] = useState('');
 
   // ── Auto-refresh "sedang digunakan" every 60s (same as RuanganPage) ──
   const [, setTick] = useState(0);
@@ -130,6 +132,7 @@ export default function NewOverviewPage() {
       });
     } catch (err) {
       console.error('Error loading KPI:', err);
+      setDataError(err.message || 'Gagal memuat data KPI.');
     } finally {
       setLoading(false);
     }
@@ -147,6 +150,7 @@ export default function NewOverviewPage() {
       setJenisStats(jenis);
     } catch (err) {
       console.error('Error loading charts:', err);
+      setDataError(err.message || 'Gagal memuat data grafik.');
     } finally {
       setChartLoading(false);
     }
@@ -159,6 +163,7 @@ export default function NewOverviewPage() {
       setJadwalHariIni(data);
     } catch (err) {
       console.error('Error loading jadwal:', err);
+      setDataError(err.message || 'Gagal memuat jadwal.');
     }
   }, []);
 
@@ -223,9 +228,39 @@ export default function NewOverviewPage() {
   const goToNext = () =>
     setSelectedDate((d) => new Date(d.getTime() + 86400000));
   const goToToday = () => setSelectedDate(new Date());
+  const retryLoad = () => {
+    setDataError('');
+    loadKPI(selectedDate);
+    loadCharts(selectedDate);
+    loadTable(selectedDate);
+  };
 
   return (
     <div className="space-y-6">
+      {dataError && (
+        <section
+          className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800 sm:flex-row sm:items-center sm:justify-between"
+          role="alert"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 shrink-0" size={20} />
+            <div>
+              <p className="text-sm font-semibold">
+                Sebagian data gagal dimuat
+              </p>
+              <p className="mt-0.5 text-xs text-red-700">{dataError}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={retryLoad}
+            className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+          >
+            Coba Lagi
+          </button>
+        </section>
+      )}
+
       {/* ── Date Picker Bar ── */}
       <section className="sticky top-[72px] z-20 bg-white rounded-[var(--radius-card)] shadow-[var(--shadow-card)] border border-slate-100 p-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">

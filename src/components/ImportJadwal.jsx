@@ -8,7 +8,7 @@
  *            - Lain-lain
  * ================================================================================
  */
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 
@@ -240,6 +240,7 @@ export default function ImportJadwal({
   options,
   userName,
   onSuccess,
+  onNotify,
 }) {
   const [file, setFile] = useState(null);
   const [sheetNames, setSheetNames] = useState([]);
@@ -268,11 +269,11 @@ export default function ImportJadwal({
   }, []);
 
   // Get the right column map based on jenis
-  const getColumnMap = () => {
+  const columnMap = useMemo(() => {
     if (jenis === 'perkuliahan') return PERKULIAHAN_MAP;
     if (jenis === 'karya_akhir') return KARYA_AKHIR_MAP;
     return LAIN_LAIN_MAP;
-  };
+  }, [jenis]);
 
   // DB columns per type
   const getDbColumns = () => {
@@ -373,7 +374,7 @@ export default function ImportJadwal({
     setPreviewData(rows);
 
     // Auto-map columns
-    const colMap = getColumnMap();
+    const colMap = columnMap;
     const autoMapping = {};
     headers.forEach((header, idx) => {
       const key = header.toLowerCase().trim();
@@ -420,7 +421,7 @@ export default function ImportJadwal({
     if (dateIdx >= 0) setDateColumn(String(dateIdx));
 
     setStep(2);
-  }, [workbook, selectedSheet, jenis]);
+  }, [workbook, selectedSheet, columnMap]);
 
   // ──────────── STEP 2→3: Preview mapped data ────────────
   const handlePreview = () => setStep(3);
@@ -465,7 +466,7 @@ export default function ImportJadwal({
       angkatanByName,
       agendaByName,
     };
-  }, [options]);
+  }, [options, allRuangan]);
 
   // Fuzzy lookup by name (exact first, then contains match)
   const fuzzyLookup = (name, map) => {
@@ -522,13 +523,6 @@ export default function ImportJadwal({
         : jenis === 'karya_akhir'
           ? 'jadwal_karya_akhir'
           : 'jadwal_lain_lain';
-
-    // Collect multi-column targets per row
-    const multiColTargets = [
-      '_lookup_dosen_extra',
-      '_lookup_dosen_ka',
-      '_lookup_penguji',
-    ];
 
     // Group column mapping by target
     const mappingByTarget = {};
@@ -848,6 +842,44 @@ export default function ImportJadwal({
 
     setImportResult(results);
     setImporting(false);
+
+    // Kirim notifikasi ke dashboard
+    if (onNotify) {
+      const jenisLabel =
+        {
+          perkuliahan: 'Perkuliahan',
+          karya_akhir: 'Karya Akhir',
+          lain_lain: 'Lain-lain',
+        }[jenis] || jenis;
+      if (results.updated > 0) {
+        onNotify({
+          type: 'edit',
+          tag: 'UPDATE',
+          title: `Import ${jenisLabel}: ${results.updated} Data Diperbarui`,
+          description: `${results.updated} data duplikat ditemukan dan diperbarui dari file import oleh ${userName || 'User'}.`,
+        });
+      }
+      if (results.errors.length > 0) {
+        onNotify({
+          type: 'error',
+          tag: 'ERROR',
+          title: `Import ${jenisLabel}: ${results.errors.length} Baris Gagal`,
+          description:
+            results.errors.slice(0, 3).join(' | ') +
+            (results.errors.length > 3
+              ? ` (+${results.errors.length - 3} lainnya)`
+              : ''),
+        });
+      }
+      if (results.inserted > 0) {
+        onNotify({
+          type: 'tambah',
+          tag: 'BARU',
+          title: `Import ${jenisLabel}: ${results.inserted} Data Ditambahkan`,
+          description: `${results.inserted} data baru berhasil diimport oleh ${userName || 'User'}.`,
+        });
+      }
+    }
   };
 
   // Reset state
@@ -893,7 +925,7 @@ export default function ImportJadwal({
         karya_akhir: 'jadwal_karya_akhir',
         lain_lain: 'jadwal_lain_lain',
       };
-      const { error, count } = await supabase
+      const { error } = await supabase
         .from(tableMap[jenis])
         .delete()
         .eq('created_by', importBatchTag);
@@ -1188,16 +1220,14 @@ export default function ImportJadwal({
                         <td className="py-1 px-2 border text-slate-400">
                           {rIdx + 1}
                         </td>
-                        {Object.entries(columnMapping).map(
-                          ([colIdx, target]) => (
-                            <td
-                              key={colIdx}
-                              className="py-1 px-2 border text-slate-700 max-w-[150px] truncate"
-                            >
-                              {String(row[parseInt(colIdx)] || '-')}
-                            </td>
-                          )
-                        )}
+                        {Object.entries(columnMapping).map(([colIdx]) => (
+                          <td
+                            key={colIdx}
+                            className="py-1 px-2 border text-slate-700 max-w-[150px] truncate"
+                          >
+                            {String(row[parseInt(colIdx)] || '-')}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>

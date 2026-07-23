@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
 import { verifyOTPCode, getEnrolledFactors } from '../utils/twoFactorAuth';
 
 export default function TwoFAVerification({ email, onSuccess, onCancel }) {
@@ -7,7 +6,6 @@ export default function TwoFAVerification({ email, onSuccess, onCancel }) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [factorId, setFactorId] = useState(null);
-  const [sessionData, setSessionData] = useState(null);
 
   // Get factor ID untuk user yang login
   useEffect(() => {
@@ -22,18 +20,7 @@ export default function TwoFAVerification({ email, onSuccess, onCancel }) {
       }
     };
 
-    // Get session data untuk challenge
-    const getSessionData = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        setSessionData(data?.session?.id);
-      } catch (err) {
-        console.error('Error getting session:', err);
-      }
-    };
-
     fetchFactorId();
-    getSessionData();
   }, []);
 
   const handleSubmit = async (e) => {

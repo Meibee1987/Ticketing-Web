@@ -6,6 +6,10 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
+import {
+  assertSupabaseResults,
+  getErrorMessage,
+} from '../../utils/supabaseResults';
 
 // ============= HELPERS =============
 const formatDate = (d) =>
@@ -190,7 +194,16 @@ function useRuanganData(selectedDate) {
         supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
       ]);
 
-      if (ruanganRes.error) throw ruanganRes.error;
+      assertSupabaseResults([
+        ['Data ruangan', ruanganRes],
+        ['Jadwal perkuliahan', perkuliahanRes],
+        ['Jadwal karya akhir', karyaAkhirRes],
+        ['Jadwal lain-lain', lainLainRes],
+        ['Referensi dosen', dosenRes],
+        ['Referensi angkatan', angkatanRes],
+        ['Referensi mata kuliah', matkulRes],
+        ['Referensi agenda', agendaKARes],
+      ]);
 
       const ruangan = ruanganRes.data || [];
       const maps = {
@@ -276,12 +289,14 @@ function useRuanganData(selectedDate) {
         ruangan: [],
         allBookings: [],
         loading: false,
-        error: err.message || 'Gagal mengambil data',
+        error: getErrorMessage(err),
       });
     }
   }, []);
 
   useEffect(() => {
+    // Initial synchronization with the external room data source.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
 

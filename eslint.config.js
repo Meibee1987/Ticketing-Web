@@ -7,7 +7,18 @@ import prettierConfig from 'eslint-config-prettier';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores([
+    'dist',
+    'src/Pages/JadwalPage1.jsx',
+    'src/Pages/dashboard/*_backup.jsx',
+    'src/Pages/dashboard/*_old.jsx',
+    'src/Pages/dashboard/*.jsx.backup',
+    'src/Pages/dashboard/OverviewPage.jsx',
+    'src/Pages/dashboard/DashboardLayout.jsx',
+    'src/Pages/dashboard/DashboardTicketPage.jsx',
+    'src/Pages/dashboard/CreateTicketPage.jsx',
+    'src/components/Modal.jsx',
+  ]),
   {
     files: ['**/*.{js,jsx}'],
     extends: [

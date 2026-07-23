@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
 // 🎯 Import komponen reusable
 import SearchBar from '../../components/SearchBar';
 import ActionButtons from '../../components/ActionButtons';
+
+const hasOwn = (object, key) =>
+  Object.prototype.hasOwnProperty.call(object, key);
 
 export default function MasterData() {
   const [activeTab, setActiveTab] = useState('dosen');
@@ -24,11 +27,6 @@ export default function MasterData() {
   const [modalMode, setModalMode] = useState('create'); // create, edit, view
   const [selectedItem, setSelectedItem] = useState(null);
 
-  // Fetch data saat component mount atau tab berubah
-  useEffect(() => {
-    fetchData();
-  }, [activeTab]);
-
   // Fetch roles untuk dropdown (hanya sekali saat mount)
   useEffect(() => {
     const fetchRoles = async () => {
@@ -47,11 +45,11 @@ export default function MasterData() {
     fetchRoles();
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       switch (activeTab) {
-        case 'dosen':
+        case 'dosen': {
           // Join dengan tabel roles untuk mendapatkan nama role
           const { data: dosenData, error: dosenError } = await supabase
             .from('dosen')
@@ -65,7 +63,8 @@ export default function MasterData() {
           }));
           setDosen(dosenWithRole);
           break;
-        case 'angkatan':
+        }
+        case 'angkatan': {
           const { data: angkatanData, error: angkatanError } = await supabase
             .from('angkatan')
             .select('*')
@@ -73,7 +72,8 @@ export default function MasterData() {
           if (angkatanError) throw angkatanError;
           setAngkatan(angkatanData || []);
           break;
-        case 'matakuliah':
+        }
+        case 'matakuliah': {
           const { data: mkData, error: mkError } = await supabase
             .from('mata_kuliah')
             .select('*')
@@ -81,7 +81,8 @@ export default function MasterData() {
           if (mkError) throw mkError;
           setMataKuliah(mkData || []);
           break;
-        case 'ruangan':
+        }
+        case 'ruangan': {
           const { data: ruanganData, error: ruanganError } = await supabase
             .from('ruangan')
             .select('*')
@@ -89,6 +90,7 @@ export default function MasterData() {
           if (ruanganError) throw ruanganError;
           setRuangan(ruanganData || []);
           break;
+        }
         default:
           break;
       }
@@ -98,13 +100,11 @@ export default function MasterData() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
 
-  const handleCreate = () => {
-    setModalMode('create');
-    setSelectedItem(null);
-    setShowModal(true);
-  };
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleEdit = (item) => {
     setModalMode('edit');
@@ -156,7 +156,7 @@ export default function MasterData() {
   // Filter data based on search and status
   const filteredData = getCurrentData().filter((item) => {
     // Filter by status (skip if column doesn't exist)
-    if (item.hasOwnProperty('aktif_nonaktif')) {
+    if (hasOwn(item, 'aktif_nonaktif')) {
       if (statusFilter === 'aktif' && item.aktif_nonaktif !== true)
         return false;
       if (statusFilter === 'nonaktif' && item.aktif_nonaktif !== false)
@@ -329,7 +329,7 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
   const getColumns = () => {
     // Check if any data has aktif_nonaktif column
     const hasStatusColumn =
-      data.length > 0 && data[0].hasOwnProperty('aktif_nonaktif');
+      data.length > 0 && hasOwn(data[0], 'aktif_nonaktif');
 
     switch (activeTab) {
       case 'dosen':
@@ -366,6 +366,7 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
       case 'ruangan':
         return [
           { key: 'id', label: 'ID' },
+          { key: 'kode_ruangan', label: 'Kode Ruangan' },
           { key: 'nama_ruangan', label: 'Nama Ruangan' },
           { key: 'kapasitas_ruangan', label: 'Kapasitas' },
           { key: 'gedung', label: 'Gedung' },
@@ -471,7 +472,12 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
           setFormData({ kode_mata_kuliah: '', mata_kuliah: '' });
           break;
         case 'ruangan':
-          setFormData({ nama_ruangan: '', kapasitas_ruangan: '', gedung: '' });
+          setFormData({
+            kode_ruangan: '',
+            nama_ruangan: '',
+            kapasitas_ruangan: '',
+            gedung: '',
+          });
           break;
       }
     }
@@ -491,7 +497,9 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
       const tableName = activeTab === 'matakuliah' ? 'mata_kuliah' : activeTab;
 
       // Remove id, created_at, and empty string values from formData
-      const { id, created_at, ...rawData } = formData;
+      const rawData = { ...formData };
+      delete rawData.id;
+      delete rawData.created_at;
 
       // Filter out empty strings and ensure id is completely removed
       const cleanData = Object.entries(rawData).filter(([key, value]) => {
@@ -627,8 +635,8 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
                 Pilih role "dosen" agar dosen ini bisa login ke sistem
               </p>
             </div>
-            {(item?.hasOwnProperty('aktif_nonaktif') ||
-              formData.hasOwnProperty('aktif_nonaktif')) && (
+            {(hasOwn(item || {}, 'aktif_nonaktif') ||
+              hasOwn(formData, 'aktif_nonaktif')) && (
               <StatusToggle
                 label="Status"
                 checked={formData.aktif_nonaktif ?? true}
@@ -667,8 +675,8 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
               disabled={isReadOnly}
               required
             />
-            {(item?.hasOwnProperty('aktif_nonaktif') ||
-              formData.hasOwnProperty('aktif_nonaktif')) && (
+            {(hasOwn(item || {}, 'aktif_nonaktif') ||
+              hasOwn(formData, 'aktif_nonaktif')) && (
               <StatusToggle
                 label="Status"
                 checked={formData.aktif_nonaktif ?? true}
@@ -699,8 +707,8 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
               disabled={isReadOnly}
               required
             />
-            {(item?.hasOwnProperty('aktif_nonaktif') ||
-              formData.hasOwnProperty('aktif_nonaktif')) && (
+            {(hasOwn(item || {}, 'aktif_nonaktif') ||
+              hasOwn(formData, 'aktif_nonaktif')) && (
               <StatusToggle
                 label="Status"
                 checked={formData.aktif_nonaktif ?? true}
@@ -715,6 +723,14 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
       case 'ruangan':
         return (
           <>
+            <FormField
+              label="Kode Ruangan"
+              name="kode_ruangan"
+              value={formData.kode_ruangan || ''}
+              onChange={handleChange}
+              disabled={isReadOnly}
+              placeholder="Contoh: SBA001"
+            />
             <FormField
               label="Nama Ruangan"
               name="nama_ruangan"
@@ -740,8 +756,8 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
               disabled={isReadOnly}
               required
             />
-            {(item?.hasOwnProperty('aktif_nonaktif') ||
-              formData.hasOwnProperty('aktif_nonaktif')) && (
+            {(hasOwn(item || {}, 'aktif_nonaktif') ||
+              hasOwn(formData, 'aktif_nonaktif')) && (
               <StatusToggle
                 label="Status"
                 checked={formData.aktif_nonaktif ?? true}

@@ -23,7 +23,7 @@ export function checkOtpCooldown(email) {
 
     const remainingSeconds = Math.ceil((cooldownEnd - now) / 1000);
     return { isOnCooldown: true, remainingSeconds };
-  } catch (err) {
+  } catch {
     // Jika error parsing, abaikan
     return { isOnCooldown: false, remainingSeconds: 0 };
   }

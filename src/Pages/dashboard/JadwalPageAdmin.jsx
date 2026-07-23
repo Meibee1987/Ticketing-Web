@@ -5,20 +5,15 @@
  * ================================================================================
  */
 
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-} from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
-import { useAuth } from '../../contexts/AuthContext';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { useNotifications } from '../../hooks/useNotifications';
 // 🎯 Import komponen reusable dari folder components/
 import SearchBar from '../../components/SearchBar';
 import ActionButtons from '../../components/ActionButtons';
 import Pagination from '../../components/Pagination';
+import { assertSupabaseResults } from '../../utils/supabaseResults';
 import SearchableSelect from '../../components/SearchableSelect';
 import ImportJadwal from '../../components/ImportJadwal';
 
@@ -263,11 +258,6 @@ const toDatetimeLocal = (ts) => {
 const createMap = (data, key) =>
   Object.fromEntries((data || []).map((item) => [item.id, item[key]]));
 
-// Helper untuk format input date (YYYY-MM-DD)
-const formatDateInput = (date) => {
-  return date.toISOString().split('T')[0];
-};
-
 // Helper untuk format tanggal display (Indonesia)
 const formatDate = (date) => {
   return date.toLocaleDateString('id-ID', {
@@ -278,13 +268,10 @@ const formatDate = (date) => {
   });
 };
 
-// Helper untuk compare tanggal (tanpa waktu)
-const isSameDate = (date1, date2) => {
-  return (
-    date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate()
-  );
+// Strip timestamp suffix dari batchTag import (misal: "wanda-2026-04-10 03:27:02" → "wanda")
+const parseDisplayName = (val) => {
+  if (!val || val === '-') return val;
+  return val.replace(/-\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?$/, '').trim();
 };
 
 // Badge untuk jenis jadwal
@@ -535,6 +522,14 @@ export default function JadwalPageAdmin() {
           supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
         ]);
 
+      assertSupabaseResults([
+        ['Referensi dosen', dosenRes],
+        ['Referensi ruangan', ruanganRes],
+        ['Referensi angkatan', angkatanRes],
+        ['Referensi mata kuliah', mataKuliahRes],
+        ['Referensi agenda', agendaRes],
+      ]);
+
       setOptions({
         dosen: dosenRes.data || [],
         ruangan: ruanganRes.data || [],
@@ -544,13 +539,15 @@ export default function JadwalPageAdmin() {
       });
 
       const ruanganMap = createMap(ruanganRes.data, 'nama_ruangan');
-      const angkatanMap = createMap(angkatanRes.data, 'nama_angkatan');
       const agendaMap = createMap(agendaRes.data, 'agenda_karya_akhir');
+      const dosenMap = createMap(dosenRes.data, 'nama_dosen');
 
       // Fetch jadwal perkuliahan
-      const { data: perkuliahanData } = await supabase
+      const perkuliahanRes = await supabase
         .from('jadwal_perkuliahan')
         .select('*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)');
+      assertSupabaseResults([['Jadwal perkuliahan', perkuliahanRes]]);
+      const perkuliahanData = perkuliahanRes.data;
 
       const mergedPerkuliahan = (perkuliahanData || []).map((r) => ({
         ...r,
@@ -627,12 +624,11 @@ export default function JadwalPageAdmin() {
       setJadwalPerkuliahan(mergedPerkuliahan);
 
       // Fetch jadwal karya akhir
-      const { data: karyaAkhirData } = await supabase
+      const karyaAkhirRes = await supabase
         .from('jadwal_karya_akhir')
         .select('*');
-
-      // Create dosen map for lookup
-      const dosenMap = createMap(dosenRes.data, 'nama_dosen');
+      assertSupabaseResults([['Jadwal karya akhir', karyaAkhirRes]]);
+      const karyaAkhirData = karyaAkhirRes.data;
 
       const mergedKaryaAkhir = (karyaAkhirData || []).map((j) => {
         // Parse dosen IDs (stored as JSON array or comma-separated)
@@ -705,9 +701,9 @@ export default function JadwalPageAdmin() {
       setJadwalKaryaAkhir(mergedKaryaAkhir);
 
       // Fetch jadwal lain-lain
-      const { data: lainLainData } = await supabase
-        .from('jadwal_lain_lain')
-        .select('*');
+      const lainLainRes = await supabase.from('jadwal_lain_lain').select('*');
+      assertSupabaseResults([['Jadwal lain-lain', lainLainRes]]);
+      const lainLainData = lainLainRes.data;
 
       const mergedLainLain = (lainLainData || []).map((j) => ({
         ...j,
@@ -856,6 +852,8 @@ export default function JadwalPageAdmin() {
       delete window.openDownloadModal;
       delete window.openImportModal;
     };
+    // Bridge sementara untuk komponen tab; dependency di bawah menjaga data terbaru.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     jadwalPerkuliahan,
     jadwalKaryaAkhir,
@@ -1080,7 +1078,8 @@ export default function JadwalPageAdmin() {
       const userName = userRole?.name || 'Unknown';
 
       if (modalMode === 'add') {
-        const { id, ...dataToInsert } = formData; // Hapus id untuk insert
+        const dataToInsert = { ...formData };
+        delete dataToInsert.id;
         dataToInsert.created_by = userName;
         dataToInsert.updated_by = userName;
         result = await supabase.from(table).insert([dataToInsert]);
@@ -1806,6 +1805,7 @@ export default function JadwalPageAdmin() {
         options={options}
         userName={userRole?.name || 'Unknown'}
         onSuccess={fetchAllData}
+        onNotify={addNotification}
       />
 
       {downloadModalOpen && (
@@ -1974,23 +1974,14 @@ function JadwalTab({
     return filteredData.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredData, currentPage]);
 
-  // Reset ke halaman 1 saat search berubah
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
-
   // Search handlers
   const handleSearch = () => {
+    setCurrentPage(1);
     setSearchQuery(searchInput);
   };
 
-  const handleSearchKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
-
   const handleClearSearch = () => {
+    setCurrentPage(1);
     setSearchInput('');
     setSearchQuery('');
   };
@@ -2570,7 +2561,7 @@ function JadwalTab({
                             <div className="flex items-center gap-1">
                               <span className="text-green-500 text-xs">➕</span>
                               <span className="text-xs font-semibold text-slate-700">
-                                {row.created_by}
+                                {parseDisplayName(row.created_by)}
                               </span>
                             </div>
                             <div className="text-[10px] text-slate-400 ml-4">
@@ -2595,7 +2586,7 @@ function JadwalTab({
                             <div className="flex items-center gap-1">
                               <span className="text-blue-500 text-xs">✏️</span>
                               <span className="text-xs font-semibold text-slate-700">
-                                {row.updated_by}
+                                {parseDisplayName(row.updated_by)}
                               </span>
                             </div>
                             <div className="text-[10px] text-slate-400 ml-4">

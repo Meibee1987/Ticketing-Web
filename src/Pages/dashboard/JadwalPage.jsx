@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../supabaseClient';
+import { assertSupabaseResults } from '../../utils/supabaseResults';
 
 // ================================================================================
 // HELPER FUNCTIONS & CONSTANTS
@@ -476,7 +477,11 @@ function useJadwalKaryaAkhir() {
         supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
       ]);
 
-      if (jadwalRes.error) throw jadwalRes.error;
+      assertSupabaseResults([
+        ['Jadwal karya akhir', jadwalRes],
+        ['Referensi ruangan', ruanganRes],
+        ['Referensi agenda', agendaRes],
+      ]);
 
       const ruanganMap = Object.fromEntries(
         (ruanganRes.data || []).map((r) => [r.id, r.nama_ruangan])
@@ -505,6 +510,8 @@ function useJadwalKaryaAkhir() {
   }, []);
 
   useEffect(() => {
+    // Initial synchronization with the external schedule data source.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchJadwal();
 
     // Realtime subscription
@@ -626,7 +633,10 @@ function useJadwalLainLain() {
         supabase.from('ruangan').select('id, nama_ruangan'),
       ]);
 
-      if (jadwalRes.error) throw jadwalRes.error;
+      assertSupabaseResults([
+        ['Jadwal lain-lain', jadwalRes],
+        ['Referensi ruangan', ruanganRes],
+      ]);
 
       const ruanganMap = Object.fromEntries(
         (ruanganRes.data || []).map((r) => [r.id, r.nama_ruangan])
@@ -651,6 +661,8 @@ function useJadwalLainLain() {
   }, []);
 
   useEffect(() => {
+    // Initial synchronization with the external schedule data source.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchJadwal();
 
     // Realtime subscription

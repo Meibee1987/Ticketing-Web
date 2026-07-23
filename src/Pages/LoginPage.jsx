@@ -1,6 +1,5 @@
 // src/pages/LoginPage.jsx
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import TwoFAVerification from '../components/TwoFAVerification';
 
@@ -11,8 +10,6 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [need2FA, setNeed2FA] = useState(false);
-  const [factorId, setFactorId] = useState(null);
-  const navigate = useNavigate();
 
   // Cek session saat load
   useEffect(() => {
@@ -68,7 +65,6 @@ export default function LoginPage() {
           // Jika user punya 2FA yang enrolled
           if (totp && totp.length > 0) {
             setNeed2FA(true);
-            setFactorId(totp[0].id);
             setIsLoading(false);
             return;
           }
@@ -96,7 +92,6 @@ export default function LoginPage() {
 
   const handle2FACancel = () => {
     setNeed2FA(false);
-    setFactorId(null);
     setEmail('');
     setPassword('');
     setError('');

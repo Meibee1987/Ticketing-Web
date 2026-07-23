@@ -1,6 +1,3 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../../supabaseClient';
-
 export default function AllTicketsPage() {
   return (
     <div className="space-y-6">

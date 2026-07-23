@@ -1,5 +1,6 @@
-import { useState, useAuth } from 'react';
+import { useState } from 'react';
 import TwoFASetup from '../../components/TwoFASetup';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function SettingsPage() {
   const { userRole } = useAuth();

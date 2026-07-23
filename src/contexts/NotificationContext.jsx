@@ -1,88 +1,145 @@
-/**
- * NotificationContext – Global realtime notification state
- *
- * Subscribes to Supabase realtime changes on all 3 jadwal tables.
- * Provides notifications + unread count to:
- *   - Topbar bell badge
- *   - NotificationPanel on Dashboard
- *   - Any other component that needs it
- */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { supabase } from '../supabaseClient';
+import { useAuth } from '../hooks/useAuth';
+import { NotificationContext } from './notificationContextValue';
 import {
-  createContext,
-  useContext,
-  useState,
-  useRef,
-  useCallback,
-} from 'react';
+  buildScheduleNotification,
+  loadNotificationState,
+  mergeNotification,
+} from '../utils/notifications';
 
-const NotificationContext = createContext({
-  notifications: [],
-  unreadCount: 0,
-  dismissNotification: () => {},
-  markAllRead: () => {},
-  clearAll: () => {},
-});
+const STORAGE_PREFIX = 'ticketing.notifications.v1';
+const SCHEDULE_TABLES = [
+  'jadwal_perkuliahan',
+  'jadwal_karya_akhir',
+  'jadwal_lain_lain',
+];
 
-const MAX_NOTIFICATIONS = 50;
+function NotificationStore({ children, userId }) {
+  const storageKey = `${STORAGE_PREFIX}.${userId}`;
+  const initialState = loadNotificationState(localStorage.getItem(storageKey));
+  const [notifications, setNotifications] = useState(
+    initialState.notifications
+  );
+  const [readIds, setReadIds] = useState(initialState.readIds);
+  const notificationsRef = useRef(notifications);
 
-export function NotificationProvider({ children }) {
-  const [notifications, setNotifications] = useState([]);
-  const [readIds, setReadIds] = useState(new Set());
-  const notifRef = useRef(notifications);
-  notifRef.current = notifications;
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
 
-  // ── Unread count ──
-  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          notifications,
+          readIds: [...readIds],
+        })
+      );
+    } catch (error) {
+      console.warn('Gagal menyimpan notifikasi:', error);
+    }
+  }, [notifications, readIds, storageKey]);
 
-  // ── Dismiss a single notification ──
-  const dismissNotification = useCallback((id) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key !== storageKey) return;
+      const stored = loadNotificationState(event.newValue);
+      setNotifications(stored.notifications);
+      setReadIds(stored.readIds);
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [storageKey]);
+
+  const addNotification = useCallback((notification) => {
+    setNotifications((current) => mergeNotification(current, notification));
   }, []);
 
-  // ── Mark all as read (clears the bell badge) ──
-  const markAllRead = useCallback(() => {
-    setReadIds((prev) => {
-      const next = new Set(prev);
-      notifRef.current.forEach((n) => next.add(n.id));
+  useEffect(() => {
+    const channel = supabase.channel(`global-notifications-${userId}`);
+    const handler = (payload) =>
+      addNotification(buildScheduleNotification(payload));
+
+    SCHEDULE_TABLES.forEach((table) => {
+      channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        handler
+      );
+    });
+
+    channel.subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.error('Koneksi notifikasi realtime gagal:', status);
+      }
+    });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [addNotification, userId]);
+
+  const dismissNotification = useCallback((id) => {
+    setNotifications((current) => current.filter((item) => item.id !== id));
+    setReadIds((current) => {
+      const next = new Set(current);
+      next.delete(id);
       return next;
     });
   }, []);
 
-  // ── Clear all notifications ──
+  const markAllRead = useCallback(() => {
+    setReadIds(
+      new Set(notificationsRef.current.map((notification) => notification.id))
+    );
+  }, []);
+
   const clearAll = useCallback(() => {
     setNotifications([]);
     setReadIds(new Set());
   }, []);
 
-  // ── Manually add a notification (called from pages after CRUD) ──
-  const addNotification = useCallback((notif) => {
-    const fullNotif = {
-      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      time: 'Baru saja',
-      timestamp: Date.now(),
-      ...notif,
-    };
-    setNotifications((prev) =>
-      [fullNotif, ...prev].slice(0, MAX_NOTIFICATIONS)
-    );
-  }, []);
+  const unreadCount = notifications.filter(
+    (notification) => !readIds.has(notification.id)
+  ).length;
+
+  const value = useMemo(
+    () => ({
+      notifications,
+      unreadCount,
+      dismissNotification,
+      markAllRead,
+      clearAll,
+      addNotification,
+    }),
+    [
+      notifications,
+      unreadCount,
+      dismissNotification,
+      markAllRead,
+      clearAll,
+      addNotification,
+    ]
+  );
 
   return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        dismissNotification,
-        markAllRead,
-        clearAll,
-        addNotification,
-      }}
-    >
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );
 }
 
-export function useNotifications() {
-  return useContext(NotificationContext);
+export function NotificationProvider({ children }) {
+  const { user } = useAuth();
+  return (
+    <NotificationStore
+      key={user?.id || 'anonymous'}
+      userId={user?.id || 'anonymous'}
+    >
+      {children}
+    </NotificationStore>
+  );
 }

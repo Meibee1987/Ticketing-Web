@@ -1,16 +1,6 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-} from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase, supabaseUrl } from '../supabaseClient';
-
-const AuthContext = createContext({});
-export const useAuth = () => useContext(AuthContext);
+import { AuthContext } from './authContextValue';
 
 const DEFAULT_ROLE = {
   userId: null,
@@ -21,6 +11,8 @@ const DEFAULT_ROLE = {
 };
 const STORAGE_KEY = `sb-${supabaseUrl?.split('//')[1]?.split('.')[0] || 'app'}-auth-token`;
 const USER_ROLE_KEY = 'userRole';
+const ROLE_EXPIRY_KEY = 'userRoleExpiry';
+const ROLE_EXPIRY_HOURS = 1; // Role data expire setelah 1 jam
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -31,8 +23,14 @@ export const AuthProvider = ({ children }) => {
   const clearSession = useCallback(() => {
     setUser(null);
     setUserRole(null);
+    sessionStorage.removeItem(USER_ROLE_KEY);
     localStorage.removeItem(USER_ROLE_KEY);
+    localStorage.removeItem(ROLE_EXPIRY_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
+    localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
+    localStorage.removeItem('sb-session-expiry');
     setLoading(false);
   }, []);
 
@@ -42,14 +40,18 @@ export const AuthProvider = ({ children }) => {
     fetchRoleRef.current = authId;
 
     try {
-      // Check localStorage first for faster loading
-      const savedRole = localStorage.getItem(USER_ROLE_KEY);
-      if (savedRole) {
+      // Check sessionStorage first dengan expiry check
+      const savedRole = sessionStorage.getItem(USER_ROLE_KEY);
+      const expiry = localStorage.getItem(ROLE_EXPIRY_KEY);
+      const isExpired = expiry && Date.now() > parseInt(expiry);
+
+      if (savedRole && !isExpired) {
         try {
           const parsed = JSON.parse(savedRole);
           setUserRole(parsed);
-        } catch (e) {
-          console.warn('Invalid saved role, using default');
+          return; // Gunakan cached role jika masih valid
+        } catch {
+          console.warn('Invalid saved role, fetching fresh');
         }
       }
 
@@ -77,7 +79,10 @@ export const AuthProvider = ({ children }) => {
           userType: 'teknisi',
         };
         setUserRole(roleData);
-        localStorage.setItem(USER_ROLE_KEY, JSON.stringify(roleData));
+        // Simpan di sessionStorage dengan expiry
+        sessionStorage.setItem(USER_ROLE_KEY, JSON.stringify(roleData));
+        const expiryTime = Date.now() + ROLE_EXPIRY_HOURS * 60 * 60 * 1000;
+        localStorage.setItem(ROLE_EXPIRY_KEY, expiryTime.toString());
         return;
       }
 
@@ -105,22 +110,21 @@ export const AuthProvider = ({ children }) => {
           userType: 'dosen',
         };
         setUserRole(roleData);
-        localStorage.setItem(USER_ROLE_KEY, JSON.stringify(roleData));
+        // Simpan di sessionStorage dengan expiry
+        sessionStorage.setItem(USER_ROLE_KEY, JSON.stringify(roleData));
+        const expiryTime = Date.now() + ROLE_EXPIRY_HOURS * 60 * 60 * 1000;
+        localStorage.setItem(ROLE_EXPIRY_KEY, expiryTime.toString());
         return;
       }
 
       // 3. Jika tidak ditemukan di kedua tabel, gunakan default
-      if (!savedRole) {
-        setUserRole(DEFAULT_ROLE);
-      }
+      setUserRole(DEFAULT_ROLE);
     } catch (err) {
       console.warn('Role fetch failed, using cached/default:', err.message);
       // Keep existing userRole or use default
-      if (!userRole) {
-        const savedRole = localStorage.getItem(USER_ROLE_KEY);
-        const roleData = savedRole ? JSON.parse(savedRole) : DEFAULT_ROLE;
-        setUserRole(roleData);
-      }
+      const savedRole = sessionStorage.getItem(USER_ROLE_KEY);
+      const roleData = savedRole ? JSON.parse(savedRole) : DEFAULT_ROLE;
+      setUserRole((currentRole) => currentRole || roleData);
     } finally {
       fetchRoleRef.current = null;
     }
@@ -160,7 +164,7 @@ export const AuthProvider = ({ children }) => {
     checkUser();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         // Jangan fetch role jika belum ada user
         if (!session?.user) {
           if (['SIGNED_OUT', 'USER_DELETED'].includes(event)) {
@@ -176,8 +180,13 @@ export const AuthProvider = ({ children }) => {
         // Hanya fetch role jika ada session valid
         if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
           setUser(session.user);
-          await fetchUserRole(session.user.id);
-          setLoading(false);
+
+          // Jalankan query role setelah callback auth selesai. Callback async yang
+          // memanggil Supabase kembali dapat menahan auth lock dan membuat
+          // signOut menunggu selamanya.
+          window.setTimeout(() => {
+            fetchUserRole(session.user.id).finally(() => setLoading(false));
+          }, 0);
         }
       }
     );
@@ -186,8 +195,31 @@ export const AuthProvider = ({ children }) => {
   }, [checkUser, clearSession, fetchUserRole]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    clearSession();
+    let timeoutId;
+
+    try {
+      const result = await Promise.race([
+        supabase.auth.signOut(),
+        new Promise((resolve) => {
+          timeoutId = window.setTimeout(
+            () => resolve({ error: new Error('Logout timeout') }),
+            2000
+          );
+        }),
+      ]);
+
+      if (result?.error) {
+        console.warn(
+          'Supabase logout failed, clearing local session:',
+          result.error
+        );
+      }
+    } catch (error) {
+      console.warn('Unexpected logout error, clearing local session:', error);
+    } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      clearSession();
+    }
   }, [clearSession]);
 
   const value = useMemo(

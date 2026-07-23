@@ -11,6 +11,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { formatNotificationTime } from '../../utils/notifications';
 
 const ALERT_CONFIG = {
   peringatan: {
@@ -122,7 +123,7 @@ function AlertCard({ notification, onDismiss }) {
 
           {/* Time */}
           <span className="text-[11px] text-slate-400 mt-1.5 block">
-            {notification.time}
+            {formatNotificationTime(notification.timestamp)}
           </span>
         </div>
       </div>

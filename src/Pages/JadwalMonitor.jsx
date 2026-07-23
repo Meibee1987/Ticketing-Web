@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { assertSupabaseResults } from '../utils/supabaseResults';
 
 const STORAGE_KEY = 'jadwal_monitor_slides';
 
@@ -9,6 +10,7 @@ export default function JadwalMonitor() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(0);
   const [slideImages, setSlideImages] = useState([]);
+  const [error, setError] = useState('');
 
   // 🎯 KONFIGURASI - Ubah sesuai kebutuhan
   const ITEMS_PER_PAGE = 5; // Maksimal 6 data per halaman
@@ -44,14 +46,6 @@ export default function JadwalMonitor() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch data jadwal hari ini
-  useEffect(() => {
-    fetchTodaySchedule();
-    // Refresh data setiap 5 menit
-    const interval = setInterval(fetchTodaySchedule, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   // 🎯 AUTO-SLIDE: Pindah halaman otomatis setiap 7 detik
   useEffect(() => {
     const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
@@ -66,9 +60,10 @@ export default function JadwalMonitor() {
     return () => clearInterval(slideTimer);
   }, [jadwalData.length, SLIDE_IMAGES.length]);
 
-  const fetchTodaySchedule = async () => {
+  const fetchTodaySchedule = useCallback(async () => {
     try {
       setLoading(true);
+      setError('');
 
       // Fetch semua data, filter tanggal dilakukan client-side (sama seperti JadwalPage)
       const [
@@ -98,6 +93,14 @@ export default function JadwalMonitor() {
         // Reference data
         supabase.from('ruangan').select('id, nama_ruangan'),
         supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
+      ]);
+
+      assertSupabaseResults([
+        ['Jadwal perkuliahan', perkuliahanRes],
+        ['Jadwal karya akhir', karyaAkhirRes],
+        ['Jadwal lain-lain', lainLainRes],
+        ['Referensi ruangan', ruanganRes],
+        ['Referensi agenda', agendaRes],
       ]);
 
       // Create maps untuk reference data
@@ -152,26 +155,6 @@ export default function JadwalMonitor() {
             display_mahasiswa: item.nama_mahasiswa || '-',
             display_agenda: agendaMap[item.agenda_jadwal_karya_akhir] || '-',
           };
-
-          // Parse dosen_ids jika ada
-          let dosenNames = '-';
-          if (item.dosen_ids) {
-            try {
-              const dosenIds =
-                typeof item.dosen_ids === 'string'
-                  ? JSON.parse(item.dosen_ids)
-                  : item.dosen_ids;
-
-              if (Array.isArray(dosenIds) && dosenIds.length > 0) {
-                dosenNames =
-                  dosenIds.length > 2
-                    ? `${dosenIds.length} Dosen Penguji`
-                    : 'Dosen Penguji';
-              }
-            } catch (e) {
-              console.error('Error parsing dosen_ids:', e);
-            }
-          }
 
           allSchedules.push({
             id: `K${merged.id}`,
@@ -256,10 +239,17 @@ export default function JadwalMonitor() {
       setJadwalData(todaySchedules);
     } catch (error) {
       console.error('Error fetching schedule:', error);
+      setError(error.message || 'Gagal memuat jadwal monitor.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchTodaySchedule();
+    const interval = setInterval(fetchTodaySchedule, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchTodaySchedule]);
 
   const formatTime = (timestamp) => {
     if (!timestamp) return '-';
@@ -288,45 +278,6 @@ export default function JadwalMonitor() {
     }
   };
 
-  const getTypeColor = (type) => {
-    switch (type) {
-      case 'perkuliahan':
-        return 'bg-blue-100 border-blue-300 text-blue-800';
-      case 'karya_akhir':
-        return 'bg-purple-100 border-purple-300 text-purple-800';
-      case 'lain_lain':
-        return 'bg-green-100 border-green-300 text-green-800';
-      default:
-        return 'bg-gray-100 border-gray-300 text-gray-800';
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'upcoming':
-        return 'text-gray-600';
-      case 'ongoing':
-        return 'text-green-600 font-bold';
-      case 'finished':
-        return 'text-gray-400';
-      default:
-        return 'text-gray-600';
-    }
-  };
-
-  const formatCurrentTime = () => {
-    return currentTime.toLocaleString('id-ID', {
-      weekday: 'long',
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-  };
-
   const formatDateOnly = () => {
     return currentTime.toLocaleString('id-ID', {
       weekday: 'long',
@@ -349,29 +300,6 @@ export default function JadwalMonitor() {
 
   // Stats
   const totalJadwal = jadwalData.length;
-  const jadwalSelesai = jadwalData.filter(
-    (i) => i.status === 'finished'
-  ).length;
-  const jadwalBerlangsung = jadwalData.filter(
-    (i) => i.status === 'ongoing'
-  ).length;
-  const jadwalAkanDatang = jadwalData.filter(
-    (i) => i.status === 'upcoming'
-  ).length;
-
-  const getTypeLabel = (type) => {
-    switch (type) {
-      case 'perkuliahan':
-        return 'JADWAL PERKULIAHAN';
-      case 'karya_akhir':
-        return 'JADWAL KARYA AKHIR';
-      case 'lain_lain':
-        return 'JADWAL LAIN-LAIN';
-      default:
-        return 'JADWAL';
-    }
-  };
-
   const getTypeIconBg = (type) => {
     switch (type) {
       case 'perkuliahan':
@@ -446,6 +374,29 @@ export default function JadwalMonitor() {
   }
 
   // 🎯 PAGINATION LOGIC - All types combined, ordered: perkuliahan → karya_akhir → lain_lain
+  if (error) {
+    return (
+      <main className="min-h-screen bg-slate-100 px-4 flex items-center justify-center">
+        <section
+          className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-xl"
+          role="alert"
+        >
+          <h1 className="text-xl font-bold text-slate-900">
+            Jadwal tidak dapat dimuat
+          </h1>
+          <p className="mt-3 text-sm text-slate-600">{error}</p>
+          <button
+            type="button"
+            onClick={fetchTodaySchedule}
+            className="mt-6 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            Coba Lagi
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
   const totalPages = totalDataPages + SLIDE_IMAGES.length;
 
@@ -595,11 +546,7 @@ export default function JadwalMonitor() {
             ) : (
               /* 📋 DATA SLIDE */
               <div className="space-y-2 md:space-y-3 lg:space-y-4 3xl:space-y-5 4xl:space-y-8">
-                {currentPageData.map((item, index) => {
-                  const prevItem =
-                    index > 0 ? currentPageData[index - 1] : null;
-                  const showTypeSeparator =
-                    !prevItem || prevItem.type !== item.type;
+                {currentPageData.map((item) => {
                   const statusBadge = getStatusBadge(item.status);
 
                   return (

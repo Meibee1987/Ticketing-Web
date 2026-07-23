@@ -7,8 +7,9 @@
  * - User avatar + name + role badge
  */
 import { useState, useRef, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { useNotifications } from '../../hooks/useNotifications';
+import { formatNotificationTime } from '../../utils/notifications';
 import {
   Search,
   Bell,
@@ -64,12 +65,6 @@ export default function Topbar({ title = 'Dashboard', onMenuClick }) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
-
-  const today = new Date().toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
 
   const greeting = `Selamat datang kembali, ${userRole?.name?.split(' ')[0] || 'User'} 👋`;
 
@@ -169,7 +164,7 @@ export default function Topbar({ title = 'Dashboard', onMenuClick }) {
                             {n.description}
                           </p>
                           <span className="text-[10px] text-slate-400 mt-1 block">
-                            {n.time}
+                            {formatNotificationTime(n.timestamp)}
                           </span>
                         </div>
                         <button

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
+import { assertSupabaseResults } from '../../utils/supabaseResults';
 
 export default function MyTicketsPage() {
   const [tickets, setTickets] = useState([]);
@@ -11,34 +12,27 @@ export default function MyTicketsPage() {
   const [categories, setCategories] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [assignees, setAssignees] = useState([]);
+  const [pageError, setPageError] = useState('');
 
-  useEffect(() => {
-    console.log('=== MyTicketsPage loaded ===');
-    fetchAll();
-  }, []);
-
-  const fetchAll = async () => {
-    await Promise.all([fetchTickets(), fetchDropdownData()]);
-  };
-
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     try {
       setLoading(true);
+      setPageError('');
       const { data, error } = await supabase
         .from('ticket')
         .select('*')
         .order('id', { ascending: false });
       if (error) throw error;
-      console.log('✅ Tickets:', data);
       setTickets(data || []);
     } catch (error) {
       console.error('❌ Fetch tickets error:', error);
+      setPageError(error.message || 'Gagal memuat tiket.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchDropdownData = async () => {
+  const fetchDropdownData = useCallback(async () => {
     try {
       const [catRes, statRes, assignRes] = await Promise.all([
         supabase.from('category_divisi').select('*'),
@@ -46,17 +40,29 @@ export default function MyTicketsPage() {
         supabase.from('kasubag').select('*'),
       ]);
 
-      console.log('📋 Categories:', catRes.data);
-      console.log('📋 Statuses:', statRes.data);
-      console.log('📋 Assignees:', assignRes.data);
+      assertSupabaseResults([
+        ['Kategori tiket', catRes],
+        ['Status tiket', statRes],
+        ['Daftar assignee', assignRes],
+      ]);
 
       setCategories(catRes.data || []);
       setStatuses(statRes.data || []);
       setAssignees(assignRes.data || []);
     } catch (error) {
       console.error('❌ Fetch dropdown error:', error);
+      setPageError(error.message || 'Gagal memuat referensi tiket.');
     }
-  };
+  }, []);
+
+  const fetchAll = useCallback(
+    () => Promise.all([fetchTickets(), fetchDropdownData()]),
+    [fetchDropdownData, fetchTickets]
+  );
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
   const filteredTickets = tickets.filter((ticket) => {
     const query = searchQuery.toLowerCase();
@@ -103,6 +109,21 @@ export default function MyTicketsPage() {
   return (
     <div className="space-y-6">
       <PageHeader onCreateClick={handleCreate} />
+      {pageError && (
+        <div
+          className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          role="alert"
+        >
+          <span>{pageError}</span>
+          <button
+            type="button"
+            onClick={fetchAll}
+            className="shrink-0 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      )}
       <SearchSection
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
