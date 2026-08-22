@@ -10,9 +10,11 @@ import { supabase } from '../../supabaseClient';
 // 🎯 Import komponen reusable
 import SearchBar from '../../components/SearchBar';
 import ActionButtons from '../../components/ActionButtons';
+import Pagination from '../../components/Pagination';
 import PageHeader from '../../components/ui/PageHeader';
 import StatePanel from '../../components/ui/StatePanel';
 
+const ITEMS_PER_PAGE = 10;
 const hasOwn = (object, key) =>
   Object.prototype.hasOwnProperty.call(object, key);
 const TAB_ICONS = {
@@ -36,6 +38,7 @@ export default function MasterData() {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, aktif, nonaktif
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -186,6 +189,22 @@ export default function MasterData() {
     );
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const firstItemIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedData = filteredData.slice(
+    firstItemIndex,
+    firstItemIndex + ITEMS_PER_PAGE
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, statusFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
   const tabs = [
     { id: 'dosen', label: 'Dosen' },
     { id: 'angkatan', label: 'Angkatan' },
@@ -219,6 +238,7 @@ export default function MasterData() {
                         setSearchInput('');
                         setSearchQuery('');
                         setStatusFilter('all');
+                        setCurrentPage(1);
                       }}
                       className={`ui-tab ${tabIsActive ? 'is-active' : ''}`}
                       role="tab"
@@ -254,7 +274,10 @@ export default function MasterData() {
             <select
               aria-label="Filter status"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className="ui-field w-full bg-white sm:w-auto"
             >
               <option value="all">Semua Status</option>
@@ -266,10 +289,14 @@ export default function MasterData() {
             <SearchBar
               value={searchInput}
               onChange={setSearchInput}
-              onSearch={() => setSearchQuery(searchInput)}
+              onSearch={() => {
+                setSearchQuery(searchInput);
+                setCurrentPage(1);
+              }}
               onClear={() => {
                 setSearchInput('');
                 setSearchQuery('');
+                setCurrentPage(1);
               }}
               placeholder={
                 activeTab === 'ruangan'
@@ -302,7 +329,7 @@ export default function MasterData() {
           ) : (
             <DataTable
               activeTab={activeTab}
-              data={filteredData}
+              data={paginatedData}
               onEdit={handleEdit}
               onDelete={handleDelete}
             />
@@ -310,11 +337,20 @@ export default function MasterData() {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50">
-          <span className="text-sm text-slate-600">
-            Menampilkan {filteredData.length} dari {getCurrentData().length}{' '}
-            data
-          </span>
+        <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm text-slate-600">
+              Menampilkan{' '}
+              {filteredData.length === 0 ? 0 : firstItemIndex + 1}–
+              {Math.min(firstItemIndex + ITEMS_PER_PAGE, filteredData.length)} dari{' '}
+              {filteredData.length} data
+            </span>
+            <Pagination
+              currentPage={safeCurrentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
         </div>
       </div>
 

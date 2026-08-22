@@ -27,15 +27,16 @@ import ImportJadwal from '../../components/ImportJadwal';
 import StatePanel from '../../components/ui/StatePanel';
 
 // ================================================================================
-// KOMPONEN MULTI-DOSEN SELECT (max 8 dosen)
+// KOMPONEN MULTI SELECT
 // ================================================================================
-function MultiDosenSelect({
+function MultiSelect({
   label,
   values: valuesProp = [],
   onChange,
   options = [],
   displayKey,
   maxSelections = 8,
+  itemLabel = 'pilihan',
 }) {
   const values = Array.isArray(valuesProp) ? valuesProp : [];
   const [isOpen, setIsOpen] = useState(false);
@@ -49,8 +50,7 @@ function MultiDosenSelect({
       : option[displayKey];
   };
 
-  // Get selected dosen names
-  const selectedDosen = values
+  const selectedOptions = values
     .map((id) => options.find((opt) => opt.id === id))
     .filter(Boolean);
 
@@ -90,25 +90,25 @@ function MultiDosenSelect({
       <label className="block text-sm font-medium text-slate-700 mb-1">
         {label}{' '}
         <span className="text-xs text-slate-500">
-          (max {maxSelections} dosen)
+      (maks. {maxSelections} {itemLabel})
         </span>
       </label>
 
       {/* Selected Dosen Tags */}
-      {selectedDosen.length > 0 && (
+      {selectedOptions.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
-          {selectedDosen.map((dosen, idx) => (
+          {selectedOptions.map((option, idx) => (
             <span
-              key={dosen.id}
+              key={option.id}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full"
             >
               <span className="text-indigo-500">{idx + 1}.</span>
-              {getDisplayText(dosen)}
+              {getDisplayText(option)}
               <button
                 type="button"
-                onClick={() => handleRemove(dosen.id)}
+                onClick={() => handleRemove(option.id)}
                 className="ml-1 text-indigo-400 hover:text-indigo-600"
-                aria-label={`Hapus ${getDisplayText(dosen)} dari pilihan`}
+                aria-label={`Hapus ${getDisplayText(option)} dari pilihan`}
               >
                 ×
               </button>
@@ -131,8 +131,8 @@ function MultiDosenSelect({
       >
         <span className="text-slate-400">
           {values.length >= maxSelections
-            ? `Maksimal ${maxSelections} dosen dipilih`
-            : `Pilih dosen... (${values.length}/${maxSelections})`}
+            ? `Maksimal ${maxSelections} ${itemLabel} dipilih`
+            : `Pilih ${itemLabel}... (${values.length}/${maxSelections})`}
         </span>
         <svg
           className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -158,7 +158,7 @@ function MultiDosenSelect({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari dosen..."
+              placeholder={`Cari ${itemLabel}...`}
               className="ui-field min-h-9 w-full py-1.5"
               autoFocus
               aria-label={`Cari ${label}`}
@@ -197,6 +197,17 @@ function MultiDosenSelect({
 // ================================================================================
 
 const ITEMS_PER_PAGE = 10;
+
+const parseIdList = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 // Helper untuk format timestamp ke tampilan lengkap "Hari, DD Bulan YYYY, HH:MM"
 const formatTimestamp = (ts) => {
@@ -560,6 +571,7 @@ export default function JadwalPageAdmin() {
       const ruanganMap = createMap(ruanganRes.data, 'nama_ruangan');
       const agendaMap = createMap(agendaRes.data, 'agenda_karya_akhir');
       const dosenMap = createMap(dosenRes.data, 'nama_dosen');
+      const angkatanMap = createMap(angkatanRes.data, 'nama_angkatan');
 
       // Fetch jadwal perkuliahan
       const perkuliahanRes = await supabase
@@ -573,7 +585,12 @@ export default function JadwalPageAdmin() {
         jenis: 'perkuliahan',
         nama_dosen: r.dosen?.nama_dosen || '-',
         nama_ruangan: r.ruangan?.nama_ruangan || '-',
-        nama_angkatan: r.angkatan?.nama_angkatan || '-',
+        nama_angkatan: (parseIdList(r.id_angkatans).length
+          ? parseIdList(r.id_angkatans)
+              .map((id) => angkatanMap[id])
+              .filter(Boolean)
+              .join(', ')
+          : r.angkatan?.nama_angkatan) || '-',
         nama_matkul:
           r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',
         agenda_display:
@@ -792,6 +809,7 @@ export default function JadwalPageAdmin() {
         dosen_id: '',
         ruangan_id: '',
         id_angkatan: '',
+        id_angkatans: [],
         id_mata_kuliah: '',
         mulai_jadwal: '',
         akhir_jadwal: '',
@@ -894,6 +912,11 @@ export default function JadwalPageAdmin() {
         dosen_id: row.dosen_id || '',
         ruangan_id: row.ruangan_id || '',
         id_angkatan: row.id_angkatan || '',
+        id_angkatans: parseIdList(row.id_angkatans).length
+          ? parseIdList(row.id_angkatans)
+          : row.id_angkatan
+            ? [row.id_angkatan]
+            : [],
         id_mata_kuliah: row.id_mata_kuliah || '',
         mulai_jadwal: toDatetimeLocal(row.mulai_jadwal),
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
@@ -1033,6 +1056,15 @@ export default function JadwalPageAdmin() {
     setSaving(true);
 
     try {
+      if (
+        modalType === 'perkuliahan' &&
+        modalMode === 'add' &&
+        (!Array.isArray(form.id_angkatans) || form.id_angkatans.length === 0)
+      ) {
+        alert('Pilih minimal satu angkatan');
+        return;
+      }
+
       const conflictMsg = await handleCheckConflict();
       if (conflictMsg) {
         alert(conflictMsg);
@@ -1099,10 +1131,28 @@ export default function JadwalPageAdmin() {
       if (modalMode === 'add') {
         const dataToInsert = { ...formData };
         delete dataToInsert.id;
+        const selectedAngkatanIds =
+          modalType === 'perkuliahan' ? form.id_angkatans.filter(Boolean) : [];
+        delete dataToInsert.id_angkatans;
+        if (modalType === 'perkuliahan') {
+          dataToInsert.id_angkatan = selectedAngkatanIds[0];
+          dataToInsert.id_angkatans = selectedAngkatanIds;
+        }
         dataToInsert.created_by = userName;
         dataToInsert.updated_by = userName;
-        result = await supabase.from(table).insert([dataToInsert]);
+        result = await supabase
+          .from(table)
+          .insert(
+            [dataToInsert]
+          );
       } else {
+        if (modalType === 'perkuliahan') {
+          const selectedAngkatanIds = form.id_angkatans.filter(Boolean);
+          formData.id_angkatan = selectedAngkatanIds[0];
+          formData.id_angkatans = selectedAngkatanIds;
+        } else {
+          delete formData.id_angkatans;
+        }
         formData.updated_by = userName;
         formData.updated_at = new Date().toISOString();
         result = await supabase
@@ -1380,13 +1430,14 @@ export default function JadwalPageAdmin() {
     if (modalType === 'perkuliahan') {
       return (
         <>
-          <SearchableSelect
+          <MultiSelect
             label="Angkatan"
-            value={form.id_angkatan}
-            onChange={(v) => handleChange('id_angkatan', v)}
+            values={form.id_angkatans || []}
+            onChange={(v) => handleChange('id_angkatans', v)}
             options={options.angkatan}
             displayKey="nama_angkatan"
-            required
+            maxSelections={3}
+            itemLabel="angkatan"
           />
           <SearchableSelect
             label="Mata Kuliah"
@@ -1405,13 +1456,6 @@ export default function JadwalPageAdmin() {
             placeholder="1, 2, 3..."
             type="number"
           /> */}
-          <InputField
-            label="Real Perkuliahan"
-            value={form.real_perkuliahan || ''}
-            onChange={(v) => handleChange('real_perkuliahan', v)}
-            placeholder="Jumlah pertemuan yang sudah terlaksana"
-            type="number"
-          />
           <SearchableSelect
             label="Dosen Utama"
             value={form.dosen_id}
@@ -1419,21 +1463,22 @@ export default function JadwalPageAdmin() {
             options={options.dosen}
             displayKey="nama_dosen"
           />
-          <MultiDosenSelect
+          <MultiSelect
             label="Dosen Tambahan (Dosen 2)"
             values={form.dosen_ids || []}
             onChange={(v) => handleChange('dosen_ids', v)}
             options={options.dosen}
             displayKey="nama_dosen"
             maxSelections={2}
+            itemLabel="dosen"
           />
           {/* <InputField
-            label="Moderator"
+            label="Dosen Seminar"
             value={form.moderator || ''}
             onChange={(v) => handleChange('moderator', v)}
             placeholder="Nama moderator"
           /> */}
-          {/* <MultiDosenSelect
+          {/* <MultiSelect
             label="Penguji"
             values={form.penguji_ids || []}
             onChange={(v) => handleChange('penguji_ids', v)}
@@ -1520,27 +1565,29 @@ export default function JadwalPageAdmin() {
             displayKey="agenda_karya_akhir"
             required
           />
-          <MultiDosenSelect
+          <MultiSelect
             label="Dosen Pembimbing"
             values={form.dosen_ids || []}
             onChange={(v) => handleChange('dosen_ids', v)}
             options={options.dosen}
             displayKey="nama_dosen"
             maxSelections={4}
+            itemLabel="dosen"
           />
-          <MultiDosenSelect
+          <MultiSelect
             label="Penguji"
             values={form.penguji_ids || []}
             onChange={(v) => handleChange('penguji_ids', v)}
             options={options.dosen}
             displayKey="nama_dosen"
             maxSelections={4}
+            itemLabel="dosen"
           />
           <InputField
-            label="Moderator"
+            label="Dosen Seminar"
             value={form.moderator || ''}
             onChange={(v) => handleChange('moderator', v)}
-            placeholder="Nama moderator sidang"
+            placeholder="Nama Dosen Seminar"
           />
           <SelectField
             label="Jenis Pertemuan"

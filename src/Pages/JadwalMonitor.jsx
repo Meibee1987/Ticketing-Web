@@ -13,6 +13,17 @@ import { assertSupabaseResults } from '../utils/supabaseResults';
 
 const STORAGE_KEY = 'jadwal_monitor_slides';
 
+const parseIdList = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 export default function JadwalMonitor() {
   const [jadwalData, setJadwalData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +49,7 @@ export default function JadwalMonitor() {
 
     loadSlides();
 
-    const interval = setInterval(loadSlides, 5 * 60 * 1000);
+    const interval = setInterval(loadSlides, 15 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -75,6 +86,7 @@ export default function JadwalMonitor() {
         lainLainRes,
         ruanganRes,
         agendaRes,
+        angkatanRes,
       ] = await Promise.all([
         supabase
           .from('jadwal_perkuliahan')
@@ -93,6 +105,7 @@ export default function JadwalMonitor() {
 
         supabase.from('ruangan').select('id, nama_ruangan'),
         supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
+        supabase.from('angkatan').select('id, nama_angkatan'),
       ]);
 
       assertSupabaseResults([
@@ -101,6 +114,7 @@ export default function JadwalMonitor() {
         ['Jadwal lain-lain', lainLainRes],
         ['Referensi ruangan', ruanganRes],
         ['Referensi agenda', agendaRes],
+        ['Referensi angkatan', angkatanRes],
       ]);
 
       const ruanganMap = Object.fromEntries(
@@ -108,6 +122,9 @@ export default function JadwalMonitor() {
       );
       const agendaMap = Object.fromEntries(
         (agendaRes.data || []).map((a) => [a.id, a.agenda_karya_akhir])
+      );
+      const angkatanMap = Object.fromEntries(
+        (angkatanRes.data || []).map((a) => [a.id, a.nama_angkatan])
       );
 
       const allSchedules = [];
@@ -118,7 +135,12 @@ export default function JadwalMonitor() {
             ...item,
             nama_dosen: item.dosen?.nama_dosen || '-',
             nama_ruangan: item.ruangan?.nama_ruangan || '-',
-            nama_angkatan: item.angkatan?.nama_angkatan || '-',
+            nama_angkatan: (parseIdList(item.id_angkatans).length
+              ? parseIdList(item.id_angkatans)
+                  .map((id) => angkatanMap[id])
+                  .filter(Boolean)
+                  .join(', ')
+              : item.angkatan?.nama_angkatan) || '-',
             nama_matkul:
               item.mata_kuliah?.mata_kuliah ||
               item.mata_kuliah?.nama_matkul ||
@@ -236,7 +258,7 @@ export default function JadwalMonitor() {
 
   useEffect(() => {
     fetchTodaySchedule();
-    const interval = setInterval(fetchTodaySchedule, 5 * 60 * 1000);
+    const interval = setInterval(fetchTodaySchedule, 7 * 1000);
     return () => clearInterval(interval);
   }, [fetchTodaySchedule]);
 
