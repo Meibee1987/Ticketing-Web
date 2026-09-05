@@ -15,6 +15,7 @@ import {
   readLegacyMonitorSlides,
 } from '../utils/monitorSlides';
 import { assertSupabaseResults } from '../utils/supabaseResults';
+import { usesPhysicalRoom } from '../utils/meetingRoom';
 
 const ITEMS_PER_PAGE = 7;
 const AUTO_SLIDE_INTERVAL = 7 * 1000;
@@ -46,6 +47,11 @@ const parseIdList = (value) => {
 
 export default function JadwalMonitor() {
   const [jadwalData, setJadwalData] = useState([]);
+  // Pengaman render untuk state lama (misalnya setelah hot reload): daring tidak
+  // boleh pernah diteruskan ke kartu monitor.
+  const visibleJadwalData = jadwalData.filter((item) =>
+    usesPhysicalRoom(item.jenis_pertemuan)
+  );
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(0);
@@ -102,7 +108,7 @@ export default function JadwalMonitor() {
   }, []);
 
   useEffect(() => {
-    const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
+    const totalDataPages = Math.ceil(visibleJadwalData.length / ITEMS_PER_PAGE);
     const totalPages = totalDataPages + slideImages.length;
 
     if (totalPages <= 1) return;
@@ -112,14 +118,14 @@ export default function JadwalMonitor() {
     }, AUTO_SLIDE_INTERVAL);
 
     return () => clearTimeout(slideTimer);
-  }, [currentPage, jadwalData.length, slideImages]);
+  }, [currentPage, visibleJadwalData.length, slideImages]);
 
   useEffect(() => {
-    const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
+    const totalDataPages = Math.ceil(visibleJadwalData.length / ITEMS_PER_PAGE);
     const totalPages = totalDataPages + slideImages.length;
 
     setCurrentPage((page) => (totalPages > 0 && page >= totalPages ? 0 : page));
-  }, [jadwalData.length, slideImages.length]);
+  }, [visibleJadwalData.length, slideImages.length]);
 
   const fetchTodaySchedule = useCallback(async () => {
     try {
@@ -176,6 +182,8 @@ export default function JadwalMonitor() {
 
       if (perkuliahanRes.data) {
         perkuliahanRes.data.forEach((item) => {
+          if (!usesPhysicalRoom(item.jenis_pertemuan)) return;
+
           const merged = {
             ...item,
             nama_dosen: item.dosen?.nama_dosen || '-',
@@ -213,6 +221,8 @@ export default function JadwalMonitor() {
 
       if (karyaAkhirRes.data) {
         karyaAkhirRes.data.forEach((item) => {
+          if (!usesPhysicalRoom(item.jenis_pertemuan)) return;
+
           const merged = {
             ...item,
             display_ruangan: ruanganMap[item.nama_ruangan] || '-',
@@ -240,6 +250,8 @@ export default function JadwalMonitor() {
 
       if (lainLainRes.data) {
         lainLainRes.data.forEach((item) => {
+          if (!usesPhysicalRoom(item.jenis_pertemuan)) return;
+
           const merged = {
             ...item,
             ruangan_display: ruanganMap[item.nama_ruangan] || '-',
@@ -287,6 +299,7 @@ export default function JadwalMonitor() {
       const now = new Date();
       const todaySchedules = allSchedules.filter((item) => {
         return (
+          usesPhysicalRoom(item.jenis_pertemuan) &&
           item.mulai.getFullYear() === now.getFullYear() &&
           item.mulai.getMonth() === now.getMonth() &&
           item.mulai.getDate() === now.getDate()
@@ -355,8 +368,8 @@ export default function JadwalMonitor() {
     };
   };
 
-  const totalJadwal = jadwalData.length;
-  const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
+  const totalJadwal = visibleJadwalData.length;
+  const totalDataPages = Math.ceil(visibleJadwalData.length / ITEMS_PER_PAGE);
   const totalPages = totalDataPages + slideImages.length;
   const isImageSlide = currentPage >= totalDataPages;
   const imageSlideIndex = currentPage - totalDataPages;
@@ -364,7 +377,10 @@ export default function JadwalMonitor() {
   let currentPageData = [];
   if (!isImageSlide) {
     const startIdx = currentPage * ITEMS_PER_PAGE;
-    currentPageData = jadwalData.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+    currentPageData = visibleJadwalData.slice(
+      startIdx,
+      startIdx + ITEMS_PER_PAGE
+    );
   }
 
   const clock = formatClockTime();

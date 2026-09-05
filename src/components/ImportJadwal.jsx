@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { usesPhysicalRoom } from '../utils/meetingRoom';
 
 // ================================================================================
 // COLUMN MAPPING: Spreadsheet Header → Database Column
@@ -832,6 +833,12 @@ export default function ImportJadwal({
 
         // Set default jenis_pertemuan
         if (!record.jenis_pertemuan) record.jenis_pertemuan = 'luring';
+
+        // Pertemuan daring tidak membawa reservasi ruangan dari spreadsheet.
+        if (!usesPhysicalRoom(record.jenis_pertemuan)) {
+          if (jenis === 'perkuliahan') record.ruangan_id = null;
+          else record.nama_ruangan = null;
+        }
 
         // Add user info — gunakan batchTag agar bisa di-rollback
         record.created_by = batchTag;

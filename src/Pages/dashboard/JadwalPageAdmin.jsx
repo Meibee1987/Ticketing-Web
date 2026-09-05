@@ -28,6 +28,7 @@ import { assertSupabaseResults } from '../../utils/supabaseResults';
 import SearchableSelect from '../../components/SearchableSelect';
 import ImportJadwal from '../../components/ImportJadwal';
 import StatePanel from '../../components/ui/StatePanel';
+import { usesPhysicalRoom } from '../../utils/meetingRoom';
 
 // ================================================================================
 // KOMPONEN MULTI SELECT
@@ -1007,7 +1008,7 @@ export default function JadwalPageAdmin() {
       if (dosenConflict) conflicts.push(dosenConflict);
 
       // Cek konflik ruangan hanya untuk luring
-      if (form.jenis_pertemuan !== 'daring') {
+      if (usesPhysicalRoom(form.jenis_pertemuan)) {
         const ruanganConflict = await checkRuanganConflict({
           mulai: form.mulai_jadwal,
           akhir: form.akhir_jadwal,
@@ -1031,27 +1032,30 @@ export default function JadwalPageAdmin() {
       });
       if (dosenConflict) conflicts.push(dosenConflict);
 
-      // Cek konflik ruangan
-      const ruanganConflict = await checkRuanganConflict({
-        mulai: form.mulai_jadwal,
-        akhir: form.akhir_jadwal,
-        ruanganId: form.nama_ruangan,
-        excludeId: form.id,
-        excludeTable: modalMode === 'edit' ? 'jadwal_karya_akhir' : null,
-        ruanganMap,
-      });
-      if (ruanganConflict) conflicts.push(ruanganConflict);
+      if (usesPhysicalRoom(form.jenis_pertemuan)) {
+        const ruanganConflict = await checkRuanganConflict({
+          mulai: form.mulai_jadwal,
+          akhir: form.akhir_jadwal,
+          ruanganId: form.nama_ruangan,
+          excludeId: form.id,
+          excludeTable: modalMode === 'edit' ? 'jadwal_karya_akhir' : null,
+          ruanganMap,
+        });
+        if (ruanganConflict) conflicts.push(ruanganConflict);
+      }
     } else {
-      // Untuk lain-lain, hanya cek ruangan
-      const ruanganConflict = await checkRuanganConflict({
-        mulai: form.mulai_jadwal,
-        akhir: form.akhir_jadwal,
-        ruanganId: form.nama_ruangan,
-        excludeId: form.id,
-        excludeTable: modalMode === 'edit' ? 'jadwal_lain_lain' : null,
-        ruanganMap,
-      });
-      if (ruanganConflict) conflicts.push(ruanganConflict);
+      // Untuk lain-lain, cek ruangan hanya jika menggunakan ruangan fisik.
+      if (usesPhysicalRoom(form.jenis_pertemuan)) {
+        const ruanganConflict = await checkRuanganConflict({
+          mulai: form.mulai_jadwal,
+          akhir: form.akhir_jadwal,
+          ruanganId: form.nama_ruangan,
+          excludeId: form.id,
+          excludeTable: modalMode === 'edit' ? 'jadwal_lain_lain' : null,
+          ruanganMap,
+        });
+        if (ruanganConflict) conflicts.push(ruanganConflict);
+      }
     }
 
     return conflicts.length ? conflicts.join('\n\n') : null;
@@ -1093,9 +1097,13 @@ export default function JadwalPageAdmin() {
       // Prepare form data - convert dosen_ids array to JSON string for karya_akhir
       let formData = { ...form };
 
-      // Convert empty string ruangan to null untuk daring
+      // Pertemuan daring tidak menyimpan penggunaan ruangan.
       if (modalType === 'perkuliahan') {
-        if (formData.ruangan_id === '' || formData.ruangan_id === null) {
+        if (
+          !usesPhysicalRoom(formData.jenis_pertemuan) ||
+          formData.ruangan_id === '' ||
+          formData.ruangan_id === null
+        ) {
           formData.ruangan_id = null;
         }
         if (formData.dosen_id === '' || formData.dosen_id === null) {
@@ -1117,7 +1125,11 @@ export default function JadwalPageAdmin() {
         if (formData.penguji_ids)
           formData.penguji_ids = JSON.stringify(formData.penguji_ids);
       } else if (modalType === 'karya_akhir' || modalType === 'lain_lain') {
-        if (formData.nama_ruangan === '' || formData.nama_ruangan === null) {
+        if (
+          !usesPhysicalRoom(formData.jenis_pertemuan) ||
+          formData.nama_ruangan === '' ||
+          formData.nama_ruangan === null
+        ) {
           formData.nama_ruangan = null;
         }
         if (formData.petugas_zoom === '') formData.petugas_zoom = null;
@@ -1468,7 +1480,7 @@ export default function JadwalPageAdmin() {
           formatTime(d.mulai_jadwal),
           formatTime(d.akhir_jadwal),
           d.jenis_pertemuan || 'luring',
-          d.nama_ruangan || '',
+          usesPhysicalRoom(d.jenis_pertemuan) ? d.nama_ruangan || '' : '',
           dosenNames[0] || '',
           dosenNames[1] || '',
           dosenNames[2] || '',
@@ -1587,14 +1599,16 @@ export default function JadwalPageAdmin() {
             ]}
             displayKey="label"
           />
-          <SearchableSelect
-            label="Ruangan"
-            value={form.ruangan_id}
-            onChange={(v) => handleChange('ruangan_id', v)}
-            options={options.ruangan}
-            displayKey="nama_ruangan"
-            required={form.jenis_pertemuan !== 'daring'}
-          />
+          {usesPhysicalRoom(form.jenis_pertemuan) && (
+            <SearchableSelect
+              label="Ruangan"
+              value={form.ruangan_id}
+              onChange={(v) => handleChange('ruangan_id', v)}
+              options={options.ruangan}
+              displayKey="nama_ruangan"
+              required
+            />
+          )}
           {/* <InputField
             label="Petugas Zoom"
             value={form.petugas_zoom || ''}
@@ -1690,14 +1704,16 @@ export default function JadwalPageAdmin() {
             ]}
             displayKey="label"
           />
-          <SearchableSelect
-            label="Ruangan"
-            value={form.nama_ruangan}
-            onChange={(v) => handleChange('nama_ruangan', v)}
-            options={options.ruangan}
-            displayKey="nama_ruangan"
-            required={form.jenis_pertemuan !== 'daring'}
-          />
+          {usesPhysicalRoom(form.jenis_pertemuan) && (
+            <SearchableSelect
+              label="Ruangan"
+              value={form.nama_ruangan}
+              onChange={(v) => handleChange('nama_ruangan', v)}
+              options={options.ruangan}
+              displayKey="nama_ruangan"
+              required
+            />
+          )}
           {/* <InputField
             label="Petugas Zoom"
             value={form.petugas_zoom || ''}
@@ -1766,14 +1782,16 @@ export default function JadwalPageAdmin() {
             ]}
             displayKey="label"
           />
-          <SearchableSelect
-            label="Ruangan"
-            value={form.nama_ruangan}
-            onChange={(v) => handleChange('nama_ruangan', v)}
-            options={options.ruangan}
-            displayKey="nama_ruangan"
-            required={form.jenis_pertemuan !== 'daring'}
-          />
+          {usesPhysicalRoom(form.jenis_pertemuan) && (
+            <SearchableSelect
+              label="Ruangan"
+              value={form.nama_ruangan}
+              onChange={(v) => handleChange('nama_ruangan', v)}
+              options={options.ruangan}
+              displayKey="nama_ruangan"
+              required
+            />
+          )}
           {/* <InputField
             label="Petugas Zoom"
             value={form.petugas_zoom || ''}
@@ -2460,7 +2478,9 @@ function JadwalTab({
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="text-slate-800">
-                            {row.nama_ruangan}
+                            {usesPhysicalRoom(row.jenis_pertemuan)
+                              ? row.nama_ruangan
+                              : '-'}
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
@@ -2608,7 +2628,9 @@ function JadwalTab({
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="text-slate-800">
-                            {row.nama_ruangan}
+                            {usesPhysicalRoom(row.jenis_pertemuan)
+                              ? row.nama_ruangan
+                              : '-'}
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
@@ -2671,7 +2693,9 @@ function JadwalTab({
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="text-slate-800">
-                            {row.nama_ruangan}
+                            {usesPhysicalRoom(row.jenis_pertemuan)
+                              ? row.nama_ruangan
+                              : '-'}
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
