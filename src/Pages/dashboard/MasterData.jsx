@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Building2,
   CalendarRange,
@@ -14,7 +15,10 @@ import Pagination from '../../components/Pagination';
 import PageHeader from '../../components/ui/PageHeader';
 import StatePanel from '../../components/ui/StatePanel';
 
-const ITEMS_PER_PAGE = 10;
+const DEFAULT_ITEMS_PER_PAGE = 10;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const MASTER_DATA_TABS = ['dosen', 'angkatan', 'matakuliah', 'ruangan'];
+const STATUS_FILTERS = ['all', 'aktif', 'nonaktif'];
 const hasOwn = (object, key) =>
   Object.prototype.hasOwnProperty.call(object, key);
 const TAB_ICONS = {
@@ -25,7 +29,12 @@ const TAB_ICONS = {
 };
 
 export default function MasterData() {
-  const [activeTab, setActiveTab] = useState('dosen');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tableStartRef = useRef(null);
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get('tab');
+    return MASTER_DATA_TABS.includes(tabParam) ? tabParam : 'dosen';
+  });
 
   // State untuk masing-masing tabel
   const [dosen, setDosen] = useState([]);
@@ -34,11 +43,29 @@ export default function MasterData() {
   const [ruangan, setRuangan] = useState([]);
   const [roles, setRoles] = useState([]); // Untuk dropdown role dosen
 
-  const [loading, setLoading] = useState(false);
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // all, aktif, nonaktif
-  const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState(
+    () => searchParams.get('q') || ''
+  );
+  const [searchQuery, setSearchQuery] = useState(
+    () => searchParams.get('q') || ''
+  );
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const statusParam = searchParams.get('status');
+    return STATUS_FILTERS.includes(statusParam) ? statusParam : 'all';
+  });
+  const [currentPage, setCurrentPage] = useState(() => {
+    const pageParam = Number(searchParams.get('page'));
+    return Number.isFinite(pageParam) && pageParam >= 1
+      ? Math.trunc(pageParam)
+      : 1;
+  });
+  const [pageSize, setPageSize] = useState(() => {
+    const pageSizeParam = Number(searchParams.get('pageSize'));
+    return PAGE_SIZE_OPTIONS.includes(pageSizeParam)
+      ? pageSizeParam
+      : DEFAULT_ITEMS_PER_PAGE;
+  });
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -189,21 +216,62 @@ export default function MasterData() {
     );
   });
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const firstItemIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const firstItemIndex = (safeCurrentPage - 1) * pageSize;
   const paginatedData = filteredData.slice(
     firstItemIndex,
-    firstItemIndex + ITEMS_PER_PAGE
+    firstItemIndex + pageSize
   );
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, searchQuery, statusFilter]);
+    const nextParams = new URLSearchParams();
+    nextParams.set('tab', activeTab);
+    nextParams.set('page', String(currentPage));
+    nextParams.set('pageSize', String(pageSize));
+    nextParams.set('status', statusFilter);
+    if (searchQuery) nextParams.set('q', searchQuery);
+
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    activeTab,
+    currentPage,
+    pageSize,
+    searchQuery,
+    setSearchParams,
+    statusFilter,
+  ]);
 
   useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+    if (!loading && currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, loading, totalPages]);
+
+  const scrollToTableStart = useCallback(() => {
+    requestAnimationFrame(() => {
+      tableStartRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  }, []);
+
+  const handlePageChange = useCallback(
+    (targetPage) => {
+      setCurrentPage(targetPage);
+      scrollToTableStart();
+    },
+    [scrollToTableStart]
+  );
+
+  const handlePageSizeChange = useCallback(
+    (nextPageSize) => {
+      if (!PAGE_SIZE_OPTIONS.includes(nextPageSize)) return;
+      setPageSize(nextPageSize);
+      setCurrentPage(1);
+      scrollToTableStart();
+    },
+    [scrollToTableStart]
+  );
 
   const tabs = [
     { id: 'dosen', label: 'Dosen' },
@@ -313,7 +381,7 @@ export default function MasterData() {
         </div>
 
         {/* Table Content */}
-        <div className="overflow-x-auto">
+        <div ref={tableStartRef} className="scroll-mt-4 overflow-x-auto">
           {loading ? (
             <StatePanel
               type="loading"
@@ -338,19 +406,22 @@ export default function MasterData() {
 
         {/* Footer */}
         <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm text-slate-600">
-              Menampilkan{' '}
-              {filteredData.length === 0 ? 0 : firstItemIndex + 1}–
-              {Math.min(firstItemIndex + ITEMS_PER_PAGE, filteredData.length)} dari{' '}
-              {filteredData.length} data
-            </span>
-            <Pagination
-              currentPage={safeCurrentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
+          <Pagination
+            currentPage={safeCurrentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            onPageSizeChange={handlePageSizeChange}
+            isLoading={loading}
+            itemSummary={
+              <span>
+                Menampilkan {filteredData.length === 0 ? 0 : firstItemIndex + 1}
+                –{Math.min(firstItemIndex + pageSize, filteredData.length)} dari{' '}
+                {filteredData.length} data
+              </span>
+            }
+          />
         </div>
       </div>
 

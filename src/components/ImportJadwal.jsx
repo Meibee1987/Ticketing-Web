@@ -10,6 +10,20 @@
  */
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  Database,
+  FileSpreadsheet,
+  Info,
+  LoaderCircle,
+  RotateCcw,
+  UploadCloud,
+  X,
+} from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 // ================================================================================
@@ -28,6 +42,7 @@ const PERKULIAHAN_MAP = {
   'kode mata kuliah': '_lookup_matkul_kode',
   'mata kuliah': '_lookup_matkul',
   'mata kuliah (nama)': '_lookup_matkul',
+  agenda: '_lookup_matkul',
   'mahasiswa/mata kuliah': '_lookup_matkul',
   matakuliah: '_lookup_matkul',
   mata_kuliah: '_lookup_matkul',
@@ -41,7 +56,9 @@ const PERKULIAHAN_MAP = {
   jam: '_parse_jam',
   waktu: '_parse_jam',
   mulai: '_waktu_mulai',
+  'waktu mulai': '_waktu_mulai',
   selesai: '_waktu_selesai',
+  'waktu selesai': '_waktu_selesai',
   // Jenis pertemuan
   status: '_parse_jenis_pertemuan',
   'jenis pertemuan': '_parse_jenis_pertemuan',
@@ -92,6 +109,10 @@ const KARYA_AKHIR_MAP = {
   nama_mahasiswa: 'nama_mahasiswa',
   jam: '_parse_jam',
   waktu: '_parse_jam',
+  mulai: '_waktu_mulai',
+  'waktu mulai': '_waktu_mulai',
+  selesai: '_waktu_selesai',
+  'waktu selesai': '_waktu_selesai',
   status: '_parse_jenis_pertemuan',
   'jenis pertemuan': '_parse_jenis_pertemuan',
   ruangan: '_lookup_ruangan',
@@ -124,6 +145,10 @@ const LAIN_LAIN_MAP = {
   agenda: 'agenda',
   jam: '_parse_jam',
   waktu: '_parse_jam',
+  mulai: '_waktu_mulai',
+  'waktu mulai': '_waktu_mulai',
+  selesai: '_waktu_selesai',
+  'waktu selesai': '_waktu_selesai',
   status: '_parse_jenis_pertemuan',
   'jenis pertemuan': '_parse_jenis_pertemuan',
   ruangan: '_lookup_ruangan',
@@ -378,6 +403,9 @@ export default function ImportJadwal({
     const autoMapping = {};
     headers.forEach((header, idx) => {
       const key = header.toLowerCase().trim();
+      // "Jenis" pada file hasil download menunjukkan kategori jadwal
+      // (perkuliahan/karya akhir/lain-lain), bukan jenis pertemuan.
+      if (key === 'jenis') return;
       // Try exact match first, then partial match (header contains map key or vice versa)
       let target = colMap[key];
       if (!target) {
@@ -411,17 +439,53 @@ export default function ImportJadwal({
       }
     });
 
+    // File hasil Download Jadwal Admin memakai format ringkas yang juga harus
+    // dapat diimpor kembali. Arti kolom "Keterangan" berbeda per jenis jadwal.
+    const normalizedHeaders = headers.map((header) =>
+      header.toLowerCase().trim()
+    );
+    const isAdminExportFormat = [
+      'jenis',
+      'agenda',
+      'ruangan',
+      'waktu mulai',
+      'waktu selesai',
+      'keterangan',
+    ].every((header) => normalizedHeaders.includes(header));
+
+    if (isAdminExportFormat) {
+      const keteranganIdx = normalizedHeaders.indexOf('keterangan');
+      autoMapping[keteranganIdx] =
+        jenis === 'perkuliahan'
+          ? '_lookup_dosen1'
+          : jenis === 'karya_akhir'
+            ? 'nama_mahasiswa'
+            : 'nama_user';
+    }
+
     setColumnMapping(autoMapping);
 
-    // Auto-detect date column (look for "tanggal", "date", or date-like content)
-    const dateIdx = headers.findIndex((h) => {
+    // Auto-detect date column, including the combined Indonesian date/time
+    // produced by Download Jadwal Admin (for example 26 Agustus 2026, 08.00).
+    const dateIdx = headers.findIndex((h, idx) => {
       const l = h.toLowerCase();
-      return l.includes('tanggal') || l.includes('date') || l.includes('hari');
+      if (
+        l.includes('tanggal') ||
+        l.includes('date') ||
+        l.includes('hari') ||
+        l.includes('waktu mulai')
+      ) {
+        return true;
+      }
+
+      return rows
+        .slice(0, 5)
+        .some((row) => row[idx] && excelDateToJS(row[idx]) instanceof Date);
     });
     if (dateIdx >= 0) setDateColumn(String(dateIdx));
 
     setStep(2);
-  }, [workbook, selectedSheet, columnMap]);
+  }, [workbook, selectedSheet, columnMap, jenis]);
 
   // ──────────── STEP 2→3: Preview mapped data ────────────
   const handlePreview = () => setStep(3);
@@ -635,8 +699,13 @@ export default function ImportJadwal({
               record.jenis_pertemuan = parseJenisPertemuan(val);
               break;
             case '_lookup_angkatan': {
-              const aid = lookups.angkatanByName[val.toLowerCase().trim()];
-              record.id_angkatan = aid || null;
+              const angkatanIds = val
+                .split(/[,;|]/)
+                .map((name) => fuzzyLookup(name, lookups.angkatanByName))
+                .filter(Boolean)
+                .slice(0, 3);
+              record.id_angkatan = angkatanIds[0] || null;
+              if (angkatanIds.length) record.id_angkatans = angkatanIds;
               break;
             }
             case '_lookup_ruangan': {
@@ -950,93 +1019,186 @@ export default function ImportJadwal({
     karya_akhir: 'Karya Akhir',
     lain_lain: 'Lain-lain',
   };
+  const steps = [
+    { number: 1, label: 'Pilih file' },
+    { number: 2, label: 'Mapping kolom' },
+    { number: 3, label: 'Periksa data' },
+    { number: 4, label: 'Hasil import' },
+  ];
+  const mappedColumnCount = Object.keys(columnMapping).length;
+  const fileSize = file
+    ? file.size < 1024 * 1024
+      ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+      : `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+    : '';
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-      onClick={handleClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm sm:p-6"
+      onClick={importing ? undefined : handleClose}
+      role="presentation"
     >
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+        className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/20 bg-white shadow-2xl shadow-slate-950/25"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="import-jadwal-title"
       >
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-xl z-10">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">
-              Import Jadwal {jenisLabels[jenis]}
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Step {step}/4 —{' '}
-              {step === 1
-                ? 'Upload File'
-                : step === 2
-                  ? 'Mapping Kolom'
-                  : step === 3
-                    ? 'Preview & Import'
-                    : 'Hasil Import'}
-            </p>
+        <div className="sticky top-0 z-20 border-b border-slate-200 bg-white px-5 py-4 sm:px-7 sm:py-5">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700 ring-1 ring-primary-100">
+              <FileSpreadsheet size={22} aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2
+                  id="import-jadwal-title"
+                  className="text-lg font-semibold tracking-tight text-slate-950 sm:text-xl"
+                >
+                  Import Jadwal
+                </h2>
+                <span className="rounded-full bg-primary-50 px-2.5 py-1 text-[11px] font-semibold text-primary-700 ring-1 ring-inset ring-primary-100">
+                  {jenisLabels[jenis]}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Step {step}/4 —{' '}
+                {step === 1
+                  ? 'Upload File'
+                  : step === 2
+                    ? 'Mapping Kolom'
+                    : step === 3
+                      ? 'Preview & Import'
+                      : 'Hasil Import'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={importing}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Tutup popup import"
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
           </div>
-          <button
-            onClick={handleClose}
-            className="text-slate-400 hover:text-slate-600 text-xl"
-          >
-            &times;
-          </button>
+
+          <ol className="mt-5 grid grid-cols-4 gap-1 sm:gap-3">
+            {steps.map((item, index) => {
+              const isComplete = step > item.number;
+              const isCurrent = step === item.number;
+              return (
+                <li key={item.number} className="flex min-w-0 items-center">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1 ring-inset ${
+                        isComplete
+                          ? 'bg-emerald-500 text-white ring-emerald-500'
+                          : isCurrent
+                            ? 'bg-primary-600 text-white ring-primary-600'
+                            : 'bg-slate-100 text-slate-500 ring-slate-200'
+                      }`}
+                      aria-current={isCurrent ? 'step' : undefined}
+                    >
+                      {isComplete ? (
+                        <Check size={14} strokeWidth={2.5} aria-hidden="true" />
+                      ) : (
+                        item.number
+                      )}
+                    </span>
+                    <span
+                      className={`hidden truncate text-xs font-medium sm:block ${
+                        isCurrent ? 'text-slate-900' : 'text-slate-500'
+                      }`}
+                    >
+                      {item.label}
+                    </span>
+                  </div>
+                  {index < steps.length - 1 && (
+                    <div
+                      className={`mx-1.5 h-px min-w-2 flex-1 sm:mx-3 ${
+                        isComplete ? 'bg-emerald-300' : 'bg-slate-200'
+                      }`}
+                      aria-hidden="true"
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
         </div>
 
-        <div className="p-6">
+        <div className="bg-slate-50/70 p-5 sm:p-7">
           {/* ──────────── STEP 1: Upload File ──────────── */}
           {step === 1 && (
-            <div className="space-y-4">
-              <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-indigo-400 transition-colors">
-                <svg
-                  className="mx-auto h-12 w-12 text-slate-400 mb-3"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                  />
-                </svg>
-                <p className="text-sm text-slate-600 mb-3">
-                  Upload file <strong>.xlsx</strong>, <strong>.xls</strong>,
-                  atau <strong>.csv</strong>
-                </p>
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+              <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-5">
+                  <h3 className="text-base font-semibold text-slate-900">
+                    Pilih file jadwal
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Pastikan baris pertama berisi nama kolom.
+                  </p>
+                </div>
                 <input
+                  id="import-schedule-file"
                   ref={fileInputRef}
                   type="file"
                   accept=".xlsx,.xls,.csv"
                   onChange={handleFileChange}
-                  className="block mx-auto text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                  className="sr-only"
                 />
-              </div>
+                <label
+                  htmlFor="import-schedule-file"
+                  className="group flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/70 px-6 py-8 text-center transition-colors hover:border-primary-400 hover:bg-primary-50/40"
+                >
+                  <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-primary-600 shadow-sm ring-1 ring-slate-200 transition-transform group-hover:-translate-y-0.5">
+                    <UploadCloud size={27} aria-hidden="true" />
+                  </span>
+                  <span className="mt-4 text-sm font-semibold text-slate-900">
+                    Klik untuk memilih file
+                  </span>
+                  <span className="mt-1.5 text-xs text-slate-500">
+                    Mendukung XLSX, XLS, dan CSV
+                  </span>
+                </label>
 
-              {file && sheetNames.length > 0 && (
-                <div className="space-y-3 bg-slate-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-green-500">&#10003;</span>
-                    <span className="font-medium text-slate-700">
-                      {file.name}
-                    </span>
-                    <span className="text-slate-400">
-                      ({sheetNames.length} sheet)
-                    </span>
-                  </div>
+                {file && sheetNames.length > 0 && (
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-600 ring-1 ring-emerald-200">
+                        <FileSpreadsheet size={20} aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-900">
+                          {file.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {fileSize} · {sheetNames.length} sheet terdeteksi
+                        </p>
+                      </div>
+                      <CheckCircle2
+                        size={20}
+                        className="shrink-0 text-emerald-600"
+                        aria-label="File berhasil dibaca"
+                      />
+                    </div>
 
-                  {sheetNames.length > 1 && (
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Pilih Sheet:
+                    <div className="mt-4">
+                      <label
+                        htmlFor="import-sheet"
+                        className="mb-1.5 block text-xs font-semibold text-slate-700"
+                      >
+                        Sheet yang akan diproses
                       </label>
                       <select
+                        id="import-sheet"
                         value={selectedSheet}
                         onChange={(e) => setSelectedSheet(e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                        className="ui-field w-full bg-white text-sm"
                       >
                         {sheetNames.map((name) => (
                           <option key={name} value={name}>
@@ -1045,21 +1207,30 @@ export default function ImportJadwal({
                         ))}
                       </select>
                     </div>
-                  )}
 
-                  <button
-                    onClick={handleReadSheet}
-                    className="w-full px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-                  >
-                    Baca File &rarr;
-                  </button>
-                </div>
-              )}
+                    <button
+                      type="button"
+                      onClick={handleReadSheet}
+                      className="ui-button ui-button-primary mt-4 w-full justify-center"
+                    >
+                      Baca dan lanjutkan
+                      <ArrowRight size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
+              </section>
 
               {/* Guide */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-700 space-y-1">
-                <p className="font-semibold">Format yang didukung:</p>
-                <ul className="list-disc ml-4 space-y-0.5">
+              <aside className="rounded-xl border border-slate-200 bg-white p-5 text-xs text-slate-600 shadow-sm">
+                <div className="flex items-center gap-2 text-slate-900">
+                  <Info
+                    size={18}
+                    className="text-primary-600"
+                    aria-hidden="true"
+                  />
+                  <p className="text-sm font-semibold">Panduan file</p>
+                </div>
+                <ul className="mt-4 list-disc space-y-2 pl-4 leading-5 marker:text-primary-500">
                   <li>File Excel (.xlsx/.xls) — bisa pilih sheet</li>
                   <li>File CSV (.csv) — langsung diproses</li>
                   <li>
@@ -1069,27 +1240,55 @@ export default function ImportJadwal({
                     Kolom akan di-mapping otomatis berdasarkan nama header
                   </li>
                 </ul>
-              </div>
+                <div className="mt-5 rounded-lg bg-amber-50 p-3 leading-5 text-amber-800 ring-1 ring-inset ring-amber-200">
+                  Periksa kembali nama dosen dan referensi Master Data sebelum
+                  menyimpan.
+                </div>
+              </aside>
             </div>
           )}
 
           {/* ──────────── STEP 2: Column Mapping ──────────── */}
           {step === 2 && (
-            <div className="space-y-4">
-              <p className="text-sm text-slate-600">
-                Cocokkan kolom dari file Anda ke kolom database. Kolom yang
-                sudah terdeteksi otomatis ditandai.
-              </p>
+            <div className="space-y-5">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">
+                    Cocokkan kolom
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Periksa hasil mapping otomatis sebelum melanjutkan.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <span className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                    {previewHeaders.length} kolom file
+                  </span>
+                  <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                    {mappedColumnCount} terpetakan
+                  </span>
+                </div>
+              </div>
 
               {/* Date column selector */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <label className="block text-sm font-medium text-amber-800 mb-1">
-                  Kolom Tanggal (untuk menentukan tanggal jadwal):
-                </label>
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+                <div className="flex items-center gap-2 text-amber-950">
+                  <AlertCircle size={18} aria-hidden="true" />
+                  <label
+                    htmlFor="import-date-column"
+                    className="text-sm font-semibold"
+                  >
+                    Kolom tanggal jadwal
+                  </label>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-amber-800">
+                  Pilih kolom yang berisi tanggal untuk setiap jadwal.
+                </p>
                 <select
+                  id="import-date-column"
                   value={dateColumn}
                   onChange={(e) => setDateColumn(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-amber-300 rounded-lg bg-white"
+                  className="ui-field mt-3 w-full border-amber-300 bg-white text-sm"
                 >
                   <option value="">
                     -- Tidak ada (tanggal dari section header) --
@@ -1100,24 +1299,24 @@ export default function ImportJadwal({
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-amber-600 mt-1">
+                <p className="mt-2 text-xs leading-5 text-amber-700">
                   Jika spreadsheet menggunakan baris section header seperti
                   "Selasa, 27 Januari 2026", biarkan kosong.
                 </p>
               </div>
 
               {/* Column mapping table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
+              <div className="max-h-[360px] overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                <table className="w-full min-w-[680px] border-collapse text-sm">
                   <thead>
-                    <tr className="bg-slate-100">
-                      <th className="py-2 px-3 text-left font-medium text-slate-600 border">
+                    <tr className="sticky top-0 z-10 bg-slate-100">
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Kolom File
                       </th>
-                      <th className="py-2 px-3 text-left font-medium text-slate-600 border">
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Contoh Data
                       </th>
-                      <th className="py-2 px-3 text-left font-medium text-slate-600 border">
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Map ke →
                       </th>
                     </tr>
@@ -1126,19 +1325,19 @@ export default function ImportJadwal({
                     {previewHeaders.map((header, idx) => (
                       <tr
                         key={idx}
-                        className={`border-b ${columnMapping[idx] ? 'bg-green-50' : ''}`}
+                        className={`border-b border-slate-100 ${columnMapping[idx] ? 'bg-emerald-50/40' : 'bg-white'}`}
                       >
-                        <td className="py-2 px-3 border font-medium text-slate-700">
+                        <td className="px-4 py-3 font-semibold text-slate-700">
                           {header || (
                             <span className="text-slate-400">(kosong)</span>
                           )}
                         </td>
-                        <td className="py-2 px-3 border text-slate-500 text-xs max-w-[200px] truncate">
+                        <td className="max-w-[220px] truncate px-4 py-3 text-xs text-slate-500">
                           {previewData.length > 0
                             ? String(previewData[0][idx] || '-')
                             : '-'}
                         </td>
-                        <td className="py-2 px-3 border">
+                        <td className="px-4 py-2.5">
                           <select
                             value={columnMapping[idx] || ''}
                             onChange={(e) => {
@@ -1150,7 +1349,7 @@ export default function ImportJadwal({
                                 return next;
                               });
                             }}
-                            className={`w-full px-2 py-1 text-xs border rounded ${columnMapping[idx] ? 'border-green-400 bg-green-50' : 'border-slate-300'}`}
+                            className={`ui-field min-h-9 w-full py-1.5 text-xs ${columnMapping[idx] ? 'border-emerald-300 bg-emerald-50/60' : 'bg-white'}`}
                           >
                             <option value="">-- Lewati --</option>
                             {getDbColumns().map((col) => (
@@ -1166,19 +1365,23 @@ export default function ImportJadwal({
                 </table>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col-reverse justify-between gap-3 border-t border-slate-200 pt-5 sm:flex-row">
                 <button
+                  type="button"
                   onClick={() => setStep(1)}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+                  className="ui-button ui-button-secondary justify-center sm:min-w-32"
                 >
-                  &larr; Kembali
+                  <ArrowLeft size={16} aria-hidden="true" />
+                  Kembali
                 </button>
                 <button
+                  type="button"
                   onClick={handlePreview}
-                  disabled={Object.keys(columnMapping).length === 0}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={mappedColumnCount === 0}
+                  className="ui-button ui-button-primary justify-center disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-44"
                 >
-                  Preview Data &rarr;
+                  Periksa data
+                  <ArrowRight size={16} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -1186,27 +1389,36 @@ export default function ImportJadwal({
 
           {/* ──────────── STEP 3: Preview & Confirm ──────────── */}
           {step === 3 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">
-                  <strong>{previewData.length}</strong> baris data akan diimport
-                  ke tabel <strong>jadwal_{jenis}</strong>
-                </p>
-                <span className="text-xs text-slate-400">
-                  (Data kosong akan diskip otomatis)
-                </span>
+            <div className="space-y-5">
+              <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-primary-600 ring-1 ring-primary-200">
+                    <Database size={19} aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Siap mengimpor {previewData.length} baris
+                    </h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      Tujuan: <strong>Jadwal {jenisLabels[jenis]}</strong>.
+                      Baris kosong akan dilewati otomatis.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Preview table - first 10 rows */}
-              <div className="overflow-x-auto max-h-[300px] overflow-y-auto border border-slate-200 rounded-lg">
-                <table className="w-full text-xs border-collapse">
-                  <thead className="sticky top-0">
-                    <tr className="bg-slate-100">
-                      <th className="py-2 px-2 border text-slate-600">#</th>
+              <div className="max-h-[360px] overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                <table className="w-full min-w-max border-collapse text-xs">
+                  <thead className="sticky top-0 z-10 bg-slate-100">
+                    <tr>
+                      <th className="border-b border-slate-200 px-3 py-3 text-left font-semibold text-slate-500">
+                        No.
+                      </th>
                       {Object.entries(columnMapping).map(([colIdx, target]) => (
                         <th
                           key={colIdx}
-                          className="py-2 px-2 border text-slate-600 whitespace-nowrap"
+                          className="whitespace-nowrap border-b border-slate-200 px-3 py-3 text-left font-semibold text-slate-500"
                         >
                           {getDbColumns().find((c) => c.key === target)
                             ?.label || target}
@@ -1214,16 +1426,16 @@ export default function ImportJadwal({
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100">
                     {previewData.slice(0, 15).map((row, rIdx) => (
-                      <tr key={rIdx} className="border-b hover:bg-slate-50">
-                        <td className="py-1 px-2 border text-slate-400">
+                      <tr key={rIdx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2.5 font-medium text-slate-400">
                           {rIdx + 1}
                         </td>
                         {Object.entries(columnMapping).map(([colIdx]) => (
                           <td
                             key={colIdx}
-                            className="py-1 px-2 border text-slate-700 max-w-[150px] truncate"
+                            className="max-w-[220px] truncate px-3 py-2.5 text-slate-700"
                           >
                             {String(row[parseInt(colIdx)] || '-')}
                           </td>
@@ -1235,23 +1447,27 @@ export default function ImportJadwal({
               </div>
 
               {previewData.length > 15 && (
-                <p className="text-xs text-slate-400 text-center">
-                  ...dan {previewData.length - 15} baris lainnya
+                <p className="text-center text-xs text-slate-500">
+                  {previewData.length - 15} baris lainnya juga akan diproses.
                 </p>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex flex-col-reverse justify-between gap-3 border-t border-slate-200 pt-5 sm:flex-row">
                 <button
+                  type="button"
                   onClick={() => setStep(2)}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+                  className="ui-button ui-button-secondary justify-center sm:min-w-32"
                 >
-                  &larr; Kembali
+                  <ArrowLeft size={16} aria-hidden="true" />
+                  Kembali
                 </button>
                 <button
+                  type="button"
                   onClick={handleImport}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg"
+                  className="ui-button justify-center bg-emerald-600 text-white hover:bg-emerald-700 sm:min-w-52"
                 >
-                  Import {previewData.length} Baris
+                  <UploadCloud size={16} aria-hidden="true" />
+                  Import {previewData.length} baris
                 </button>
               </div>
             </div>
@@ -1261,20 +1477,41 @@ export default function ImportJadwal({
           {step === 4 && (
             <div className="space-y-4">
               {importing ? (
-                <div className="flex flex-col items-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4" />
-                  <p className="text-sm text-slate-600">
-                    Mengimport data ke database...
+                <div className="flex min-h-[360px] flex-col items-center justify-center rounded-xl border border-slate-200 bg-white px-6 text-center shadow-sm">
+                  <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-50 text-primary-600 ring-1 ring-primary-100">
+                    <LoaderCircle
+                      size={30}
+                      className="animate-spin"
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <h3 className="mt-5 text-base font-semibold text-slate-900">
+                    Sedang memproses data
+                  </h3>
+                  <p className="mt-1.5 text-sm text-slate-500">
+                    Jadwal sedang disimpan ke database.
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="mt-4 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
                     Mohon tunggu, jangan tutup halaman ini
                   </p>
                 </div>
               ) : (
                 importResult && (
                   <div className="space-y-4">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-5 text-center">
+                      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-500/25">
+                        <Check size={24} strokeWidth={2.5} aria-hidden="true" />
+                      </span>
+                      <h3 className="mt-3 text-base font-semibold text-emerald-950">
+                        Proses import selesai
+                      </h3>
+                      <p className="mt-1 text-sm text-emerald-800">
+                        Ringkasan hasil pemrosesan file Anda.
+                      </p>
+                    </div>
+
                     {/* Batch tag info */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs text-slate-500">
+                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-sm">
                       <span className="font-medium text-slate-600">
                         ID Import:{' '}
                       </span>
@@ -1282,44 +1519,49 @@ export default function ImportJadwal({
                     </div>
 
                     {/* Summary */}
-                    <div className="grid grid-cols-4 gap-3">
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-green-600">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="rounded-xl border border-emerald-200 bg-white p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-emerald-600">
                           {importResult.inserted ?? importResult.success}
                         </div>
-                        <div className="text-xs text-green-700">
-                          Baru (Insert)
+                        <div className="mt-1 text-xs font-medium text-slate-500">
+                          Data baru
                         </div>
                       </div>
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                      <div className="rounded-xl border border-blue-200 bg-white p-4 text-center shadow-sm">
                         <div className="text-2xl font-bold text-blue-600">
                           {importResult.updated ?? 0}
                         </div>
-                        <div className="text-xs text-blue-700">
-                          Diperbarui (Update)
+                        <div className="mt-1 text-xs font-medium text-slate-500">
+                          Diperbarui
                         </div>
                       </div>
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                      <div className="rounded-xl border border-red-200 bg-white p-4 text-center shadow-sm">
                         <div className="text-2xl font-bold text-red-600">
                           {importResult.errors.length}
                         </div>
-                        <div className="text-xs text-red-700">Gagal</div>
+                        <div className="mt-1 text-xs font-medium text-slate-500">
+                          Gagal
+                        </div>
                       </div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 text-center shadow-sm">
                         <div className="text-2xl font-bold text-slate-600">
                           {importResult.skipped}
                         </div>
-                        <div className="text-xs text-slate-700">Diskip</div>
+                        <div className="mt-1 text-xs font-medium text-slate-500">
+                          Dilewati
+                        </div>
                       </div>
                     </div>
 
                     {/* Error details */}
                     {importResult.errors.length > 0 && (
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <p className="text-sm font-medium text-red-700 mb-2">
-                          Detail Error:
+                      <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                        <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-800">
+                          <AlertCircle size={17} aria-hidden="true" />
+                          Detail kegagalan
                         </p>
-                        <div className="max-h-[150px] overflow-y-auto text-xs text-red-600 space-y-1">
+                        <div className="max-h-40 space-y-1 overflow-y-auto text-xs leading-5 text-red-700">
                           {importResult.errors.map((err, idx) => (
                             <div key={idx}>• {err}</div>
                           ))}
@@ -1327,18 +1569,21 @@ export default function ImportJadwal({
                       </div>
                     )}
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
                       <button
+                        type="button"
                         onClick={handleReset}
-                        className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+                        className="ui-button ui-button-secondary justify-center"
                       >
+                        <RotateCcw size={15} aria-hidden="true" />
                         Import Lagi
                       </button>
                       {(importResult.inserted ?? importResult.success) > 0 && (
                         <button
+                          type="button"
                           onClick={handleUndo}
                           disabled={undoing}
-                          className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-60"
+                          className="ui-button justify-center border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-60"
                         >
                           {undoing
                             ? 'Membatalkan...'
@@ -1346,8 +1591,9 @@ export default function ImportJadwal({
                         </button>
                       )}
                       <button
+                        type="button"
                         onClick={handleClose}
-                        className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
+                        className="ui-button ui-button-primary justify-center sm:min-w-28"
                       >
                         Selesai
                       </button>

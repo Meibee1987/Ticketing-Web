@@ -1383,23 +1383,77 @@ export default function JadwalPageAdmin() {
         return;
       }
 
-      // Convert to CSV
+      // Convert to CSV dengan format lengkap dan import-friendly. Kolom-kolom
+      // ini sengaja memakai nama yang dipahami oleh ImportJadwal agar file
+      // hasil download dapat diedit di Excel lalu diimpor kembali.
       const headers = [
         'Jenis',
+        'Angkatan',
+        'Mata Kuliah',
+        'Nama Mahasiswa',
+        'Nama User',
         'Agenda',
+        'Tanggal',
+        'Mulai',
+        'Selesai',
+        'Jenis Pertemuan',
         'Ruangan',
-        'Waktu Mulai',
-        'Waktu Selesai',
-        'Keterangan',
+        'Dosen 1',
+        'Dosen 2',
+        'Dosen 3',
+        'Dosen 4',
+        'Paralel',
+        'Real Perkuliahan',
+        'Petugas Zoom',
+        'Zoom ID',
+        'Zoom Password',
+        'Moderator',
+        'Penguji 1',
+        'Penguji 2',
+        'Pintang/SPS',
+        'Catatan',
       ];
-      const rows = data.map((d) => [
-        d.jenis,
-        d.agenda_display || '-',
-        d.nama_ruangan || '-',
-        d.mulai_formatted || '-',
-        d.akhir_formatted || '-',
-        d.keterangan || '-',
-      ]);
+      const rows = data.map((d) => {
+        const mulai = d.mulai_jadwal ? new Date(d.mulai_jadwal) : null;
+        const tanggal =
+          mulai && !isNaN(mulai.getTime())
+            ? `${mulai.getFullYear()}-${String(mulai.getMonth() + 1).padStart(2, '0')}-${String(mulai.getDate()).padStart(2, '0')}`
+            : '';
+        const dosenNames =
+          d.jenis === 'perkuliahan'
+            ? [d.nama_dosen, ...(d.dosen_tambahan_names || [])]
+            : d.dosen_names || [];
+
+        return [
+          d.jenis,
+          d.jenis === 'perkuliahan' ? d.nama_angkatan || '' : '',
+          d.jenis === 'perkuliahan' ? d.nama_matkul || '' : '',
+          d.jenis === 'karya_akhir' ? d.nama_mahasiswa || '' : '',
+          d.jenis === 'lain_lain' ? d.nama_user || '' : '',
+          d.jenis === 'karya_akhir' || d.jenis === 'lain_lain'
+            ? d.agenda_display || ''
+            : '',
+          tanggal,
+          formatTime(d.mulai_jadwal),
+          formatTime(d.akhir_jadwal),
+          d.jenis_pertemuan || 'luring',
+          d.nama_ruangan || '',
+          dosenNames[0] || '',
+          dosenNames[1] || '',
+          dosenNames[2] || '',
+          dosenNames[3] || '',
+          d.paralel === '-' ? '' : d.paralel || '',
+          d.real_perkuliahan === '-' ? '' : d.real_perkuliahan || '',
+          d.petugas_zoom === '-' ? '' : d.petugas_zoom || '',
+          d.zoom_id || '',
+          d.zoom_password || '',
+          d.moderator === '-' ? '' : d.moderator || '',
+          d.penguji_names?.[0] || '',
+          d.penguji_names?.[1] || '',
+          d.pintang_sps === '-' ? '' : d.pintang_sps || '',
+          d.note || '',
+        ];
+      });
 
       const csvContent = [headers, ...rows]
         .map((row) => row.map((cell) => `"${cell}"`).join(','))
