@@ -9,9 +9,29 @@ import {
   MonitorScheduleSkeleton,
 } from '../components/monitor/MonitorScheduleUI';
 import { supabase } from '../supabaseClient';
+import {
+  fetchMonitorSlides,
+  MONITOR_SLIDES_TABLE,
+  readLegacyMonitorSlides,
+} from '../utils/monitorSlides';
 import { assertSupabaseResults } from '../utils/supabaseResults';
 
-const STORAGE_KEY = 'jadwal_monitor_slides';
+const ITEMS_PER_PAGE = 5;
+const AUTO_SLIDE_INTERVAL = 7 * 1000;
+const DATA_REFRESH_INTERVAL = 7 * 1000;
+const SLIDE_REFRESH_INTERVAL = 15 * 1000;
+
+const hasSameSlides = (currentSlides, nextSlides) =>
+  currentSlides.length === nextSlides.length &&
+  currentSlides.every((slide, index) => {
+    const nextSlide = nextSlides[index];
+    return (
+      slide.id === nextSlide?.id &&
+      slide.url === nextSlide.url &&
+      slide.title === nextSlide.title &&
+      slide.sortOrder === nextSlide.sortOrder
+    );
+  });
 
 const parseIdList = (value) => {
   if (Array.isArray(value)) return value;
@@ -32,28 +52,47 @@ export default function JadwalMonitor() {
   const [slideImages, setSlideImages] = useState([]);
   const [error, setError] = useState('');
 
-  const ITEMS_PER_PAGE = 5;
-  const AUTO_SLIDE_INTERVAL = 10000;
-
   useEffect(() => {
-    const loadSlides = () => {
+    let isMounted = true;
+
+    const loadSlides = async () => {
       try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          setSlideImages(JSON.parse(saved));
-        }
+        const remoteSlides = await fetchMonitorSlides();
+        if (!isMounted) return;
+
+        setSlideImages((currentSlides) =>
+          hasSameSlides(currentSlides, remoteSlides)
+            ? currentSlides
+            : remoteSlides
+        );
       } catch (error) {
-        console.error('Error loading slides:', error);
+        console.error('Error loading monitor slides:', error);
+
+        const legacySlides = readLegacyMonitorSlides();
+        if (isMounted && legacySlides.length > 0) {
+          setSlideImages(legacySlides);
+        }
       }
     };
 
     loadSlides();
 
-    const interval = setInterval(loadSlides, 15 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+    const channel = supabase
+      .channel('jadwal-monitor-slides')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: MONITOR_SLIDES_TABLE },
+        loadSlides
+      )
+      .subscribe();
+    const interval = setInterval(loadSlides, SLIDE_REFRESH_INTERVAL);
 
-  const SLIDE_IMAGES = slideImages;
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -64,20 +103,26 @@ export default function JadwalMonitor() {
 
   useEffect(() => {
     const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
-    const totalPages = totalDataPages + SLIDE_IMAGES.length;
+    const totalPages = totalDataPages + slideImages.length;
 
     if (totalPages <= 1) return;
 
-    const slideTimer = setInterval(() => {
+    const slideTimer = setTimeout(() => {
       setCurrentPage((prev) => (prev + 1) % totalPages);
     }, AUTO_SLIDE_INTERVAL);
 
-    return () => clearInterval(slideTimer);
-  }, [jadwalData.length, SLIDE_IMAGES.length]);
+    return () => clearTimeout(slideTimer);
+  }, [currentPage, jadwalData.length, slideImages]);
+
+  useEffect(() => {
+    const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
+    const totalPages = totalDataPages + slideImages.length;
+
+    setCurrentPage((page) => (totalPages > 0 && page >= totalPages ? 0 : page));
+  }, [jadwalData.length, slideImages.length]);
 
   const fetchTodaySchedule = useCallback(async () => {
     try {
-      setLoading(true);
       setError('');
 
       const [
@@ -135,12 +180,13 @@ export default function JadwalMonitor() {
             ...item,
             nama_dosen: item.dosen?.nama_dosen || '-',
             nama_ruangan: item.ruangan?.nama_ruangan || '-',
-            nama_angkatan: (parseIdList(item.id_angkatans).length
-              ? parseIdList(item.id_angkatans)
-                  .map((id) => angkatanMap[id])
-                  .filter(Boolean)
-                  .join(', ')
-              : item.angkatan?.nama_angkatan) || '-',
+            nama_angkatan:
+              (parseIdList(item.id_angkatans).length
+                ? parseIdList(item.id_angkatans)
+                    .map((id) => angkatanMap[id])
+                    .filter(Boolean)
+                    .join(', ')
+                : item.angkatan?.nama_angkatan) || '-',
             nama_matkul:
               item.mata_kuliah?.mata_kuliah ||
               item.mata_kuliah?.nama_matkul ||
@@ -258,7 +304,7 @@ export default function JadwalMonitor() {
 
   useEffect(() => {
     fetchTodaySchedule();
-    const interval = setInterval(fetchTodaySchedule, 7 * 1000);
+    const interval = setInterval(fetchTodaySchedule, DATA_REFRESH_INTERVAL);
     return () => clearInterval(interval);
   }, [fetchTodaySchedule]);
 
@@ -311,7 +357,7 @@ export default function JadwalMonitor() {
 
   const totalJadwal = jadwalData.length;
   const totalDataPages = Math.ceil(jadwalData.length / ITEMS_PER_PAGE);
-  const totalPages = totalDataPages + SLIDE_IMAGES.length;
+  const totalPages = totalDataPages + slideImages.length;
   const isImageSlide = currentPage >= totalDataPages;
   const imageSlideIndex = currentPage - totalDataPages;
 
@@ -322,7 +368,7 @@ export default function JadwalMonitor() {
   }
 
   const clock = formatClockTime();
-  const activeSlide = SLIDE_IMAGES[imageSlideIndex];
+  const activeSlide = slideImages[imageSlideIndex];
 
   return (
     <div className="monitor-page flex min-h-screen flex-col overflow-x-hidden bg-background">
@@ -330,30 +376,17 @@ export default function JadwalMonitor() {
 
       <main className="flex-1">
         <div className="mx-auto w-full max-w-[1720px] px-4 py-5 sm:px-6 lg:px-8">
-          {!loading && !error && jadwalData.length > 0 && (
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h2 className="text-lg font-semibold leading-7 text-slate-900 sm:text-xl">
-                  {isImageSlide ? 'Informasi Kampus' : 'Jadwal Hari Ini'}
-                </h2>
-                {!isImageSlide && (
-                  <p className="mt-0.5 text-sm leading-5 text-slate-500">
-                    Menampilkan {currentPageData.length} dari {totalJadwal}{' '}
-                    kegiatan.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
           {loading ? (
             <MonitorScheduleSkeleton />
-          ) : error ? (
+          ) : error && slideImages.length === 0 ? (
             <MonitorScheduleErrorState
               message={error}
-              onRetry={fetchTodaySchedule}
+              onRetry={() => {
+                setLoading(true);
+                fetchTodaySchedule();
+              }}
             />
-          ) : jadwalData.length === 0 ? (
+          ) : totalPages === 0 ? (
             <MonitorScheduleEmptyState />
           ) : isImageSlide && activeSlide ? (
             <MonitorImageSlide slide={activeSlide} />
@@ -370,7 +403,7 @@ export default function JadwalMonitor() {
         </div>
       </main>
 
-      {!loading && !error && (
+      {!loading && (!error || slideImages.length > 0) && (
         <MonitorFooter
           totalSchedules={totalJadwal}
           totalPages={totalPages}

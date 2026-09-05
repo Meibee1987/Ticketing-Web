@@ -11,8 +11,11 @@ import {
   ClipboardList,
   Download,
   GraduationCap,
+  LoaderCircle,
   Plus,
+  Trash2,
   Upload,
+  X,
 } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../hooks/useAuth';
@@ -90,7 +93,7 @@ function MultiSelect({
       <label className="block text-sm font-medium text-slate-700 mb-1">
         {label}{' '}
         <span className="text-xs text-slate-500">
-      (maks. {maxSelections} {itemLabel})
+          (maks. {maxSelections} {itemLabel})
         </span>
       </label>
 
@@ -509,6 +512,9 @@ export default function JadwalPageAdmin() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add');
   const [modalType, setModalType] = useState('perkuliahan');
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -585,12 +591,13 @@ export default function JadwalPageAdmin() {
         jenis: 'perkuliahan',
         nama_dosen: r.dosen?.nama_dosen || '-',
         nama_ruangan: r.ruangan?.nama_ruangan || '-',
-        nama_angkatan: (parseIdList(r.id_angkatans).length
-          ? parseIdList(r.id_angkatans)
-              .map((id) => angkatanMap[id])
-              .filter(Boolean)
-              .join(', ')
-          : r.angkatan?.nama_angkatan) || '-',
+        nama_angkatan:
+          (parseIdList(r.id_angkatans).length
+            ? parseIdList(r.id_angkatans)
+                .map((id) => angkatanMap[id])
+                .filter(Boolean)
+                .join(', ')
+            : r.angkatan?.nama_angkatan) || '-',
         nama_matkul:
           r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',
         agenda_display:
@@ -1140,11 +1147,7 @@ export default function JadwalPageAdmin() {
         }
         dataToInsert.created_by = userName;
         dataToInsert.updated_by = userName;
-        result = await supabase
-          .from(table)
-          .insert(
-            [dataToInsert]
-          );
+        result = await supabase.from(table).insert([dataToInsert]);
       } else {
         if (modalType === 'perkuliahan') {
           const selectedAngkatanIds = form.id_angkatans.filter(Boolean);
@@ -1191,10 +1194,8 @@ export default function JadwalPageAdmin() {
     }
   };
 
-  // Delete handler
-  const handleDelete = async (id, jenis) => {
-    if (!confirm('Yakin ingin menghapus jadwal ini?')) return;
-
+  // Delete handlers
+  const executeSingleDelete = async (id, jenis) => {
     try {
       const tableMap = {
         perkuliahan: 'jadwal_perkuliahan',
@@ -1221,23 +1222,18 @@ export default function JadwalPageAdmin() {
         description: `${tableLabels[jenis]}: Data jadwal telah dihapus.`,
       });
 
-      alert('Data berhasil dihapus!');
       fetchAllData();
+      return true;
     } catch (err) {
       console.error('Error deleting:', err);
-      alert(`Gagal menghapus: ${err.message}`);
+      setDeleteError(err.message || 'Data jadwal gagal dihapus.');
+      return false;
     }
   };
 
   // Bulk delete handler
-  const handleBulkDelete = async (ids, jenis) => {
+  const executeBulkDelete = async (ids, jenis) => {
     if (!ids.length) return;
-    if (
-      !confirm(
-        `Yakin ingin menghapus ${ids.length} data jadwal yang dipilih? Proses ini tidak bisa dibatalkan.`
-      )
-    )
-      return;
 
     try {
       const tableMap = {
@@ -1269,12 +1265,47 @@ export default function JadwalPageAdmin() {
         description: `${tableLabels[jenis]}: ${ids.length} data jadwal telah dihapus.`,
       });
 
-      alert(`${ids.length} data berhasil dihapus!`);
       fetchAllData();
+      return true;
     } catch (err) {
       console.error('Error bulk deleting:', err);
-      alert(`Gagal menghapus: ${err.message}`);
+      setDeleteError(err.message || 'Data jadwal gagal dihapus.');
+      return false;
     }
+  };
+
+  const handleDelete = (id, jenis) => {
+    setDeleteError('');
+    setDeleteConfirmation({ mode: 'single', ids: [id], jenis });
+  };
+
+  const handleBulkDelete = (ids, jenis, onSuccess) => {
+    if (!ids.length) return;
+    setDeleteError('');
+    setDeleteConfirmation({
+      mode: 'bulk',
+      ids: [...ids],
+      jenis,
+      onSuccess,
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmation || deleting) return;
+
+    setDeleting(true);
+    setDeleteError('');
+    const { mode, ids, jenis, onSuccess } = deleteConfirmation;
+    const success =
+      mode === 'bulk'
+        ? await executeBulkDelete(ids, jenis)
+        : await executeSingleDelete(ids[0], jenis);
+
+    if (success) {
+      onSuccess?.();
+      setDeleteConfirmation(null);
+    }
+    setDeleting(false);
   };
 
   // Download handler - dengan parameter jenis untuk download per tab
@@ -1885,6 +1916,21 @@ export default function JadwalPageAdmin() {
         </div>
       </div>
 
+      {deleteConfirmation && (
+        <DeleteConfirmationModal
+          count={deleteConfirmation.ids.length}
+          jenis={deleteConfirmation.jenis}
+          deleting={deleting}
+          error={deleteError}
+          onCancel={() => {
+            if (deleting) return;
+            setDeleteConfirmation(null);
+            setDeleteError('');
+          }}
+          onConfirm={confirmDelete}
+        />
+      )}
+
       {/* Modal Form */}
       {modalOpen && (
         <Modal onClose={closeModal}>
@@ -2210,8 +2256,7 @@ function JadwalTab({
           )}
           <button
             onClick={() => {
-              onBulkDelete(selectedIds, jenis);
-              setSelectedIds([]);
+              onBulkDelete(selectedIds, jenis, () => setSelectedIds([]));
             }}
             className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
             type="button"
@@ -2776,6 +2821,126 @@ function ErrorState({ message }) {
 function EmptyState({ text }) {
   return (
     <StatePanel type="empty" title="Belum ada jadwal" description={text} />
+  );
+}
+
+function DeleteConfirmationModal({
+  count,
+  jenis,
+  deleting,
+  error,
+  onCancel,
+  onConfirm,
+}) {
+  const jenisLabels = {
+    perkuliahan: 'perkuliahan',
+    karya_akhir: 'karya akhir',
+    lain_lain: 'lain-lain',
+  };
+  const isBulk = count > 1;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+      onClick={deleting ? undefined : onCancel}
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl shadow-slate-950/25"
+        onClick={(event) => event.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-confirmation-title"
+        aria-describedby="delete-confirmation-description"
+      >
+        <div className="flex items-start gap-4 px-6 pb-4 pt-6">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 ring-1 ring-red-100">
+            <Trash2 size={22} aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-600">
+              Konfirmasi penghapusan
+            </p>
+            <h2
+              id="delete-confirmation-title"
+              className="mt-1 text-lg font-semibold tracking-tight text-slate-950"
+            >
+              {isBulk ? `Hapus ${count} Jadwal?` : 'Hapus Jadwal?'}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Tutup konfirmasi hapus"
+          >
+            <X size={19} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="px-6 pb-6">
+          <p
+            id="delete-confirmation-description"
+            className="text-sm leading-6 text-slate-600"
+          >
+            {isBulk
+              ? `${count} data jadwal ${jenisLabels[jenis] || ''} yang dipilih akan dihapus dari sistem.`
+              : `Data jadwal ${jenisLabels[jenis] || ''} ini akan dihapus dari sistem.`}
+          </p>
+
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm font-semibold text-red-800">
+              Tindakan ini bersifat permanen
+            </p>
+            <p className="mt-1 text-xs leading-5 text-red-700">
+              Data yang telah dihapus tidak dapat dipulihkan kembali.
+            </p>
+          </div>
+
+          {error && (
+            <div
+              className="mt-4 rounded-lg border border-red-200 bg-white px-3 py-2.5 text-xs leading-5 text-red-700"
+              role="alert"
+            >
+              Gagal menghapus: {error}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            className="ui-button ui-button-secondary justify-center sm:min-w-28"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={deleting}
+            className="ui-button justify-center bg-red-600 text-white shadow-sm shadow-red-600/20 hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-36"
+          >
+            {deleting ? (
+              <LoaderCircle
+                size={16}
+                className="animate-spin"
+                aria-hidden="true"
+              />
+            ) : (
+              <Trash2 size={16} aria-hidden="true" />
+            )}
+            {deleting
+              ? 'Menghapus...'
+              : isBulk
+                ? `Hapus ${count} Data`
+                : 'Hapus Jadwal'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

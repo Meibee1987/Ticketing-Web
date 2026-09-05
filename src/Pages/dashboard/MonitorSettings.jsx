@@ -5,17 +5,68 @@
  * ================================================================================
  */
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ImagePlus, Images, Info, Upload } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 import PageHeader from '../../components/ui/PageHeader';
 import StatePanel from '../../components/ui/StatePanel';
+import {
+  fetchMonitorSlides,
+  LEGACY_MONITOR_SLIDES_KEY,
+  mapMonitorSlide,
+  MONITOR_SLIDES_BUCKET,
+  MONITOR_SLIDES_TABLE,
+  readLegacyMonitorSlides,
+} from '../../utils/monitorSlides';
 
-const STORAGE_KEY = 'jadwal_monitor_slides';
+const getSlideErrorMessage = (error) => {
+  if (error?.code === '42P01') {
+    return 'Tabel monitor belum tersedia. Jalankan MIGRATION_MONITOR_SLIDES.sql di Supabase SQL Editor.';
+  }
+
+  return error?.message || 'Terjadi kendala saat mengelola gambar monitor.';
+};
+
+const getFileExtension = (mimeType = '') => {
+  const extensions = {
+    'image/gif': 'gif',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+  };
+
+  return extensions[mimeType] || 'jpg';
+};
+
+let legacyMigrationPromise = null;
+
+const uploadMonitorImage = async (file, prefix = 'slide') => {
+  const originalExtension = file.name?.split('.').pop()?.toLowerCase();
+  const fileExtension = originalExtension || getFileExtension(file.type);
+  const fileName = `${prefix}-${Date.now()}-${crypto.randomUUID()}.${fileExtension}`;
+
+  const { error } = await supabase.storage
+    .from(MONITOR_SLIDES_BUCKET)
+    .upload(fileName, file, {
+      cacheControl: '3600',
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (error) throw error;
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from(MONITOR_SLIDES_BUCKET).getPublicUrl(fileName);
+
+  return { publicUrl, storagePath: fileName };
+};
 
 export default function MonitorSettings() {
   const [slides, setSlides] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [loadingSlides, setLoadingSlides] = useState(true);
+  const [slidesError, setSlidesError] = useState('');
   const [previewImage, setPreviewImage] = useState(null);
   const [newSlide, setNewSlide] = useState({
     title: '',
@@ -23,31 +74,97 @@ export default function MonitorSettings() {
     preview: null,
   });
 
-  // Load slides dari localStorage
-  useEffect(() => {
-    loadSlides();
+  const migrateLegacySlides = useCallback(async (remoteSlides) => {
+    if (legacyMigrationPromise) return legacyMigrationPromise;
+
+    const legacySlides = readLegacyMonitorSlides();
+    if (legacySlides.length === 0) return;
+
+    const existingUrls = new Set(remoteSlides.map((slide) => slide.url));
+    const slidesToMigrate = legacySlides.filter(
+      (slide) => slide?.url && !existingUrls.has(slide.url)
+    );
+
+    if (slidesToMigrate.length === 0) {
+      localStorage.removeItem(LEGACY_MONITOR_SLIDES_KEY);
+      return;
+    }
+
+    legacyMigrationPromise = (async () => {
+      const migratedRows = [];
+      const uploadedPaths = [];
+
+      try {
+        for (const [index, slide] of slidesToMigrate.entries()) {
+          let imageUrl = slide.url;
+          let storagePath = null;
+
+          if (slide.url.startsWith('data:image/')) {
+            const response = await fetch(slide.url);
+            const blob = await response.blob();
+            const file = new File(
+              [blob],
+              `legacy-${index}.${getFileExtension(blob.type)}`,
+              { type: blob.type }
+            );
+            const uploaded = await uploadMonitorImage(file, 'legacy-slide');
+            imageUrl = uploaded.publicUrl;
+            storagePath = uploaded.storagePath;
+            uploadedPaths.push(uploaded.storagePath);
+          }
+
+          migratedRows.push({
+            title: slide.title?.trim() || `Gambar ${index + 1}`,
+            image_url: imageUrl,
+            storage_path: storagePath,
+            sort_order: remoteSlides.length + index,
+          });
+        }
+
+        const { error } = await supabase
+          .from(MONITOR_SLIDES_TABLE)
+          .insert(migratedRows);
+
+        if (error) throw error;
+
+        localStorage.removeItem(LEGACY_MONITOR_SLIDES_KEY);
+      } catch (error) {
+        if (uploadedPaths.length > 0) {
+          await supabase.storage
+            .from(MONITOR_SLIDES_BUCKET)
+            .remove(uploadedPaths);
+        }
+        throw error;
+      }
+    })();
+
+    try {
+      await legacyMigrationPromise;
+    } finally {
+      legacyMigrationPromise = null;
+    }
   }, []);
 
-  const loadSlides = () => {
-    try {
-      const savedSlides = localStorage.getItem(STORAGE_KEY);
-      if (savedSlides) {
-        setSlides(JSON.parse(savedSlides));
-      }
-    } catch (error) {
-      console.error('Error loading slides:', error);
-    }
-  };
+  const loadSlides = useCallback(async () => {
+    setLoadingSlides(true);
+    setSlidesError('');
 
-  const saveSlides = (newSlides) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newSlides));
-      setSlides(newSlides);
+      const remoteSlides = await fetchMonitorSlides();
+      await migrateLegacySlides(remoteSlides);
+      const synchronizedSlides = await fetchMonitorSlides();
+      setSlides(synchronizedSlides);
     } catch (error) {
-      console.error('Error saving slides:', error);
-      alert('Gagal menyimpan: ' + error.message);
+      console.error('Error loading monitor slides:', error);
+      setSlidesError(getSlideErrorMessage(error));
+    } finally {
+      setLoadingSlides(false);
     }
-  };
+  }, [migrateLegacySlides]);
+
+  useEffect(() => {
+    loadSlides();
+  }, [loadSlides]);
 
   // Handle file selection
   const handleFileSelect = (e) => {
@@ -78,33 +195,6 @@ export default function MonitorSettings() {
     reader.readAsDataURL(file);
   };
 
-  // Upload gambar ke Supabase Storage
-  const uploadToStorage = async (file) => {
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `slide-${Date.now()}.${fileExt}`;
-      const filePath = `monitor-slides/${fileName}`;
-
-      const { error } = await supabase.storage
-        .from('public-files')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-
-      if (error) throw error;
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from('public-files').getPublicUrl(filePath);
-
-      return publicUrl;
-    } catch (error) {
-      console.error('Error uploading to storage:', error);
-      throw error;
-    }
-  };
-
   // Add slide
   const handleAddSlide = async () => {
     if (!newSlide.title.trim()) {
@@ -118,54 +208,83 @@ export default function MonitorSettings() {
     }
 
     setUploading(true);
-    try {
-      let imageUrl = newSlide.preview;
+    let uploadedStoragePath = null;
 
-      // Jika ada file baru, upload ke Supabase Storage
-      // Jika tidak ada Supabase Storage, gunakan Data URL (base64)
-      if (newSlide.file) {
-        try {
-          imageUrl = await uploadToStorage(newSlide.file);
-        } catch (storageError) {
-          console.warn('Storage upload failed, using base64:', storageError);
-          // Fallback ke base64 jika storage gagal
-          imageUrl = newSlide.preview;
-        }
+    try {
+      const uploaded = await uploadMonitorImage(newSlide.file);
+      uploadedStoragePath = uploaded.storagePath;
+
+      const { data, error } = await supabase
+        .from(MONITOR_SLIDES_TABLE)
+        .insert({
+          title: newSlide.title.trim(),
+          image_url: uploaded.publicUrl,
+          storage_path: uploaded.storagePath,
+          sort_order: slides.length,
+        })
+        .select(
+          'id, title, image_url, storage_path, sort_order, is_active, created_at'
+        )
+        .single();
+
+      if (error) throw error;
+
+      setSlides((currentSlides) => [...currentSlides, mapMonitorSlide(data)]);
+      setNewSlide({ title: '', file: null, preview: null });
+      setSlidesError('');
+      alert('Gambar berhasil ditambahkan dan disinkronkan ke monitor!');
+    } catch (error) {
+      if (uploadedStoragePath) {
+        await supabase.storage
+          .from(MONITOR_SLIDES_BUCKET)
+          .remove([uploadedStoragePath]);
       }
 
-      const slide = {
-        id: Date.now(),
-        type: 'image',
-        url: imageUrl,
-        title: newSlide.title,
-        createdAt: new Date().toISOString(),
-      };
-
-      const updatedSlides = [...slides, slide];
-      saveSlides(updatedSlides);
-
-      // Reset form
-      setNewSlide({ title: '', file: null, preview: null });
-      alert('Gambar berhasil ditambahkan!');
-    } catch (error) {
       console.error('Error adding slide:', error);
-      alert('Gagal menambahkan gambar: ' + error.message);
+      setSlidesError(getSlideErrorMessage(error));
+      alert('Gagal menambahkan gambar: ' + getSlideErrorMessage(error));
     } finally {
       setUploading(false);
     }
   };
 
   // Delete slide
-  const handleDeleteSlide = (id) => {
-    if (!confirm('Hapus gambar ini dari slideshow?')) return;
+  const handleDeleteSlide = async (slide) => {
+    if (!confirm(`Hapus gambar "${slide.title}" dari monitor?`)) return;
 
-    const updatedSlides = slides.filter((s) => s.id !== id);
-    saveSlides(updatedSlides);
-    alert('Gambar berhasil dihapus!');
+    try {
+      const { error } = await supabase
+        .from(MONITOR_SLIDES_TABLE)
+        .delete()
+        .eq('id', slide.id);
+
+      if (error) throw error;
+
+      if (slide.storagePath) {
+        const { error: storageError } = await supabase.storage
+          .from(MONITOR_SLIDES_BUCKET)
+          .remove([slide.storagePath]);
+
+        if (storageError) {
+          console.warn(
+            'Slide deleted, but image cleanup failed:',
+            storageError
+          );
+        }
+      }
+
+      setSlides((currentSlides) =>
+        currentSlides.filter((item) => item.id !== slide.id)
+      );
+      alert('Gambar berhasil dihapus dari monitor!');
+    } catch (error) {
+      console.error('Error deleting slide:', error);
+      alert('Gagal menghapus gambar: ' + getSlideErrorMessage(error));
+    }
   };
 
   // Move slide up/down
-  const moveSlide = (index, direction) => {
+  const moveSlide = async (index, direction) => {
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= slides.length) return;
 
@@ -174,7 +293,32 @@ export default function MonitorSettings() {
       updatedSlides[newIndex],
       updatedSlides[index],
     ];
-    saveSlides(updatedSlides);
+
+    setSlides(updatedSlides);
+
+    const firstSlide = updatedSlides[index];
+    const secondSlide = updatedSlides[newIndex];
+    const updatedAt = new Date().toISOString();
+
+    try {
+      const [firstResult, secondResult] = await Promise.all([
+        supabase
+          .from(MONITOR_SLIDES_TABLE)
+          .update({ sort_order: index, updated_at: updatedAt })
+          .eq('id', firstSlide.id),
+        supabase
+          .from(MONITOR_SLIDES_TABLE)
+          .update({ sort_order: newIndex, updated_at: updatedAt })
+          .eq('id', secondSlide.id),
+      ]);
+
+      if (firstResult.error) throw firstResult.error;
+      if (secondResult.error) throw secondResult.error;
+    } catch (error) {
+      console.error('Error reordering slides:', error);
+      setSlides(slides);
+      alert('Gagal mengubah urutan: ' + getSlideErrorMessage(error));
+    }
   };
 
   return (
@@ -286,7 +430,28 @@ export default function MonitorSettings() {
               </p>
             </div>
           </div>
-          {slides.length === 0 ? (
+          {loadingSlides ? (
+            <StatePanel
+              type="loading"
+              title="Memuat gambar monitor"
+              description="Mengambil daftar gambar terbaru dari Supabase."
+            />
+          ) : slidesError ? (
+            <StatePanel
+              type="error"
+              title="Gambar monitor gagal dimuat"
+              description={slidesError}
+              action={
+                <button
+                  type="button"
+                  className="ui-button ui-button-secondary"
+                  onClick={loadSlides}
+                >
+                  Coba Lagi
+                </button>
+              }
+            />
+          ) : slides.length === 0 ? (
             <StatePanel
               type="empty"
               title="Belum ada gambar"
@@ -374,7 +539,7 @@ export default function MonitorSettings() {
                       {/* Delete */}
                       <button
                         type="button"
-                        onClick={() => handleDeleteSlide(slide.id)}
+                        onClick={() => handleDeleteSlide(slide)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded"
                         title="Hapus"
                         aria-label={`Hapus ${slide.title}`}
@@ -417,8 +582,8 @@ export default function MonitorSettings() {
               panah)
             </li>
             <li>
-              • Monitor akan refresh otomatis setiap 5 menit untuk update gambar
-              terbaru
+              • Perubahan disinkronkan melalui Supabase dan diperiksa kembali
+              setiap 15 detik
             </li>
             <li>
               • Buka{' '}
