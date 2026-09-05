@@ -2,6 +2,7 @@
  * NotificationPanel – "Notifikasi Sistem" sidebar panel
  * Alert cards: conflict=red/warning, info=blue, success=green
  */
+import { useState } from 'react';
 import {
   AlertTriangle,
   Info,
@@ -13,6 +14,8 @@ import {
 } from 'lucide-react';
 import { formatNotificationTime } from '../../utils/notifications';
 import StatePanel from './StatePanel';
+
+const DEFAULT_VISIBLE_NOTIFICATIONS = 5;
 
 const ALERT_CONFIG = {
   peringatan: {
@@ -135,10 +138,17 @@ function AlertCard({ notification, onDismiss }) {
 
 export default function NotificationPanel({
   notifications = [],
+  unreadCount,
   onDismiss,
   loading = false,
 }) {
+  const [showAll, setShowAll] = useState(false);
   const activeCount = notifications.length;
+  const displayedNotifications = showAll
+    ? notifications
+    : notifications.slice(0, DEFAULT_VISIBLE_NOTIFICATIONS);
+  const badgeCount = unreadCount ?? activeCount;
+  const hiddenCount = Math.max(0, activeCount - DEFAULT_VISIBLE_NOTIFICATIONS);
 
   return (
     <div className="h-full rounded-[var(--radius-card)] border border-slate-200 bg-white p-5 shadow-[var(--shadow-card)]">
@@ -146,10 +156,12 @@ export default function NotificationPanel({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="ui-card-title">Notifikasi Sistem</h3>
-          <p className="ui-description">{activeCount} notifikasi aktif</p>
+          <p className="ui-description">
+            {activeCount} tersimpan · {badgeCount} belum dibaca
+          </p>
         </div>
         <span className="ui-badge bg-primary-50 text-primary-700">
-          {activeCount}
+          {badgeCount}
         </span>
       </div>
 
@@ -171,15 +183,34 @@ export default function NotificationPanel({
           compact
         />
       ) : (
-        <div className="space-y-3">
-          {notifications.map((notif) => (
-            <AlertCard
-              key={notif.id}
-              notification={notif}
-              onDismiss={onDismiss}
-            />
-          ))}
-        </div>
+        <>
+          <div
+            className={`space-y-3 ${
+              showAll ? 'max-h-[48rem] overflow-y-auto pr-1' : ''
+            }`}
+          >
+            {displayedNotifications.map((notif) => (
+              <AlertCard
+                key={notif.id}
+                notification={notif}
+                onDismiss={onDismiss}
+              />
+            ))}
+          </div>
+
+          {activeCount > DEFAULT_VISIBLE_NOTIFICATIONS && (
+            <button
+              type="button"
+              onClick={() => setShowAll((current) => !current)}
+              className="mt-4 flex w-full items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-primary-700 transition hover:border-primary-200 hover:bg-primary-50"
+              aria-expanded={showAll}
+            >
+              {showAll
+                ? 'Tampilkan 5 terbaru'
+                : `Lihat Semua (${hiddenCount} lainnya)`}
+            </button>
+          )}
+        </>
       )}
     </div>
   );

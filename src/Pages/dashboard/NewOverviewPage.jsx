@@ -62,9 +62,6 @@ const formatDateDisplay = (d) =>
     year: 'numeric',
   });
 
-// ── Max notifications kept in state ──
-const MAX_NOTIFICATIONS = 20;
-
 export default function NewOverviewPage() {
   const navigate = useNavigate();
 
@@ -73,7 +70,8 @@ export default function NewOverviewPage() {
   const isToday = isSameDate(selectedDate, new Date());
 
   // ── Global notifications from context ──
-  const { notifications, dismissNotification } = useNotifications();
+  const { notifications, unreadCount, dismissNotification } =
+    useNotifications();
 
   // ── KPI state ──
   const [loading, setLoading] = useState(true);
@@ -437,6 +435,7 @@ export default function NewOverviewPage() {
         <div className="lg:col-span-2">
           <NotificationPanel
             notifications={notifications}
+            unreadCount={unreadCount}
             onDismiss={handleDismissNotif}
           />
         </div>

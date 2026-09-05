@@ -16,7 +16,7 @@ import {
 } from '../utils/monitorSlides';
 import { assertSupabaseResults } from '../utils/supabaseResults';
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 7;
 const AUTO_SLIDE_INTERVAL = 7 * 1000;
 const DATA_REFRESH_INTERVAL = 7 * 1000;
 const SLIDE_REFRESH_INTERVAL = 15 * 1000;
