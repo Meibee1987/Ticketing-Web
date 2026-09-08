@@ -4,7 +4,9 @@ import {
   CalendarX2,
   ChevronLeft,
   ChevronRight,
+  CircleCheck,
   CircleAlert,
+  CircleDot,
   Clock3,
   ImageOff,
   MapPin,
@@ -14,33 +16,34 @@ import {
 const STATUS_STYLES = {
   ongoing: {
     label: 'Berlangsung',
-    accent: 'border-l-success-500',
-    badge: 'border-success-100 bg-success-100 text-success-700',
-    dot: 'bg-success-500',
+    card: 'border-success-200 border-l-success-500 bg-success-50/55 shadow-[0_2px_12px_rgba(22,163,74,0.10)]',
+    badge:
+      'border-success-200 bg-success-100 text-success-800 ring-1 ring-success-200/70',
+    icon: CircleDot,
   },
   upcoming: {
     label: 'Akan Datang',
-    accent: 'border-l-primary-500',
+    card: 'border-primary-100 border-l-primary-500 bg-white shadow-sm',
     badge: 'border-primary-200 bg-primary-100 text-primary-700',
-    dot: 'bg-primary-500',
+    icon: Clock3,
   },
   finished: {
     label: 'Selesai',
-    accent: 'border-l-slate-400',
+    card: 'border-slate-200 border-l-slate-400 bg-slate-50/75 shadow-sm',
     badge: 'border-slate-200 bg-slate-100 text-slate-600',
-    dot: 'bg-slate-400',
+    icon: CircleCheck,
   },
   cancelled: {
     label: 'Dibatalkan',
-    accent: 'border-l-danger-500',
+    card: 'border-danger-200 border-l-danger-500 bg-danger-50/50 shadow-sm',
     badge: 'border-danger-100 bg-danger-100 text-danger-700',
-    dot: 'bg-danger-500',
+    icon: CircleAlert,
   },
   default: {
     label: 'Status tidak tersedia',
-    accent: 'border-l-slate-300',
+    card: 'border-slate-200 border-l-slate-300 bg-white shadow-sm',
     badge: 'border-slate-200 bg-slate-100 text-slate-600',
-    dot: 'bg-slate-400',
+    icon: CircleAlert,
   },
 };
 
@@ -85,13 +88,16 @@ function CategoryBadge({ children }) {
 
 function StatusBadge({ status }) {
   const config = STATUS_STYLES[status] || STATUS_STYLES.default;
+  const StatusIcon = config.icon;
 
   return (
     <span
       className={`inline-flex h-9 min-w-[112px] items-center justify-center gap-2 rounded-full border px-3 text-[13px] font-semibold leading-none 3xl:min-w-[120px] 3xl:text-sm ${config.badge}`}
     >
-      <span
-        className={`h-2 w-2 shrink-0 rounded-full ${config.dot}`}
+      <StatusIcon
+        size={16}
+        className="shrink-0"
+        strokeWidth={2}
         aria-hidden="true"
       />
       {config.label}
@@ -237,7 +243,7 @@ export function MonitorScheduleCard({ item }) {
 
   return (
     <article
-      className={`rounded-xl border border-l-4 border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5 xl:py-3.5 ${status.accent}`}
+      className={`rounded-xl border border-l-4 px-4 py-4 transition-colors sm:px-5 xl:py-3.5 ${status.card}`}
     >
       <div className="flex items-start justify-between gap-3 xl:hidden">
         <CategoryBadge>{category}</CategoryBadge>
