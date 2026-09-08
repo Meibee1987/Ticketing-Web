@@ -16,11 +16,26 @@ import {
 } from '../utils/monitorSlides';
 import { assertSupabaseResults } from '../utils/supabaseResults';
 import { usesPhysicalRoom } from '../utils/meetingRoom';
+import { useAuth } from '../hooks/useAuth';
+import { formatAngkatanLabel } from '../utils/scheduleLabels';
+import { mergeConsecutiveSchedules } from '../utils/monitorSchedules';
 
 const ITEMS_PER_PAGE = 7;
 const AUTO_SLIDE_INTERVAL = 7 * 1000;
 const DATA_REFRESH_INTERVAL = 7 * 1000;
 const SLIDE_REFRESH_INTERVAL = 15 * 1000;
+
+const formatDateInput = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateInput = (value) => new Date(`${value}T00:00:00`);
+
+const isSameDate = (date, selectedDate) =>
+  formatDateInput(date) === selectedDate;
 
 const hasSameSlides = (currentSlides, nextSlides) =>
   currentSlides.length === nextSlides.length &&
@@ -46,6 +61,7 @@ const parseIdList = (value) => {
 };
 
 export default function JadwalMonitor() {
+  const { isSuperAdmin } = useAuth();
   const [jadwalData, setJadwalData] = useState([]);
   // Pengaman render untuk state lama (misalnya setelah hot reload): daring tidak
   // boleh pernah diteruskan ke kartu monitor.
@@ -57,6 +73,19 @@ export default function JadwalMonitor() {
   const [currentPage, setCurrentPage] = useState(0);
   const [slideImages, setSlideImages] = useState([]);
   const [error, setError] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() =>
+    formatDateInput(new Date())
+  );
+  const [hasCustomDate, setHasCustomDate] = useState(false);
+  const currentDateValue = formatDateInput(currentTime);
+
+  useEffect(() => {
+    if (!isSuperAdmin || !hasCustomDate) {
+      setSelectedDate(currentDateValue);
+    }
+
+    if (!isSuperAdmin) setHasCustomDate(false);
+  }, [currentDateValue, hasCustomDate, isSuperAdmin]);
 
   useEffect(() => {
     let isMounted = true;
@@ -127,7 +156,7 @@ export default function JadwalMonitor() {
     setCurrentPage((page) => (totalPages > 0 && page >= totalPages ? 0 : page));
   }, [visibleJadwalData.length, slideImages.length]);
 
-  const fetchTodaySchedule = useCallback(async () => {
+  const fetchSchedule = useCallback(async () => {
     try {
       setError('');
 
@@ -204,7 +233,11 @@ export default function JadwalMonitor() {
           allSchedules.push({
             id: `P${merged.id}`,
             type: 'perkuliahan',
-            kode: merged.nama_angkatan || '-',
+            kode: formatAngkatanLabel(
+              merged.nama_angkatan,
+              merged.paralel,
+              merged.kelas
+            ),
             jam: `${formatTime(merged.mulai_jadwal)} - ${formatTime(merged.akhir_jadwal)}`,
             kegiatan: merged.nama_matkul,
             tempat:
@@ -214,6 +247,7 @@ export default function JadwalMonitor() {
             dosen: merged.nama_dosen || '-',
             status: getStatus(merged.mulai_jadwal, merged.akhir_jadwal),
             mulai: new Date(merged.mulai_jadwal),
+            akhir: new Date(merged.akhir_jadwal),
             jenis_pertemuan: merged.jenis_pertemuan || 'luring',
           });
         });
@@ -243,6 +277,7 @@ export default function JadwalMonitor() {
             dosen: merged.display_mahasiswa,
             status: getStatus(merged.mulai_jadwal, merged.akhir_jadwal),
             mulai: new Date(merged.mulai_jadwal),
+            akhir: new Date(merged.akhir_jadwal),
             jenis_pertemuan: merged.jenis_pertemuan || 'luring',
           });
         });
@@ -271,6 +306,7 @@ export default function JadwalMonitor() {
             dosen: merged.user_display || '-',
             status: getStatus(merged.mulai_jadwal, merged.akhir_jadwal),
             mulai: new Date(merged.mulai_jadwal),
+            akhir: new Date(merged.akhir_jadwal),
             jenis_pertemuan: merged.jenis_pertemuan || 'luring',
           });
         });
@@ -296,30 +332,35 @@ export default function JadwalMonitor() {
         return a.mulai - b.mulai;
       });
 
-      const now = new Date();
-      const todaySchedules = allSchedules.filter((item) => {
+      const selectedSchedules = allSchedules.filter((item) => {
         return (
           usesPhysicalRoom(item.jenis_pertemuan) &&
-          item.mulai.getFullYear() === now.getFullYear() &&
-          item.mulai.getMonth() === now.getMonth() &&
-          item.mulai.getDate() === now.getDate()
+          isSameDate(item.mulai, selectedDate)
         );
       });
 
-      setJadwalData(todaySchedules);
+      const mergedSchedules = mergeConsecutiveSchedules(selectedSchedules).map(
+        (item) => ({
+          ...item,
+          jam: `${formatTime(item.mulai)} - ${formatTime(item.akhir)}`,
+          status: getStatus(item.mulai, item.akhir),
+        })
+      );
+
+      setJadwalData(mergedSchedules);
     } catch (error) {
       console.error('Error fetching schedule:', error);
       setError(error.message || 'Gagal memuat jadwal monitor.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedDate]);
 
   useEffect(() => {
-    fetchTodaySchedule();
-    const interval = setInterval(fetchTodaySchedule, DATA_REFRESH_INTERVAL);
+    fetchSchedule();
+    const interval = setInterval(fetchSchedule, DATA_REFRESH_INTERVAL);
     return () => clearInterval(interval);
-  }, [fetchTodaySchedule]);
+  }, [fetchSchedule]);
 
   const formatTime = (timestamp) => {
     if (!timestamp) return '-';
@@ -349,7 +390,7 @@ export default function JadwalMonitor() {
   };
 
   const formatDateOnly = () => {
-    return currentTime.toLocaleString('id-ID', {
+    return parseDateInput(selectedDate).toLocaleDateString('id-ID', {
       weekday: 'long',
       day: '2-digit',
       month: 'long',
@@ -385,10 +426,33 @@ export default function JadwalMonitor() {
 
   const clock = formatClockTime();
   const activeSlide = slideImages[imageSlideIndex];
+  const selectedDateLabel = formatDateOnly();
+  const isToday = selectedDate === formatDateInput(currentTime);
+
+  const handleDateChange = (event) => {
+    if (!event.target.value) return;
+    setLoading(true);
+    setCurrentPage(0);
+    setHasCustomDate(event.target.value !== formatDateInput(new Date()));
+    setSelectedDate(event.target.value);
+  };
 
   return (
     <div className="monitor-page flex min-h-screen flex-col overflow-x-hidden bg-background">
-      <MonitorHeader dateLabel={formatDateOnly()} clock={clock} />
+      <MonitorHeader
+        dateLabel={selectedDateLabel}
+        clock={clock}
+        canSelectDate={isSuperAdmin}
+        selectedDate={selectedDate}
+        onDateChange={handleDateChange}
+        onToday={() => {
+          setLoading(true);
+          setCurrentPage(0);
+          setHasCustomDate(false);
+          setSelectedDate(formatDateInput(new Date()));
+        }}
+        isToday={isToday}
+      />
 
       <main className="flex-1">
         <div className="mx-auto w-full max-w-[1720px] px-4 py-5 sm:px-6 lg:px-8">
@@ -399,17 +463,20 @@ export default function JadwalMonitor() {
               message={error}
               onRetry={() => {
                 setLoading(true);
-                fetchTodaySchedule();
+                fetchSchedule();
               }}
             />
           ) : totalPages === 0 ? (
-            <MonitorScheduleEmptyState />
+            <MonitorScheduleEmptyState
+              dateLabel={selectedDateLabel}
+              isToday={isToday}
+            />
           ) : isImageSlide && activeSlide ? (
             <MonitorImageSlide slide={activeSlide} />
           ) : (
             <section
               className="space-y-3 sm:space-y-4"
-              aria-label="Daftar jadwal hari ini"
+              aria-label={`Daftar jadwal ${selectedDateLabel}`}
             >
               {currentPageData.map((item) => (
                 <MonitorScheduleCard key={item.id} item={item} />
@@ -434,6 +501,8 @@ export default function JadwalMonitor() {
             setCurrentPage((previous) => (previous + 1) % totalPages)
           }
           onPageChange={setCurrentPage}
+          dateLabel={selectedDateLabel}
+          isToday={isToday}
         />
       )}
     </div>

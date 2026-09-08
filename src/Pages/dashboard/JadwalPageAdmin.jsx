@@ -29,6 +29,7 @@ import SearchableSelect from '../../components/SearchableSelect';
 import ImportJadwal from '../../components/ImportJadwal';
 import StatePanel from '../../components/ui/StatePanel';
 import { usesPhysicalRoom } from '../../utils/meetingRoom';
+import { formatAngkatanLabel } from '../../utils/scheduleLabels';
 
 // ================================================================================
 // KOMPONEN MULTI SELECT
@@ -191,6 +192,93 @@ function MultiSelect({
             )}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Menampilkan satu dropdown terlebih dahulu. Dropdown tambahan hanya dibuat
+// ketika pengguna menekan tombol tambah.
+function ExpandableSelectList({
+  label,
+  values: valuesProp = [],
+  onChange,
+  options = [],
+  displayKey,
+  maxSelections = 3,
+  itemLabel,
+  required = false,
+}) {
+  const values = Array.isArray(valuesProp) ? valuesProp : [];
+  const [visibleCount, setVisibleCount] = useState(() =>
+    Math.max(1, Math.min(maxSelections, values.length || 1))
+  );
+  const selectedValues = values.filter(Boolean);
+
+  const updateValue = (index, value) => {
+    const nextValues = Array.from(
+      { length: visibleCount },
+      (_, itemIndex) => values[itemIndex] || ''
+    );
+    nextValues[index] = value;
+    onChange(nextValues);
+  };
+
+  const removeInput = (index) => {
+    const nextValues = Array.from(
+      { length: visibleCount },
+      (_, itemIndex) => values[itemIndex] || ''
+    );
+    nextValues.splice(index, 1);
+    onChange(nextValues);
+    setVisibleCount((count) => Math.max(1, count - 1));
+  };
+
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: visibleCount }, (_, index) => {
+        const currentValue = values[index] || '';
+        const availableOptions = options.filter(
+          (option) =>
+            option.id === currentValue || !selectedValues.includes(option.id)
+        );
+
+        return (
+          <div key={`${itemLabel}-${index}`} className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <SearchableSelect
+                label={index === 0 ? label : `${label} ${index + 1}`}
+                value={currentValue}
+                onChange={(value) => updateValue(index, value)}
+                options={availableOptions}
+                displayKey={displayKey}
+                required={required && index === 0}
+              />
+            </div>
+            {index > 0 && (
+              <button
+                type="button"
+                onClick={() => removeInput(index)}
+                className="mb-px inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-danger-200 text-danger-600 transition-colors hover:bg-danger-50"
+                aria-label={`Hapus input ${itemLabel} ${index + 1}`}
+                title={`Hapus ${itemLabel}`}
+              >
+                <X size={17} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      {visibleCount < maxSelections && (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((count) => count + 1)}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-700 hover:text-primary-800"
+        >
+          <Plus size={16} aria-hidden="true" />
+          Tambah {itemLabel}
+        </button>
       )}
     </div>
   );
@@ -1000,7 +1088,7 @@ export default function JadwalPageAdmin() {
         mulai: form.mulai_jadwal,
         akhir: form.akhir_jadwal,
         dosenId: form.dosen_id,
-        dosenIds: null,
+        dosenIds: form.dosen_ids,
         excludeId: form.id,
         excludeTable: modalMode === 'edit' ? 'jadwal_perkuliahan' : null,
         dosenMap,
@@ -1070,7 +1158,8 @@ export default function JadwalPageAdmin() {
       if (
         modalType === 'perkuliahan' &&
         modalMode === 'add' &&
-        (!Array.isArray(form.id_angkatans) || form.id_angkatans.length === 0)
+        (!Array.isArray(form.id_angkatans) ||
+          form.id_angkatans.filter(Boolean).length === 0)
       ) {
         alert('Pilih minimal satu angkatan');
         return;
@@ -1120,6 +1209,9 @@ export default function JadwalPageAdmin() {
         if (formData.petugas_zoom === '') formData.petugas_zoom = null;
         if (formData.pintang_sps === '') formData.pintang_sps = null;
         // Stringify JSONB arrays
+        if (Array.isArray(formData.dosen_ids)) {
+          formData.dosen_ids = formData.dosen_ids.filter(Boolean);
+        }
         if (formData.dosen_ids)
           formData.dosen_ids = JSON.stringify(formData.dosen_ids);
         if (formData.penguji_ids)
@@ -1527,14 +1619,15 @@ export default function JadwalPageAdmin() {
     if (modalType === 'perkuliahan') {
       return (
         <>
-          <MultiSelect
+          <ExpandableSelectList
             label="Angkatan"
             values={form.id_angkatans || []}
             onChange={(v) => handleChange('id_angkatans', v)}
             options={options.angkatan}
             displayKey="nama_angkatan"
             maxSelections={3}
-            itemLabel="angkatan"
+            itemLabel="Angkatan"
+            required
           />
           <SearchableSelect
             label="Mata Kuliah"
@@ -1553,21 +1646,20 @@ export default function JadwalPageAdmin() {
             placeholder="1, 2, 3..."
             type="number"
           /> */}
-          <SearchableSelect
-            label="Dosen Utama"
-            value={form.dosen_id}
-            onChange={(v) => handleChange('dosen_id', v)}
+          <ExpandableSelectList
+            label="Dosen"
+            values={[form.dosen_id || '', ...(form.dosen_ids || [])]}
+            onChange={(values) =>
+              setForm((previous) => ({
+                ...previous,
+                dosen_id: values[0] || '',
+                dosen_ids: values.slice(1),
+              }))
+            }
             options={options.dosen}
             displayKey="nama_dosen"
-          />
-          <MultiSelect
-            label="Dosen Tambahan (Dosen 2)"
-            values={form.dosen_ids || []}
-            onChange={(v) => handleChange('dosen_ids', v)}
-            options={options.dosen}
-            displayKey="nama_dosen"
-            maxSelections={2}
-            itemLabel="dosen"
+            maxSelections={3}
+            itemLabel="Dosen"
           />
           {/* <InputField
             label="Dosen Seminar"
@@ -2452,7 +2544,11 @@ function JadwalTab({
                       <>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="font-semibold text-slate-800">
-                            {row.nama_angkatan}
+                            {formatAngkatanLabel(
+                              row.nama_angkatan,
+                              row.paralel,
+                              row.kelas
+                            )}
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">

@@ -26,6 +26,34 @@ import {
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { usesPhysicalRoom } from '../utils/meetingRoom';
+import { normalizeKelasForDatabase } from '../utils/scheduleLabels';
+
+const GOOGLE_SHEET_ID = '1vk9D-xL5njgiwWdNQGN4iCCodMxaKwCnwejnr61oosc';
+
+function buildGoogleSheetExportUrl() {
+  return `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx&cacheBust=${Date.now()}`;
+}
+
+function getSelectableGoogleSheets(remoteWorkbook) {
+  const sheetVisibility = new Map(
+    (remoteWorkbook.Workbook?.Sheets || []).map((sheet) => [
+      sheet.name,
+      sheet.Hidden || 0,
+    ])
+  );
+  const visibleSheets = remoteWorkbook.SheetNames.filter(
+    (name) => sheetVisibility.get(name) !== 1 && sheetVisibility.get(name) !== 2
+  );
+  const scheduleSheets = visibleSheets.filter(
+    (name) => !/^(ruangan|mk)$/i.test(name.trim()) && !/mapping/i.test(name)
+  );
+
+  return scheduleSheets.length > 0
+    ? scheduleSheets
+    : visibleSheets.length > 0
+      ? visibleSheets
+      : remoteWorkbook.SheetNames;
+}
 
 // ================================================================================
 // COLUMN MAPPING: Spreadsheet Header → Database Column
@@ -37,6 +65,7 @@ const PERKULIAHAN_MAP = {
   // Angkatan
   angkatan: '_lookup_angkatan',
   // Mata Kuliah (by code or name)
+  kegiatan: '_lookup_matkul_kode',
   'matakuliah h': '_lookup_matkul_kode',
   'matakuliah h (kode)': '_lookup_matkul_kode',
   kode_mata_kuliah: '_lookup_matkul_kode',
@@ -50,6 +79,8 @@ const PERKULIAHAN_MAP = {
   konsentrasi: '_lookup_matkul', // Kolom Konsentrasi diperlakukan sebagai Mata Kuliah
   // Numerik
   paralel: 'paralel',
+  pararel: 'paralel',
+  kelas: 'kelas',
   'real perkuliahan': 'real_perkuliahan',
   real_perkuliahan: 'real_perkuliahan',
   'pertemuan n': 'real_perkuliahan',
@@ -81,6 +112,7 @@ const PERKULIAHAN_MAP = {
   zoom_password: 'zoom_password',
   // Dosen
   'dosen pengampu': '_lookup_dosen1',
+  'dosen matakuliah': '_lookup_dosen1',
   'dosen 1': '_lookup_dosen1',
   dosen1: '_lookup_dosen1',
   dosen: '_lookup_dosen1',
@@ -220,7 +252,7 @@ function excelDateToJS(serial) {
   // Try to parse Indonesian date string like "2 Maret 2026"
   const str = String(serial).trim();
   const idMatch = str.match(
-    /(\d{1,2})\s+(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+(\d{4})/i
+    /(\d{1,2})\s+(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+(\d{2}|\d{4})/i
   );
   if (idMatch) {
     const monthMap = {
@@ -237,8 +269,9 @@ function excelDateToJS(serial) {
       november: 10,
       desember: 11,
     };
+    const parsedYear = parseInt(idMatch[3]);
     return new Date(
-      parseInt(idMatch[3]),
+      parsedYear < 100 ? 2000 + parsedYear : parsedYear,
       monthMap[idMatch[2].toLowerCase()],
       parseInt(idMatch[1])
     );
@@ -276,12 +309,18 @@ export default function ImportJadwal({
   const [previewHeaders, setPreviewHeaders] = useState([]);
   const [columnMapping, setColumnMapping] = useState({});
   const [dateColumn, setDateColumn] = useState('');
+  const [dataSource, setDataSource] = useState('file');
   const [step, setStep] = useState(1); // 1=upload, 2=mapping, 3=preview, 4=importing
   const [importResult, setImportResult] = useState(null);
   const [importing, setImporting] = useState(false);
   const [undoing, setUndoing] = useState(false);
   const [importBatchTag, setImportBatchTag] = useState('');
   const [allRuangan, setAllRuangan] = useState([]);
+  const [googleSheetLoading, setGoogleSheetLoading] = useState(false);
+  const [googleSheetError, setGoogleSheetError] = useState('');
+  const [googleWorkbook, setGoogleWorkbook] = useState(null);
+  const [googleSheetNames, setGoogleSheetNames] = useState([]);
+  const [selectedGoogleSheet, setSelectedGoogleSheet] = useState('');
   const fileInputRef = useRef(null);
 
   // Fetch semua ruangan (tanpa filter aktif) untuk keperluan import lookup
@@ -301,6 +340,59 @@ export default function ImportJadwal({
     return LAIN_LAIN_MAP;
   }, [jenis]);
 
+  const filteredPreviewData = useMemo(() => {
+    if (dataSource !== 'google') return previewData;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const syncEndDate = new Date(today);
+    syncEndDate.setDate(syncEndDate.getDate() + 2);
+    const selectedDateColumn = Number.parseInt(dateColumn, 10);
+    if (!Number.isInteger(selectedDateColumn)) return [];
+
+    let sectionDate = null;
+    let isPerkuliahanSection = false;
+    const scheduleRows = [];
+
+    previewData.forEach((row) => {
+      const scheduleDate = excelDateToJS(row[selectedDateColumn]);
+      const nonEmpty = row.filter((cell) => cell !== '' && cell != null).length;
+      const firstCell = String(row[0] || '').trim();
+
+      if (scheduleDate) {
+        sectionDate = new Date(
+          scheduleDate.getFullYear(),
+          scheduleDate.getMonth(),
+          scheduleDate.getDate()
+        );
+        isPerkuliahanSection = false;
+
+        // Baris kuning hanya penanda tanggal dan nama PIC, bukan jadwal.
+        if (nonEmpty <= 3) return;
+      }
+
+      // Baris judul kelompok (abu-abu/biru/warna section lainnya) bukan jadwal.
+      const isSectionHeader =
+        /^(kuliah\s+s[123]|karya\s+akhir|lain[\s-]*lain)/i.test(firstCell) &&
+        nonEmpty <= 3;
+      if (isSectionHeader) {
+        isPerkuliahanSection = /^kuliah\s+s[123]/i.test(firstCell);
+        return;
+      }
+
+      // Sinkronisasi ini berada pada tab Perkuliahan. Bagian Karya Akhir dan
+      // Lain-lain di sheet yang sama tidak boleh masuk ke tabel perkuliahan.
+      if (!isPerkuliahanSection) return;
+      if (!(sectionDate >= today && sectionDate < syncEndDate)) return;
+
+      const scheduleRow = [...row];
+      scheduleRow._scheduleDate = sectionDate;
+      scheduleRows.push(scheduleRow);
+    });
+
+    return scheduleRows;
+  }, [dataSource, dateColumn, previewData]);
+
   // DB columns per type
   const getDbColumns = () => {
     if (jenis === 'perkuliahan') {
@@ -309,6 +401,7 @@ export default function ImportJadwal({
         { key: '_lookup_matkul_kode', label: 'Kode Mata Kuliah' },
         { key: '_lookup_matkul', label: 'Nama Mata Kuliah' },
         { key: 'paralel', label: 'Paralel' },
+        { key: 'kelas', label: 'Kelas' },
         { key: 'real_perkuliahan', label: 'Pertemuan / Real' },
         { key: '_parse_jam', label: 'Waktu (Mulai - Selesai)' },
         { key: '_waktu_mulai', label: 'Jam Mulai' },
@@ -358,6 +451,10 @@ export default function ImportJadwal({
     const f = e.target.files[0];
     if (!f) return;
     setFile(f);
+    setGoogleWorkbook(null);
+    setGoogleSheetNames([]);
+    setSelectedGoogleSheet('');
+    setGoogleSheetError('');
 
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -371,122 +468,206 @@ export default function ImportJadwal({
   }, []);
 
   // ──────────── STEP 1→2: Read sheet & auto-map ────────────
+  const prepareSheetData = useCallback(
+    (jsonData, source = 'file') => {
+      if (jsonData.length < 2) {
+        alert('Sheet kosong atau tidak memiliki data.');
+        return;
+      }
+
+      // Find header row (first row with multiple non-empty cells)
+      let headerRowIdx = 0;
+      for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
+        const nonEmpty = jsonData[i].filter(
+          (c) => c !== '' && c != null
+        ).length;
+        if (nonEmpty >= 3) {
+          headerRowIdx = i;
+          break;
+        }
+      }
+
+      const headers = jsonData[headerRowIdx].map((h) => String(h || '').trim());
+      const rows = jsonData
+        .slice(headerRowIdx + 1)
+        .filter((row) => row.some((cell) => cell !== '' && cell != null));
+
+      setPreviewHeaders(headers);
+      setPreviewData(rows);
+      setDataSource(source);
+
+      // Auto-map columns
+      const colMap = columnMap;
+      const autoMapping = {};
+      headers.forEach((header, idx) => {
+        const key = header.toLowerCase().trim();
+        // "Jenis" pada file hasil download menunjukkan kategori jadwal
+        // (perkuliahan/karya akhir/lain-lain), bukan jenis pertemuan.
+        if (key === 'jenis') return;
+        // Try exact match first, then partial match (header contains map key or vice versa)
+        let target = colMap[key];
+        if (!target) {
+          // Try partial: find the longest matching key in colMap
+          let bestKey = '';
+          for (const mapKey of Object.keys(colMap)) {
+            if (
+              (key.includes(mapKey) || mapKey.includes(key)) &&
+              mapKey.length > bestKey.length
+            ) {
+              bestKey = mapKey;
+            }
+          }
+          if (bestKey) target = colMap[bestKey];
+        }
+        if (target) {
+          if (
+            target === '_lookup_dosen_extra' ||
+            target === '_lookup_dosen_ka' ||
+            target === '_lookup_penguji'
+          ) {
+            // Multiple columns can map to same target (dosen 2,3,4)
+            if (!autoMapping[idx]) autoMapping[idx] = target;
+          } else {
+            // Check if target is already used
+            const alreadyUsed = Object.values(autoMapping).includes(target);
+            if (!alreadyUsed) {
+              autoMapping[idx] = target;
+            }
+          }
+        }
+      });
+
+      // File hasil Download Jadwal Admin memakai format ringkas yang juga harus
+      // dapat diimpor kembali. Arti kolom "Keterangan" berbeda per jenis jadwal.
+      const normalizedHeaders = headers.map((header) =>
+        header.toLowerCase().trim()
+      );
+      const isAdminExportFormat = [
+        'jenis',
+        'agenda',
+        'ruangan',
+        'waktu mulai',
+        'waktu selesai',
+        'keterangan',
+      ].every((header) => normalizedHeaders.includes(header));
+
+      if (isAdminExportFormat) {
+        const keteranganIdx = normalizedHeaders.indexOf('keterangan');
+        autoMapping[keteranganIdx] =
+          jenis === 'perkuliahan'
+            ? '_lookup_dosen1'
+            : jenis === 'karya_akhir'
+              ? 'nama_mahasiswa'
+              : 'nama_user';
+      }
+
+      // Pada Google Sheet jadwal, kolom A tidak memiliki judul: baris kuning
+      // memuat tanggal, sedangkan baris kegiatan memuat kode angkatan (SB61/SB62).
+      if (source === 'google' && !normalizedHeaders[0]) {
+        autoMapping[0] = '_lookup_angkatan';
+      }
+
+      setColumnMapping(autoMapping);
+
+      // Auto-detect date column, including the combined Indonesian date/time
+      // produced by Download Jadwal Admin (for example 26 Agustus 2026, 08.00).
+      const dateIdx = headers.findIndex((h, idx) => {
+        const l = h.toLowerCase();
+        if (
+          l.includes('tanggal') ||
+          l.includes('date') ||
+          l.includes('waktu mulai')
+        ) {
+          return true;
+        }
+
+        return rows
+          .slice(0, 5)
+          .some((row) => row[idx] && excelDateToJS(row[idx]) instanceof Date);
+      });
+      if (dateIdx >= 0) setDateColumn(String(dateIdx));
+
+      setStep(2);
+    },
+    [columnMap, jenis]
+  );
+
   const handleReadSheet = useCallback(() => {
     if (!workbook || !selectedSheet) return;
     const ws = workbook.Sheets[selectedSheet];
     const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    prepareSheetData(jsonData, 'file');
+  }, [workbook, selectedSheet, prepareSheetData]);
 
-    if (jsonData.length < 2) {
-      alert('Sheet kosong atau tidak memiliki data.');
+  const handleLoadGoogleWorkbook = useCallback(async () => {
+    setGoogleSheetLoading(true);
+    setGoogleSheetError('');
+
+    try {
+      const response = await fetch(buildGoogleSheetExportUrl(), {
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        throw new Error(
+          `Google Sheets merespons dengan status ${response.status}`
+        );
+      }
+
+      const workbookData = new Uint8Array(await response.arrayBuffer());
+      const remoteWorkbook = XLSX.read(workbookData, {
+        type: 'array',
+        // Serial angka menjaga tanggal Google Sheet tetap pada tanggal kalender
+        // yang terlihat (tanpa pergeseran zona waktu dari nilai Date Excel).
+        cellDates: false,
+      });
+      const selectableSheets = getSelectableGoogleSheets(remoteWorkbook);
+
+      if (selectableSheets.length === 0)
+        throw new Error(
+          'Google Sheets tidak memiliki sheet yang dapat dibaca.'
+        );
+
+      setFile(null);
+      setWorkbook(null);
+      setSheetNames([]);
+      setSelectedSheet('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setGoogleWorkbook(remoteWorkbook);
+      setGoogleSheetNames(selectableSheets);
+      setSelectedGoogleSheet('');
+    } catch (error) {
+      console.error('Gagal membaca Google Sheets:', error);
+      setGoogleSheetError(
+        error.message ||
+          'Google Sheets tidak dapat dibaca. Coba beberapa saat lagi.'
+      );
+    } finally {
+      setGoogleSheetLoading(false);
+    }
+  }, []);
+
+  const handleReadGoogleSheet = useCallback(() => {
+    if (!googleWorkbook || !selectedGoogleSheet) {
+      setGoogleSheetError(
+        'Pilih sheet yang akan disinkronkan terlebih dahulu.'
+      );
       return;
     }
 
-    // Find header row (first row with multiple non-empty cells)
-    let headerRowIdx = 0;
-    for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
-      const nonEmpty = jsonData[i].filter((c) => c !== '' && c != null).length;
-      if (nonEmpty >= 3) {
-        headerRowIdx = i;
-        break;
-      }
-    }
-
-    const headers = jsonData[headerRowIdx].map((h) => String(h || '').trim());
-    const rows = jsonData
-      .slice(headerRowIdx + 1)
-      .filter((row) => row.some((cell) => cell !== '' && cell != null));
-
-    setPreviewHeaders(headers);
-    setPreviewData(rows);
-
-    // Auto-map columns
-    const colMap = columnMap;
-    const autoMapping = {};
-    headers.forEach((header, idx) => {
-      const key = header.toLowerCase().trim();
-      // "Jenis" pada file hasil download menunjukkan kategori jadwal
-      // (perkuliahan/karya akhir/lain-lain), bukan jenis pertemuan.
-      if (key === 'jenis') return;
-      // Try exact match first, then partial match (header contains map key or vice versa)
-      let target = colMap[key];
-      if (!target) {
-        // Try partial: find the longest matching key in colMap
-        let bestKey = '';
-        for (const mapKey of Object.keys(colMap)) {
-          if (
-            (key.includes(mapKey) || mapKey.includes(key)) &&
-            mapKey.length > bestKey.length
-          ) {
-            bestKey = mapKey;
-          }
-        }
-        if (bestKey) target = colMap[bestKey];
-      }
-      if (target) {
-        if (
-          target === '_lookup_dosen_extra' ||
-          target === '_lookup_dosen_ka' ||
-          target === '_lookup_penguji'
-        ) {
-          // Multiple columns can map to same target (dosen 2,3,4)
-          if (!autoMapping[idx]) autoMapping[idx] = target;
-        } else {
-          // Check if target is already used
-          const alreadyUsed = Object.values(autoMapping).includes(target);
-          if (!alreadyUsed) {
-            autoMapping[idx] = target;
-          }
-        }
-      }
+    const remoteWorksheet = googleWorkbook.Sheets[selectedGoogleSheet];
+    const jsonData = XLSX.utils.sheet_to_json(remoteWorksheet, {
+      header: 1,
+      defval: '',
     });
 
-    // File hasil Download Jadwal Admin memakai format ringkas yang juga harus
-    // dapat diimpor kembali. Arti kolom "Keterangan" berbeda per jenis jadwal.
-    const normalizedHeaders = headers.map((header) =>
-      header.toLowerCase().trim()
-    );
-    const isAdminExportFormat = [
-      'jenis',
-      'agenda',
-      'ruangan',
-      'waktu mulai',
-      'waktu selesai',
-      'keterangan',
-    ].every((header) => normalizedHeaders.includes(header));
-
-    if (isAdminExportFormat) {
-      const keteranganIdx = normalizedHeaders.indexOf('keterangan');
-      autoMapping[keteranganIdx] =
-        jenis === 'perkuliahan'
-          ? '_lookup_dosen1'
-          : jenis === 'karya_akhir'
-            ? 'nama_mahasiswa'
-            : 'nama_user';
+    if (jsonData.length < 2) {
+      setGoogleSheetError(`Sheet "${selectedGoogleSheet}" kosong.`);
+      return;
     }
 
-    setColumnMapping(autoMapping);
-
-    // Auto-detect date column, including the combined Indonesian date/time
-    // produced by Download Jadwal Admin (for example 26 Agustus 2026, 08.00).
-    const dateIdx = headers.findIndex((h, idx) => {
-      const l = h.toLowerCase();
-      if (
-        l.includes('tanggal') ||
-        l.includes('date') ||
-        l.includes('hari') ||
-        l.includes('waktu mulai')
-      ) {
-        return true;
-      }
-
-      return rows
-        .slice(0, 5)
-        .some((row) => row[idx] && excelDateToJS(row[idx]) instanceof Date);
-    });
-    if (dateIdx >= 0) setDateColumn(String(dateIdx));
-
-    setStep(2);
-  }, [workbook, selectedSheet, columnMap, jenis]);
+    setGoogleSheetError('');
+    prepareSheetData(jsonData, 'google');
+  }, [googleWorkbook, prepareSheetData, selectedGoogleSheet]);
 
   // ──────────── STEP 2→3: Preview mapped data ────────────
   const handlePreview = () => setStep(3);
@@ -598,8 +779,8 @@ export default function ImportJadwal({
 
     let rowDate = null; // running date for grouped rows
 
-    for (let rowIdx = 0; rowIdx < previewData.length; rowIdx++) {
-      const row = previewData[rowIdx];
+    for (let rowIdx = 0; rowIdx < filteredPreviewData.length; rowIdx++) {
+      const row = filteredPreviewData[rowIdx];
       try {
         // Skip empty rows
         const nonEmpty = row.filter((c) => c !== '' && c != null).length;
@@ -607,6 +788,9 @@ export default function ImportJadwal({
           results.skipped++;
           continue;
         }
+
+        // Google Sheet membawa tanggal dari baris kuning sebagai metadata baris.
+        if (row._scheduleDate) rowDate = new Date(row._scheduleDate);
 
         // Detect date from date column or section headers (e.g. "Selasa, 27 Januari 2026")
         if (dateColumn !== '') {
@@ -682,6 +866,9 @@ export default function ImportJadwal({
             case 'nama_user':
             case 'agenda':
               record[target] = val;
+              break;
+            case 'kelas':
+              record.kelas = normalizeKelasForDatabase(val);
               break;
             case 'paralel':
             case 'real_perkuliahan':
@@ -968,11 +1155,17 @@ export default function ImportJadwal({
     setPreviewHeaders([]);
     setColumnMapping({});
     setDateColumn('');
+    setDataSource('file');
     setStep(1);
     setImportResult(null);
     setImporting(false);
     setUndoing(false);
     setImportBatchTag('');
+    setGoogleSheetLoading(false);
+    setGoogleSheetError('');
+    setGoogleWorkbook(null);
+    setGoogleSheetNames([]);
+    setSelectedGoogleSheet('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -1027,7 +1220,7 @@ export default function ImportJadwal({
     lain_lain: 'Lain-lain',
   };
   const steps = [
-    { number: 1, label: 'Pilih file' },
+    { number: 1, label: 'Sumber data' },
     { number: 2, label: 'Mapping kolom' },
     { number: 3, label: 'Periksa data' },
     { number: 4, label: 'Hasil import' },
@@ -1038,6 +1231,18 @@ export default function ImportJadwal({
       ? `${Math.max(1, Math.round(file.size / 1024))} KB`
       : `${(file.size / (1024 * 1024)).toFixed(1)} MB`
     : '';
+  const syncToday = new Date();
+  const syncTomorrow = new Date(syncToday);
+  syncTomorrow.setDate(syncTomorrow.getDate() + 1);
+  const googleSyncDateLabel = [syncToday, syncTomorrow]
+    .map((date) =>
+      date.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      })
+    )
+    .join(' dan ');
 
   return (
     <div
@@ -1073,7 +1278,7 @@ export default function ImportJadwal({
               <p className="text-xs text-slate-500 mt-0.5">
                 Step {step}/4 —{' '}
                 {step === 1
-                  ? 'Upload File'
+                  ? 'Pilih Sumber Data'
                   : step === 2
                     ? 'Mapping Kolom'
                     : step === 3
@@ -1144,12 +1349,111 @@ export default function ImportJadwal({
               <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <div className="mb-5">
                   <h3 className="text-base font-semibold text-slate-900">
-                    Pilih file jadwal
+                    Ambil data jadwal
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Pastikan baris pertama berisi nama kolom.
+                    Baca langsung dari Google Sheets atau unggah file lokal.
                   </p>
                 </div>
+
+                {jenis === 'perkuliahan' && (
+                  <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-600 ring-1 ring-emerald-200">
+                        <FileSpreadsheet size={20} aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-900">
+                          Google Sheets Jadwal Kuliah
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-600">
+                          Muat spreadsheet, pilih Sheet 1 atau Sheet 2, lalu
+                          periksa mapping sebelum sinkronisasi.
+                        </p>
+                      </div>
+                    </div>
+
+                    {googleSheetError && (
+                      <div className="mt-3 rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700">
+                        {googleSheetError}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleLoadGoogleWorkbook}
+                      disabled={googleSheetLoading}
+                      className="ui-button ui-button-primary mt-4 w-full justify-center disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {googleSheetLoading ? (
+                        <>
+                          <LoaderCircle
+                            size={16}
+                            className="animate-spin"
+                            aria-hidden="true"
+                          />
+                          Memuat daftar sheet...
+                        </>
+                      ) : (
+                        <>
+                          {googleSheetNames.length > 0
+                            ? 'Muat ulang daftar sheet'
+                            : 'Ambil data terbaru'}
+                          <ArrowRight size={16} aria-hidden="true" />
+                        </>
+                      )}
+                    </button>
+
+                    {googleSheetNames.length > 0 && (
+                      <div className="mt-4 rounded-lg border border-emerald-200 bg-white p-3">
+                        <label
+                          htmlFor="google-import-sheet"
+                          className="mb-1.5 block text-xs font-semibold text-slate-700"
+                        >
+                          Sheet yang akan disinkronkan
+                        </label>
+                        <select
+                          id="google-import-sheet"
+                          value={selectedGoogleSheet}
+                          onChange={(event) => {
+                            setSelectedGoogleSheet(event.target.value);
+                            setGoogleSheetError('');
+                          }}
+                          className="ui-field w-full bg-white text-sm"
+                        >
+                          <option value="">Pilih sheet dahulu</option>
+                          {googleSheetNames.map((name, index) => (
+                            <option key={name} value={name}>
+                              Sheet {index + 1} — {name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
+                          Hanya data dari sheet yang dipilih yang akan masuk ke
+                          tahap mapping dan sinkronisasi.
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={handleReadGoogleSheet}
+                          disabled={!selectedGoogleSheet}
+                          className="ui-button ui-button-primary mt-3 w-full justify-center disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Baca sheet dan cek mapping
+                          <ArrowRight size={16} aria-hidden="true" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {jenis === 'perkuliahan' && (
+                  <div className="mb-5 flex items-center gap-3 text-xs font-medium text-slate-400">
+                    <span className="h-px flex-1 bg-slate-200" />
+                    atau unggah file
+                    <span className="h-px flex-1 bg-slate-200" />
+                  </div>
+                )}
                 <input
                   id="import-schedule-file"
                   ref={fileInputRef}
@@ -1238,6 +1542,12 @@ export default function ImportJadwal({
                   <p className="text-sm font-semibold">Panduan file</p>
                 </div>
                 <ul className="mt-4 list-disc space-y-2 pl-4 leading-5 marker:text-primary-500">
+                  {jenis === 'perkuliahan' && (
+                    <li>
+                      Google Sheets terhubung menyediakan pilihan sheet sebelum
+                      mapping
+                    </li>
+                  )}
                   <li>File Excel (.xlsx/.xls) — bisa pilih sheet</li>
                   <li>File CSV (.csv) — langsung diproses</li>
                   <li>
@@ -1340,8 +1650,8 @@ export default function ImportJadwal({
                           )}
                         </td>
                         <td className="max-w-[220px] truncate px-4 py-3 text-xs text-slate-500">
-                          {previewData.length > 0
-                            ? String(previewData[0][idx] || '-')
+                          {filteredPreviewData.length > 0
+                            ? String(filteredPreviewData[0][idx] || '-')
                             : '-'}
                         </td>
                         <td className="px-4 py-2.5">
@@ -1397,6 +1707,29 @@ export default function ImportJadwal({
           {/* ──────────── STEP 3: Preview & Confirm ──────────── */}
           {step === 3 && (
             <div className="space-y-5">
+              {dataSource === 'google' && (
+                <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Cakupan sinkronisasi
+                    </h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Hanya jadwal hari ini dan besok yang diambil. Baris warna
+                      kuning dipakai sebagai penanda tanggal dan tidak dianggap
+                      sebagai data jadwal.
+                    </p>
+                    <p className="mt-2 text-xs font-semibold text-slate-700">
+                      {googleSyncDateLabel}
+                    </p>
+                  </div>
+
+                  <p className="mt-3 text-xs font-medium text-emerald-700">
+                    {filteredPreviewData.length} baris akan diproses. Jadwal
+                    tanggal lain tetap dibiarkan.
+                  </p>
+                </div>
+              )}
+
               <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 sm:p-5">
                 <div className="flex items-start gap-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-primary-600 ring-1 ring-primary-200">
@@ -1404,7 +1737,7 @@ export default function ImportJadwal({
                   </span>
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900">
-                      Siap mengimpor {previewData.length} baris
+                      Siap mengimpor {filteredPreviewData.length} baris
                     </h3>
                     <p className="mt-1 text-xs leading-5 text-slate-600">
                       Tujuan: <strong>Jadwal {jenisLabels[jenis]}</strong>.
@@ -1434,7 +1767,7 @@ export default function ImportJadwal({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {previewData.slice(0, 15).map((row, rIdx) => (
+                    {filteredPreviewData.slice(0, 15).map((row, rIdx) => (
                       <tr key={rIdx} className="hover:bg-slate-50">
                         <td className="px-3 py-2.5 font-medium text-slate-400">
                           {rIdx + 1}
@@ -1453,9 +1786,10 @@ export default function ImportJadwal({
                 </table>
               </div>
 
-              {previewData.length > 15 && (
+              {filteredPreviewData.length > 15 && (
                 <p className="text-center text-xs text-slate-500">
-                  {previewData.length - 15} baris lainnya juga akan diproses.
+                  {filteredPreviewData.length - 15} baris lainnya juga akan
+                  diproses.
                 </p>
               )}
 
@@ -1471,10 +1805,11 @@ export default function ImportJadwal({
                 <button
                   type="button"
                   onClick={handleImport}
-                  className="ui-button justify-center bg-emerald-600 text-white hover:bg-emerald-700 sm:min-w-52"
+                  disabled={filteredPreviewData.length === 0}
+                  className="ui-button justify-center bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-52"
                 >
                   <UploadCloud size={16} aria-hidden="true" />
-                  Import {previewData.length} baris
+                  Import {filteredPreviewData.length} baris
                 </button>
               </div>
             </div>

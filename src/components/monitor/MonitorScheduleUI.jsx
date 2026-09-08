@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  CalendarDays,
   CalendarX2,
   ChevronLeft,
   ChevronRight,
@@ -110,7 +111,15 @@ function MeetingBadge({ type }) {
   );
 }
 
-export function MonitorHeader({ dateLabel, clock }) {
+export function MonitorHeader({
+  dateLabel,
+  clock,
+  canSelectDate = false,
+  selectedDate,
+  onDateChange,
+  onToday,
+  isToday = true,
+}) {
   const clockLabel = `${clock.hours}:${clock.minutes}:${clock.seconds}`;
 
   return (
@@ -133,7 +142,39 @@ export function MonitorHeader({ dateLabel, clock }) {
           </p>
         </div>
 
-        <div className="col-start-2 row-start-1 justify-self-end lg:col-start-3">
+        <div className="col-start-2 row-start-1 flex items-center gap-2 justify-self-end lg:col-start-3">
+          {canSelectDate && (
+            <div className="hidden items-center gap-2 sm:flex">
+              <label
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/20 bg-white px-3 text-primary-900 shadow-sm sm:h-12"
+                title="Pilih tanggal jadwal yang ditampilkan"
+              >
+                <CalendarDays
+                  size={19}
+                  className="shrink-0 text-primary-700"
+                  strokeWidth={1.9}
+                  aria-hidden="true"
+                />
+                <span className="sr-only">Pilih tanggal jadwal</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={onDateChange}
+                  className="min-w-0 bg-transparent text-sm font-semibold text-slate-800 outline-none"
+                  aria-label="Pilih tanggal jadwal yang ditampilkan"
+                />
+              </label>
+              {!isToday && (
+                <button
+                  type="button"
+                  onClick={onToday}
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 px-3 text-sm font-semibold text-white transition-colors hover:bg-white/20 sm:h-12"
+                >
+                  Hari ini
+                </button>
+              )}
+            </div>
+          )}
           <div
             className="inline-flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 sm:h-12 sm:min-w-[148px] sm:px-4"
             aria-label={`Waktu saat ini ${clockLabel}`}
@@ -153,6 +194,31 @@ export function MonitorHeader({ dateLabel, clock }) {
             </time>
           </div>
         </div>
+
+        {canSelectDate && (
+          <div className="col-span-2 row-start-3 flex items-center justify-center gap-2 sm:hidden">
+            <label className="inline-flex h-10 items-center gap-2 rounded-lg bg-white px-3 text-primary-900 shadow-sm">
+              <CalendarDays size={18} aria-hidden="true" />
+              <span className="sr-only">Pilih tanggal jadwal</span>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={onDateChange}
+                className="min-w-0 bg-transparent text-sm font-semibold text-slate-800 outline-none"
+                aria-label="Pilih tanggal jadwal yang ditampilkan"
+              />
+            </label>
+            {!isToday && (
+              <button
+                type="button"
+                onClick={onToday}
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-white/20 bg-white/10 px-3 text-sm font-semibold text-white"
+              >
+                Hari ini
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );
@@ -286,7 +352,7 @@ export function MonitorScheduleSkeleton() {
   );
 }
 
-export function MonitorScheduleEmptyState() {
+export function MonitorScheduleEmptyState({ dateLabel, isToday = true }) {
   return (
     <section className="flex min-h-[260px] items-center justify-center rounded-xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
       <div className="max-w-md">
@@ -297,7 +363,9 @@ export function MonitorScheduleEmptyState() {
           Tidak Ada Jadwal
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Belum ada jadwal yang berlangsung atau dijadwalkan hari ini.
+          {isToday
+            ? 'Belum ada jadwal yang berlangsung atau dijadwalkan hari ini.'
+            : `Belum ada jadwal pada ${dateLabel}.`}
         </p>
       </div>
     </section>
@@ -372,12 +440,14 @@ export function MonitorFooter({
   onPrevious,
   onNext,
   onPageChange,
+  dateLabel,
+  isToday = true,
 }) {
   return (
     <footer className="border-t border-slate-200 bg-white/90">
       <div className="mx-auto flex w-full max-w-[1720px] flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-xs text-slate-500 sm:px-6 lg:px-8">
         <p>
-          Total hari ini:{' '}
+          {isToday ? 'Total hari ini' : `Total ${dateLabel}`}:{' '}
           <strong className="font-semibold text-slate-700">
             {totalSchedules} kegiatan
           </strong>
