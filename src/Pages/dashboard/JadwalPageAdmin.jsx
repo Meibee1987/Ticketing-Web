@@ -1383,7 +1383,7 @@ export default function JadwalPageAdmin() {
     setDeleteConfirmation({ mode: 'single', ids: [id], jenis });
   };
 
-  const handleBulkDelete = (ids, jenis, onSuccess) => {
+  const handleBulkDelete = (ids, jenis, onSuccess, date = '') => {
     if (!ids.length) return;
     setDeleteError('');
     setDeleteConfirmation({
@@ -1391,6 +1391,7 @@ export default function JadwalPageAdmin() {
       ids: [...ids],
       jenis,
       onSuccess,
+      date,
     });
   };
 
@@ -2030,6 +2031,7 @@ export default function JadwalPageAdmin() {
         <DeleteConfirmationModal
           count={deleteConfirmation.ids.length}
           jenis={deleteConfirmation.jenis}
+          date={deleteConfirmation.date}
           deleting={deleting}
           error={deleteError}
           onCancel={() => {
@@ -2218,6 +2220,22 @@ function JadwalTab({
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [deleteDate, setDeleteDate] = useState('');
+
+  const deleteDateRows = useMemo(() => {
+    if (!deleteDate) return [];
+
+    return data.filter(
+      (row) =>
+        row.mulai_jadwal &&
+        toDatetimeLocal(row.mulai_jadwal).slice(0, 10) === deleteDate
+    );
+  }, [data, deleteDate]);
+  const isDateSelection =
+    Boolean(deleteDate) &&
+    deleteDateRows.length > 0 &&
+    selectedIds.length === deleteDateRows.length &&
+    deleteDateRows.every((row) => selectedIds.includes(row.id));
 
   // Filter berdasarkan search saja (tanpa filter tanggal)
   const filteredData = useMemo(() => {
@@ -2349,13 +2367,46 @@ function JadwalTab({
         </button>
       </div>
 
+      <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50/70 p-4 sm:flex-row sm:items-end">
+        <label className="min-w-0 flex-1 text-sm font-medium text-red-900">
+          Pilih tanggal yang akan dihapus
+          <input
+            type="date"
+            value={deleteDate}
+            onChange={(event) => {
+              setDeleteDate(event.target.value);
+              setSelectedIds([]);
+            }}
+            className="ui-field mt-1.5 w-full bg-white sm:max-w-xs"
+          />
+        </label>
+        <div className="flex flex-col gap-1 sm:items-end">
+          <button
+            type="button"
+            disabled={!deleteDate || deleteDateRows.length === 0}
+            onClick={() => {
+              setCurrentPage(1);
+              setSearchInput('');
+              setSearchQuery('');
+              setSelectedIds(deleteDateRows.map((row) => row.id));
+            }}
+            className="ui-button bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            Pilih {deleteDateRows.length} Jadwal
+          </button>
+          <span className="text-xs text-red-700">
+            Jadwal dipilih dahulu sebelum konfirmasi penghapusan.
+          </span>
+        </div>
+      </div>
       {/* Bulk delete bar */}
       {selectedIds.length > 0 && (
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 flex-wrap">
           <span className="text-sm font-medium text-red-700">
             {selectedIds.length} dari {filteredData.length} data dipilih
           </span>
-          {selectedIds.length < filteredData.length && (
+          {!isDateSelection && selectedIds.length < filteredData.length && (
             <button
               onClick={() => setSelectedIds(filteredData.map((r) => r.id))}
               className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition-colors"
@@ -2366,7 +2417,15 @@ function JadwalTab({
           )}
           <button
             onClick={() => {
-              onBulkDelete(selectedIds, jenis, () => setSelectedIds([]));
+              onBulkDelete(
+                selectedIds,
+                jenis,
+                () => {
+                  setSelectedIds([]);
+                  setDeleteDate('');
+                },
+                isDateSelection ? deleteDate : ''
+              );
             }}
             className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
             type="button"
@@ -2947,6 +3006,7 @@ function EmptyState({ text }) {
 function DeleteConfirmationModal({
   count,
   jenis,
+  date,
   deleting,
   error,
   onCancel,
@@ -2957,7 +3017,15 @@ function DeleteConfirmationModal({
     karya_akhir: 'karya akhir',
     lain_lain: 'lain-lain',
   };
-  const isBulk = count > 1;
+  const isBulk = count > 1 || Boolean(date);
+  const dateLabel = date
+    ? new Date(`${date}T00:00:00`).toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      })
+    : '';
 
   return (
     <div
@@ -2985,7 +3053,11 @@ function DeleteConfirmationModal({
               id="delete-confirmation-title"
               className="mt-1 text-lg font-semibold tracking-tight text-slate-950"
             >
-              {isBulk ? `Hapus ${count} Jadwal?` : 'Hapus Jadwal?'}
+              {date
+                ? `Hapus ${count} Jadwal pada ${dateLabel}?`
+                : isBulk
+                  ? `Hapus ${count} Jadwal?`
+                  : 'Hapus Jadwal?'}
             </h2>
           </div>
           <button
@@ -3005,7 +3077,7 @@ function DeleteConfirmationModal({
             className="text-sm leading-6 text-slate-600"
           >
             {isBulk
-              ? `${count} data jadwal ${jenisLabels[jenis] || ''} yang dipilih akan dihapus dari sistem.`
+              ? `${count} data jadwal ${jenisLabels[jenis] || ''}${dateLabel ? ` pada ${dateLabel}` : ''} yang dipilih akan dihapus dari sistem.`
               : `Data jadwal ${jenisLabels[jenis] || ''} ini akan dihapus dari sistem.`}
           </p>
 
