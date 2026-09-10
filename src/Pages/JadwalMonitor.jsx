@@ -18,7 +18,10 @@ import { assertSupabaseResults } from '../utils/supabaseResults';
 import { usesPhysicalRoom } from '../utils/meetingRoom';
 import { useAuth } from '../hooks/useAuth';
 import { formatAngkatanLabel } from '../utils/scheduleLabels';
-import { mergeConsecutiveSchedules } from '../utils/monitorSchedules';
+import {
+  mergeConsecutiveSchedules,
+  moveFinishedSchedulesToEnd,
+} from '../utils/monitorSchedules';
 
 const ITEMS_PER_PAGE = 7;
 const AUTO_SLIDE_INTERVAL = 7 * 1000;
@@ -347,7 +350,7 @@ export default function JadwalMonitor() {
         })
       );
 
-      setJadwalData(mergedSchedules);
+      setJadwalData(moveFinishedSchedulesToEnd(mergedSchedules));
     } catch (error) {
       console.error('Error fetching schedule:', error);
       setError(error.message || 'Gagal memuat jadwal monitor.');

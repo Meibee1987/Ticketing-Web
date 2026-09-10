@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { mergeConsecutiveSchedules } from '../src/utils/monitorSchedules.js';
+import {
+  mergeConsecutiveSchedules,
+  moveFinishedSchedulesToEnd,
+} from '../src/utils/monitorSchedules.js';
 
 const schedule = (id, start, end, overrides = {}) => ({
   id,
@@ -37,4 +40,18 @@ test('tidak menggabungkan sesi dengan paralel atau waktu berbeda', () => {
   ]);
 
   assert.equal(result.length, 3);
+});
+
+test('memindahkan jadwal selesai ke belakang tanpa mengubah urutan lainnya', () => {
+  const result = moveFinishedSchedulesToEnd([
+    schedule('P1', '08:00', '09:00', { status: 'finished' }),
+    schedule('P2', '09:00', '10:00', { status: 'ongoing' }),
+    schedule('P3', '10:00', '11:00', { status: 'upcoming' }),
+    schedule('P4', '07:00', '08:00', { status: 'finished' }),
+  ]);
+
+  assert.deepEqual(
+    result.map((item) => item.id),
+    ['P2', 'P3', 'P1', 'P4']
+  );
 });

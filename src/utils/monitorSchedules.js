@@ -47,3 +47,15 @@ export function mergeConsecutiveSchedules(schedules) {
 
   return mergedSchedules;
 }
+
+export function moveFinishedSchedulesToEnd(schedules) {
+  const activeSchedules = [];
+  const finishedSchedules = [];
+
+  schedules.forEach((schedule) => {
+    if (schedule.status === 'finished') finishedSchedules.push(schedule);
+    else activeSchedules.push(schedule);
+  });
+
+  return [...activeSchedules, ...finishedSchedules];
+}
