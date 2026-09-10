@@ -28,7 +28,10 @@ import { supabase } from '../supabaseClient';
 import { usesPhysicalRoom } from '../utils/meetingRoom';
 import { normalizeKelasForDatabase } from '../utils/scheduleLabels';
 
-const GOOGLE_SHEET_ID = '1vk9D-xL5njgiwWdNQGN4iCCodMxaKwCnwejnr61oosc';
+const GOOGLE_SHEET_ID =
+  import.meta.env.VITE_GOOGLE_SHEET_ID ||
+  '137da0j_AaZhDNwrPjQkV1jA8572xVjHyRYFKMGbBIIM';
+const GOOGLE_SCHEDULE_SHEET_NAME = 'Jadwal';
 
 function buildGoogleSheetExportUrl() {
   return `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx&cacheBust=${Date.now()}`;
@@ -65,9 +68,11 @@ const PERKULIAHAN_MAP = {
   // Angkatan
   angkatan: '_lookup_angkatan',
   // Mata Kuliah (by code or name)
-  kegiatan: '_lookup_matkul_kode',
+  // Pada sheet "Jadwal", Kegiatan berisi kategori seperti "Kuliah",
+  // bukan kode mata kuliah. Nama mata kuliah diambil dari kolom berikutnya.
   'matakuliah h': '_lookup_matkul_kode',
   'matakuliah h (kode)': '_lookup_matkul_kode',
+  'kode mk': '_lookup_matkul_kode',
   kode_mata_kuliah: '_lookup_matkul_kode',
   'kode mata kuliah': '_lookup_matkul_kode',
   'mata kuliah': '_lookup_matkul',
@@ -83,6 +88,7 @@ const PERKULIAHAN_MAP = {
   kelas: 'kelas',
   'real perkuliahan': 'real_perkuliahan',
   real_perkuliahan: 'real_perkuliahan',
+  pertemuan: 'real_perkuliahan',
   'pertemuan n': 'real_perkuliahan',
   // Waktu
   jam: '_parse_jam',
@@ -124,6 +130,14 @@ const PERKULIAHAN_MAP = {
   dosen3: '_lookup_dosen_extra',
   'dosen 4': '_lookup_dosen_extra',
   dosen4: '_lookup_dosen_extra',
+  'dosen 5': '_lookup_dosen_extra',
+  dosen5: '_lookup_dosen_extra',
+  'dosen 6': '_lookup_dosen_extra',
+  dosen6: '_lookup_dosen_extra',
+  'dosen 7': '_lookup_dosen_extra',
+  dosen7: '_lookup_dosen_extra',
+  'dosen 8': '_lookup_dosen_extra',
+  dosen8: '_lookup_dosen_extra',
   moderator: 'moderator',
   'penguji 1': '_lookup_penguji',
   penguji1: '_lookup_penguji',
@@ -220,8 +234,17 @@ function parseJam(jamStr, tanggal) {
 function parseJenisPertemuan(str) {
   if (!str) return 'luring';
   const lower = String(str).toLowerCase().trim();
-  if (lower.includes('daring') || lower.includes('online')) return 'daring';
-  if (lower.includes('hybrid')) return 'hybrid';
+  if (lower.includes('hybrid') || lower.includes('blended')) return 'hybrid';
+  if (
+    lower.includes('daring') ||
+    lower.includes('online') ||
+    lower.includes('async') ||
+    lower.includes('asynchronous') ||
+    lower.includes('asinkron') ||
+    lower.includes('synchronous') ||
+    lower.includes('sinkron')
+  )
+    return 'daring';
   return 'luring';
 }
 
@@ -243,6 +266,7 @@ function parseZoomInfo(str) {
 function excelDateToJS(serial) {
   if (serial instanceof Date) return serial;
   if (typeof serial === 'number') {
+    if (serial < 20000 || serial > 100000) return null;
     // Excel serial → local date (avoid UTC timezone shift)
     const utcDays = Math.floor(serial - 25569);
     const d = new Date(utcDays * 86400 * 1000);
@@ -343,12 +367,18 @@ export default function ImportJadwal({
   const filteredPreviewData = useMemo(() => {
     if (dataSource !== 'google') return previewData;
 
+    const isDedicatedLectureSheet =
+      selectedGoogleSheet.trim().toLowerCase() ===
+      GOOGLE_SCHEDULE_SHEET_NAME.toLowerCase();
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const syncEndDate = new Date(today);
     syncEndDate.setDate(syncEndDate.getDate() + 2);
     const selectedDateColumn = Number.parseInt(dateColumn, 10);
     if (!Number.isInteger(selectedDateColumn)) return [];
+    const activityColumn = previewHeaders.findIndex(
+      (header) => header.trim().toLowerCase() === 'kegiatan'
+    );
 
     let sectionDate = null;
     let isPerkuliahanSection = false;
@@ -369,6 +399,20 @@ export default function ImportJadwal({
 
         // Baris kuning hanya penanda tanggal dan nama PIC, bukan jadwal.
         if (nonEmpty <= 3) return;
+
+        // "Jadwal" adalah tabel datar: kolom Tanggal terisi pada setiap
+        // jadwal dan tidak memakai header bagian "Kuliah S1/S2/S3".
+        if (isDedicatedLectureSheet) {
+          const activity = String(row[activityColumn] || '').trim();
+          if (activityColumn >= 0 && activity.toLowerCase() !== 'kuliah')
+            return;
+          if (sectionDate >= today && sectionDate < syncEndDate) {
+            const scheduleRow = [...row];
+            scheduleRow._scheduleDate = sectionDate;
+            scheduleRows.push(scheduleRow);
+          }
+          return;
+        }
       }
 
       // Baris judul kelompok (abu-abu/biru/warna section lainnya) bukan jadwal.
@@ -391,7 +435,13 @@ export default function ImportJadwal({
     });
 
     return scheduleRows;
-  }, [dataSource, dateColumn, previewData]);
+  }, [
+    dataSource,
+    dateColumn,
+    previewData,
+    previewHeaders,
+    selectedGoogleSheet,
+  ]);
 
   // DB columns per type
   const getDbColumns = () => {
@@ -571,20 +621,21 @@ export default function ImportJadwal({
 
       // Auto-detect date column, including the combined Indonesian date/time
       // produced by Download Jadwal Admin (for example 26 Agustus 2026, 08.00).
-      const dateIdx = headers.findIndex((h, idx) => {
+      let dateIdx = headers.findIndex((h) => {
         const l = h.toLowerCase();
-        if (
+        return (
           l.includes('tanggal') ||
           l.includes('date') ||
           l.includes('waktu mulai')
-        ) {
-          return true;
-        }
-
-        return rows
-          .slice(0, 5)
-          .some((row) => row[idx] && excelDateToJS(row[idx]) instanceof Date);
+        );
       });
+      if (dateIdx < 0) {
+        dateIdx = headers.findIndex((_, idx) =>
+          rows
+            .slice(0, 5)
+            .some((row) => row[idx] && excelDateToJS(row[idx]) instanceof Date)
+        );
+      }
       if (dateIdx >= 0) setDateColumn(String(dateIdx));
 
       setStep(2);
@@ -608,6 +659,11 @@ export default function ImportJadwal({
         cache: 'no-store',
       });
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(
+            'Google Sheets belum dapat diakses. Ubah akses spreadsheet menjadi "Siapa saja yang memiliki link" sebagai Pelihat, lalu coba lagi.'
+          );
+        }
         throw new Error(
           `Google Sheets merespons dengan status ${response.status}`
         );
@@ -634,7 +690,11 @@ export default function ImportJadwal({
       if (fileInputRef.current) fileInputRef.current.value = '';
       setGoogleWorkbook(remoteWorkbook);
       setGoogleSheetNames(selectableSheets);
-      setSelectedGoogleSheet('');
+      const scheduleSheet = selectableSheets.find(
+        (name) =>
+          name.trim().toLowerCase() === GOOGLE_SCHEDULE_SHEET_NAME.toLowerCase()
+      );
+      setSelectedGoogleSheet(scheduleSheet || '');
     } catch (error) {
       console.error('Gagal membaca Google Sheets:', error);
       setGoogleSheetError(
@@ -1364,11 +1424,11 @@ export default function ImportJadwal({
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-slate-900">
-                          Google Sheets Jadwal Kuliah
+                          Google Sheets Jadwal
                         </p>
                         <p className="mt-1 text-xs leading-5 text-slate-600">
-                          Muat spreadsheet, pilih Sheet 1 atau Sheet 2, lalu
-                          periksa mapping sebelum sinkronisasi.
+                          Muat spreadsheet. Sheet Jadwal akan dipilih otomatis,
+                          lalu periksa mapping sebelum sinkronisasi.
                         </p>
                       </div>
                     </div>
