@@ -16,7 +16,6 @@ import {
 } from '../utils/monitorSlides';
 import { assertSupabaseResults } from '../utils/supabaseResults';
 import { usesPhysicalRoom } from '../utils/meetingRoom';
-import { useAuth } from '../hooks/useAuth';
 import { formatAngkatanLabel } from '../utils/scheduleLabels';
 import {
   mergeConsecutiveSchedules,
@@ -64,7 +63,6 @@ const parseIdList = (value) => {
 };
 
 export default function JadwalMonitor() {
-  const { isSuperAdmin } = useAuth();
   const [jadwalData, setJadwalData] = useState([]);
   // Pengaman render untuk state lama (misalnya setelah hot reload): daring tidak
   // boleh pernah diteruskan ke kartu monitor.
@@ -83,12 +81,10 @@ export default function JadwalMonitor() {
   const currentDateValue = formatDateInput(currentTime);
 
   useEffect(() => {
-    if (!isSuperAdmin || !hasCustomDate) {
+    if (!hasCustomDate) {
       setSelectedDate(currentDateValue);
     }
-
-    if (!isSuperAdmin) setHasCustomDate(false);
-  }, [currentDateValue, hasCustomDate, isSuperAdmin]);
+  }, [currentDateValue, hasCustomDate]);
 
   useEffect(() => {
     let isMounted = true;
@@ -445,7 +441,7 @@ export default function JadwalMonitor() {
       <MonitorHeader
         dateLabel={selectedDateLabel}
         clock={clock}
-        canSelectDate={isSuperAdmin}
+        canSelectDate
         selectedDate={selectedDate}
         onDateChange={handleDateChange}
         onToday={() => {
