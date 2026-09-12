@@ -289,6 +289,31 @@ function ExpandableSelectList({
 // ================================================================================
 
 const ITEMS_PER_PAGE = 10;
+const SUPABASE_PAGE_SIZE = 1000;
+
+const fetchAllTableRows = async (table, columns = '*') => {
+  const rows = [];
+  let from = 0;
+
+  while (true) {
+    const result = await supabase
+      .from(table)
+      .select(columns)
+      .order('id', { ascending: true })
+      .range(from, from + SUPABASE_PAGE_SIZE - 1);
+
+    if (result.error) return result;
+
+    const pageRows = result.data || [];
+    rows.push(...pageRows);
+
+    if (pageRows.length < SUPABASE_PAGE_SIZE) {
+      return { ...result, data: rows };
+    }
+
+    from += SUPABASE_PAGE_SIZE;
+  }
+};
 
 const parseIdList = (value) => {
   if (Array.isArray(value)) return value;
@@ -446,9 +471,14 @@ const checkRuanganConflict = async ({
   const { data, error } = await supabase
     .from('view_jadwal_union')
     .select('jenis_jadwal, id_asli, mulai_jadwal, akhir_jadwal')
-    .eq('ruangan_id', ruanganId);
+    .eq('ruangan_id', ruanganId)
+    .lt('mulai_jadwal', akhir)
+    .gt('akhir_jadwal', mulai);
 
-  if (error) return (console.error('Error checking conflict:', error), null);
+  if (error) {
+    console.error('Error checking conflict:', error);
+    return '• Pengecekan konflik ruangan gagal. Data belum disimpan; silakan coba lagi.';
+  }
 
   const namaRuangan = ruanganMap?.[ruanganId] || `Ruangan ${ruanganId}`;
   const excludeJenis = JENIS_MAP[excludeTable];
@@ -489,23 +519,28 @@ const checkDosenConflict = async ({
     targetDosenIds.push(...dosenIds.map((id) => parseInt(id)));
   }
 
-  if (targetDosenIds.length === 0) return null;
+  const uniqueDosenIds = [...new Set(targetDosenIds.filter(Number.isFinite))];
+  if (uniqueDosenIds.length === 0) return null;
 
   const conflicts = [];
+  const checkErrors = [];
   const excludeJenis = JENIS_MAP[excludeTable];
 
   // Cek setiap dosen yang akan dijadwalkan
-  for (const checkDosenId of targetDosenIds) {
+  for (const checkDosenId of uniqueDosenIds) {
     const namaDosen = dosenMap?.[checkDosenId] || `Dosen ${checkDosenId}`;
 
     // 1. Cek jadwal_perkuliahan (dosen_id)
     const { data: perkuliahanData, error: perkuliahanError } = await supabase
       .from('jadwal_perkuliahan')
       .select('id, mulai_jadwal, akhir_jadwal, dosen_id')
-      .eq('dosen_id', checkDosenId);
+      .eq('dosen_id', checkDosenId)
+      .lt('mulai_jadwal', akhir)
+      .gt('akhir_jadwal', mulai);
 
     if (perkuliahanError) {
       console.error('Error checking perkuliahan conflict:', perkuliahanError);
+      checkErrors.push('perkuliahan');
     } else if (perkuliahanData) {
       perkuliahanData.forEach((j) => {
         // Skip jika ini adalah record yang sedang diedit
@@ -523,10 +558,13 @@ const checkDosenConflict = async ({
     // 2. Cek jadwal_karya_akhir (dosen_ids JSON array)
     const { data: karyaAkhirData, error: karyaAkhirError } = await supabase
       .from('jadwal_karya_akhir')
-      .select('id, mulai_jadwal, akhir_jadwal, dosen_ids');
+      .select('id, mulai_jadwal, akhir_jadwal, dosen_ids')
+      .lt('mulai_jadwal', akhir)
+      .gt('akhir_jadwal', mulai);
 
     if (karyaAkhirError) {
       console.error('Error checking karya akhir conflict:', karyaAkhirError);
+      checkErrors.push('karya akhir');
     } else if (karyaAkhirData) {
       karyaAkhirData.forEach((j) => {
         // Skip jika ini adalah record yang sedang diedit
@@ -567,7 +605,13 @@ const checkDosenConflict = async ({
     }
   }
 
-  return conflicts.length ? conflicts.join('\n') : null;
+  if (checkErrors.length) {
+    conflicts.push(
+      '• Sebagian pengecekan konflik dosen gagal. Data belum disimpan; silakan coba lagi.'
+    );
+  }
+
+  return conflicts.length ? [...new Set(conflicts)].join('\n') : null;
 };
 
 // ================================================================================
@@ -669,9 +713,10 @@ export default function JadwalPageAdmin() {
       const angkatanMap = createMap(angkatanRes.data, 'nama_angkatan');
 
       // Fetch jadwal perkuliahan
-      const perkuliahanRes = await supabase
-        .from('jadwal_perkuliahan')
-        .select('*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)');
+      const perkuliahanRes = await fetchAllTableRows(
+        'jadwal_perkuliahan',
+        '*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)'
+      );
       assertSupabaseResults([['Jadwal perkuliahan', perkuliahanRes]]);
       const perkuliahanData = perkuliahanRes.data;
 
@@ -756,9 +801,7 @@ export default function JadwalPageAdmin() {
       setJadwalPerkuliahan(mergedPerkuliahan);
 
       // Fetch jadwal karya akhir
-      const karyaAkhirRes = await supabase
-        .from('jadwal_karya_akhir')
-        .select('*');
+      const karyaAkhirRes = await fetchAllTableRows('jadwal_karya_akhir');
       assertSupabaseResults([['Jadwal karya akhir', karyaAkhirRes]]);
       const karyaAkhirData = karyaAkhirRes.data;
 
@@ -833,7 +876,7 @@ export default function JadwalPageAdmin() {
       setJadwalKaryaAkhir(mergedKaryaAkhir);
 
       // Fetch jadwal lain-lain
-      const lainLainRes = await supabase.from('jadwal_lain_lain').select('*');
+      const lainLainRes = await fetchAllTableRows('jadwal_lain_lain');
       assertSupabaseResults([['Jadwal lain-lain', lainLainRes]]);
       const lainLainData = lainLainRes.data;
 
@@ -2220,22 +2263,12 @@ function JadwalTab({
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
-  const [deleteDate, setDeleteDate] = useState('');
-
-  const deleteDateRows = useMemo(() => {
-    if (!deleteDate) return [];
-
-    return data.filter(
-      (row) =>
-        row.mulai_jadwal &&
-        toDatetimeLocal(row.mulai_jadwal).slice(0, 10) === deleteDate
-    );
-  }, [data, deleteDate]);
-  const isDateSelection =
-    Boolean(deleteDate) &&
-    deleteDateRows.length > 0 &&
-    selectedIds.length === deleteDateRows.length &&
-    deleteDateRows.every((row) => selectedIds.includes(row.id));
+  const jenisLabel =
+    jenis === 'perkuliahan'
+      ? 'Perkuliahan'
+      : jenis === 'karya_akhir'
+        ? 'Karya Akhir'
+        : 'Lain-lain';
 
   // Filter berdasarkan search saja (tanpa filter tanggal)
   const filteredData = useMemo(() => {
@@ -2352,7 +2385,12 @@ function JadwalTab({
           type="button"
         >
           <Upload size={16} aria-hidden="true" />
-          Import
+          Import{' '}
+          {jenis === 'perkuliahan'
+            ? 'Perkuliahan'
+            : jenis === 'karya_akhir'
+              ? 'Karya Akhir'
+              : 'Lain-lain'}
         </button>
         {/* Download paling kanan, setelah CRUD - download sesuai tab aktif */}
         <button
@@ -2367,46 +2405,13 @@ function JadwalTab({
         </button>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50/70 p-4 sm:flex-row sm:items-end">
-        <label className="min-w-0 flex-1 text-sm font-medium text-red-900">
-          Pilih tanggal yang akan dihapus
-          <input
-            type="date"
-            value={deleteDate}
-            onChange={(event) => {
-              setDeleteDate(event.target.value);
-              setSelectedIds([]);
-            }}
-            className="ui-field mt-1.5 w-full bg-white sm:max-w-xs"
-          />
-        </label>
-        <div className="flex flex-col gap-1 sm:items-end">
-          <button
-            type="button"
-            disabled={!deleteDate || deleteDateRows.length === 0}
-            onClick={() => {
-              setCurrentPage(1);
-              setSearchInput('');
-              setSearchQuery('');
-              setSelectedIds(deleteDateRows.map((row) => row.id));
-            }}
-            className="ui-button bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Trash2 size={16} aria-hidden="true" />
-            Pilih {deleteDateRows.length} Jadwal
-          </button>
-          <span className="text-xs text-red-700">
-            Jadwal dipilih dahulu sebelum konfirmasi penghapusan.
-          </span>
-        </div>
-      </div>
       {/* Bulk delete bar */}
       {selectedIds.length > 0 && (
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 flex-wrap">
           <span className="text-sm font-medium text-red-700">
             {selectedIds.length} dari {filteredData.length} data dipilih
           </span>
-          {!isDateSelection && selectedIds.length < filteredData.length && (
+          {selectedIds.length < filteredData.length && (
             <button
               onClick={() => setSelectedIds(filteredData.map((r) => r.id))}
               className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition-colors"
@@ -2417,15 +2422,9 @@ function JadwalTab({
           )}
           <button
             onClick={() => {
-              onBulkDelete(
-                selectedIds,
-                jenis,
-                () => {
-                  setSelectedIds([]);
-                  setDeleteDate('');
-                },
-                isDateSelection ? deleteDate : ''
-              );
+              onBulkDelete(selectedIds, jenis, () => {
+                setSelectedIds([]);
+              });
             }}
             className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
             type="button"
@@ -2442,18 +2441,47 @@ function JadwalTab({
         </div>
       )}
 
-      {/* Info hasil search */}
-      {searchQuery && (
-        <div className="text-sm text-slate-600">
-          Hasil pencarian:{' '}
-          <span className="font-medium text-indigo-600">"{searchQuery}"</span>
-        </div>
-      )}
+      {/* Info total data dan batch delete hasil search */}
+      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        {searchQuery.trim() ? (
+          <div className="text-sm text-slate-600">
+            Hasil pencarian:{' '}
+            <span className="font-medium text-indigo-600">"{searchQuery}"</span>{' '}
+            <span className="text-slate-500">
+              ({filteredData.length.toLocaleString('id-ID')} hasil dari{' '}
+              {data.length.toLocaleString('id-ID')} total data {jenisLabel})
+            </span>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-600">
+            Total data {jenisLabel}:{' '}
+            <span className="font-semibold text-slate-900">
+              {data.length.toLocaleString('id-ID')}
+            </span>
+          </div>
+        )}
+        {searchQuery.trim() && filteredData.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              onBulkDelete(
+                filteredData.map((row) => row.id),
+                jenis,
+                () => setSelectedIds([])
+              );
+            }}
+            className="ui-button justify-center bg-red-600 text-white hover:bg-red-700"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            Hapus Semua Hasil ({filteredData.length})
+          </button>
+        )}
+      </div>
 
       {filteredData.length === 0 ? (
         <EmptyState
           text={
-            searchQuery
+            searchQuery.trim()
               ? 'Tidak ada hasil pencarian.'
               : 'Belum ada data jadwal.'
           }
