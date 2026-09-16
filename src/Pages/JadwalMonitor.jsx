@@ -23,7 +23,8 @@ import {
 } from '../utils/monitorSchedules';
 
 const ITEMS_PER_PAGE = 7;
-const AUTO_SLIDE_INTERVAL = 7 * 1000;
+const SCHEDULE_SLIDE_INTERVAL = 7 * 1000;
+const IMAGE_SLIDE_INTERVAL = 4 * 1000;
 const DATA_REFRESH_INTERVAL = 7 * 1000;
 const SLIDE_REFRESH_INTERVAL = 15 * 1000;
 
@@ -141,9 +142,14 @@ export default function JadwalMonitor() {
 
     if (totalPages <= 1) return;
 
+    const slideInterval =
+      currentPage >= totalDataPages
+        ? IMAGE_SLIDE_INTERVAL
+        : SCHEDULE_SLIDE_INTERVAL;
+
     const slideTimer = setTimeout(() => {
       setCurrentPage((prev) => (prev + 1) % totalPages);
-    }, AUTO_SLIDE_INTERVAL);
+    }, slideInterval);
 
     return () => clearTimeout(slideTimer);
   }, [currentPage, visibleJadwalData.length, slideImages]);
@@ -159,6 +165,18 @@ export default function JadwalMonitor() {
     try {
       setError('');
 
+      // Supabase/PostgREST membatasi hasil query ke 1.000 baris. Mengambil
+      // seluruh tabel membuat jadwal tanggal yang lebih baru terpotong ketika
+      // jumlah data sudah melewati batas tersebut. Batasi query langsung ke
+      // tanggal yang sedang dipilih agar semua jadwal hari itu selalu terbaca.
+      const selectedDayStart = parseDateInput(selectedDate);
+      const selectedDayEnd = new Date(selectedDayStart);
+      selectedDayEnd.setDate(selectedDayEnd.getDate() + 1);
+      // Kolom jadwal menyimpan waktu lokal kampus tanpa offset zona waktu,
+      // jadi kirim batas dalam bentuk waktu lokal juga.
+      const selectedDayStartValue = `${selectedDate}T00:00:00`;
+      const selectedDayEndValue = `${formatDateInput(selectedDayEnd)}T00:00:00`;
+
       const [
         perkuliahanRes,
         karyaAkhirRes,
@@ -170,16 +188,22 @@ export default function JadwalMonitor() {
         supabase
           .from('jadwal_perkuliahan')
           .select('*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)')
+          .gte('mulai_jadwal', selectedDayStartValue)
+          .lt('mulai_jadwal', selectedDayEndValue)
           .order('mulai_jadwal', { ascending: true }),
 
         supabase
           .from('jadwal_karya_akhir')
           .select('*')
+          .gte('mulai_jadwal', selectedDayStartValue)
+          .lt('mulai_jadwal', selectedDayEndValue)
           .order('mulai_jadwal', { ascending: true }),
 
         supabase
           .from('jadwal_lain_lain')
           .select('*')
+          .gte('mulai_jadwal', selectedDayStartValue)
+          .lt('mulai_jadwal', selectedDayEndValue)
           .order('mulai_jadwal', { ascending: true }),
 
         supabase.from('ruangan').select('id, nama_ruangan'),
