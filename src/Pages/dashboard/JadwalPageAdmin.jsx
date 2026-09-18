@@ -1599,7 +1599,7 @@ export default function JadwalPageAdmin() {
         'Real Perkuliahan',
         'Petugas Zoom',
         'Link ID',
-        'Zoom Password',
+        'Password',
         'Moderator',
         'Penguji 1',
         'Penguji 2',
@@ -1780,10 +1780,10 @@ export default function JadwalPageAdmin() {
                 placeholder="Masukkan Link ID"
               />
               <InputField
-                label="Zoom Password"
+                label="Password"
                 value={form.zoom_password || ''}
                 onChange={(v) => handleChange('zoom_password', v)}
-                placeholder="Masukkan Zoom Password"
+                placeholder="Masukkan Password"
               />
             </>
           )}
@@ -1845,11 +1845,18 @@ export default function JadwalPageAdmin() {
             maxSelections={4}
             itemLabel="dosen"
           />
-          <InputField
+          <SearchableSelect
             label="Dosen Seminar"
             value={form.moderator || ''}
             onChange={(v) => handleChange('moderator', v)}
-            placeholder="Nama Dosen Seminar"
+            options={options.dosen
+              .filter((dosen) => dosen.nama_dosen)
+              .map((dosen) => ({
+                ...dosen,
+                id: dosen.nama_dosen,
+              }))}
+            displayKey="nama_dosen"
+            placeholder="Pilih dosen seminar"
           />
           <SelectField
             label="Jenis Pertemuan"
@@ -1893,10 +1900,10 @@ export default function JadwalPageAdmin() {
                 placeholder="Masukkan Link ID"
               />
               <InputField
-                label="Zoom Password"
+                label="Password"
                 value={form.zoom_password || ''}
                 onChange={(v) => handleChange('zoom_password', v)}
-                placeholder="Masukkan Zoom Password"
+                placeholder="Masukkan Password"
               />
             </>
           )}
@@ -1977,10 +1984,10 @@ export default function JadwalPageAdmin() {
                 placeholder="Masukkan Link ID"
               />
               <InputField
-                label="Zoom Password"
+                label="Password"
                 value={form.zoom_password || ''}
                 onChange={(v) => handleChange('zoom_password', v)}
-                placeholder="Masukkan Zoom Password"
+                placeholder="Masukkan Password"
               />
             </>
           )}

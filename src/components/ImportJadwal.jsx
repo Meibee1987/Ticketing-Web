@@ -116,6 +116,7 @@ const PERKULIAHAN_MAP = {
   'link id': 'zoom_id',
   zoom_id: 'zoom_id',
   'zoom password': 'zoom_password',
+  password: 'zoom_password',
   zoom_password: 'zoom_password',
   // Dosen
   'dosen pengampu': '_lookup_dosen1',
@@ -173,6 +174,7 @@ const KARYA_AKHIR_MAP = {
   'zoom id': 'zoom_id',
   'link id': 'zoom_id',
   'zoom password': 'zoom_password',
+  password: 'zoom_password',
   'dosen 1': '_lookup_dosen_ka',
   dosen1: '_lookup_dosen_ka',
   dosen: '_lookup_dosen_ka',
@@ -210,6 +212,7 @@ const LAIN_LAIN_MAP = {
   'zoom id': 'zoom_id',
   'link id': 'zoom_id',
   'zoom password': 'zoom_password',
+  password: 'zoom_password',
   catatan: 'note',
   note: 'note',
 };
