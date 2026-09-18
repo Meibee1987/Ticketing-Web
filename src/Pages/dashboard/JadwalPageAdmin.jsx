@@ -8,6 +8,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   BookOpen,
+  CircleAlert,
+  CircleCheck,
   ClipboardList,
   Download,
   GraduationCap,
@@ -617,6 +619,127 @@ const checkDosenConflict = async ({
 // ================================================================================
 // KOMPONEN UTAMA: JadwalPageAdmin
 // ================================================================================
+function ScheduleToast({ toast, onClose }) {
+  if (!toast) return null;
+
+  const isSuccess = toast.type === 'success';
+  const Icon = isSuccess ? CircleCheck : CircleAlert;
+
+  return (
+    <div
+      className={`fixed right-4 top-4 z-[100] flex w-[calc(100%-2rem)] max-w-md items-start gap-3 rounded-xl border bg-white p-4 shadow-2xl sm:right-6 sm:top-6 ${
+        isSuccess ? 'border-emerald-200' : 'border-red-200'
+      }`}
+      role={isSuccess ? 'status' : 'alert'}
+      aria-live="polite"
+    >
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+          isSuccess
+            ? 'bg-emerald-100 text-emerald-600'
+            : 'bg-red-100 text-red-600'
+        }`}
+      >
+        <Icon size={21} strokeWidth={2.2} aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1 pt-0.5">
+        <p className="text-sm font-semibold text-slate-900">{toast.title}</p>
+        <p className="mt-1 whitespace-pre-line text-sm leading-5 text-slate-600">
+          {toast.message}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+        aria-label="Tutup notifikasi"
+      >
+        <X size={17} aria-hidden="true" />
+      </button>
+      <span
+        className={`absolute inset-x-0 bottom-0 h-1 rounded-b-xl ${
+          isSuccess ? 'bg-emerald-500' : 'bg-red-500'
+        }`}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
+
+function ConflictDialog({ message, onClose }) {
+  if (!message) return null;
+
+  const conflicts = message
+    .split(/\n+/)
+    .map((item) => item.replace(/^•\s*/, '').trim())
+    .filter(Boolean);
+
+  return (
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="conflict-dialog-title"
+      aria-describedby="conflict-dialog-description"
+    >
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-2xl">
+        <div className="flex items-start gap-4 border-b border-slate-100 p-5 sm:p-6">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <CircleAlert size={23} strokeWidth={2.2} aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3
+              id="conflict-dialog-title"
+              className="text-lg font-semibold text-slate-900"
+            >
+              Jadwal bentrok
+            </h3>
+            <p
+              id="conflict-dialog-description"
+              className="mt-1 text-sm leading-5 text-slate-600"
+            >
+              Data belum disimpan. Periksa jadwal berikut sebelum melanjutkan.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Tutup peringatan konflik"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="max-h-72 overflow-y-auto p-5 sm:p-6">
+          <ul className="space-y-3">
+            {conflicts.map((conflict, index) => (
+              <li
+                key={`${conflict}-${index}`}
+                className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-5 text-amber-950"
+              >
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                <span>{conflict}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="flex justify-end border-t border-slate-100 bg-slate-50 px-5 py-4 sm:px-6">
+          <button
+            type="button"
+            onClick={onClose}
+            autoFocus
+            className="ui-button bg-amber-600 text-white hover:bg-amber-700 sm:min-w-40"
+          >
+            Periksa kembali
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function JadwalPageAdmin() {
   // 🔐 Auth context untuk logging
   const { userRole } = useAuth();
@@ -650,6 +773,15 @@ export default function JadwalPageAdmin() {
   const [deleteError, setDeleteError] = useState('');
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [conflictAlert, setConflictAlert] = useState('');
+
+  useEffect(() => {
+    if (!toast) return undefined;
+
+    const timer = window.setTimeout(() => setToast(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   // Import states
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -1223,7 +1355,7 @@ export default function JadwalPageAdmin() {
 
       const conflictMsg = await handleCheckConflict();
       if (conflictMsg) {
-        alert(conflictMsg);
+        setConflictAlert(conflictMsg);
         setSaving(false);
         return;
       }
@@ -1341,14 +1473,23 @@ export default function JadwalPageAdmin() {
         description: `${tableLabels[modalType]}: Data jadwal telah ${verb} oleh ${userName}.`,
       });
 
-      alert(
-        `Data berhasil ${modalMode === 'add' ? 'ditambahkan' : 'diupdate'}!`
-      );
+      setToast({
+        type: 'success',
+        title:
+          modalMode === 'add'
+            ? 'Jadwal berhasil ditambahkan'
+            : 'Jadwal berhasil diperbarui',
+        message: `${tableLabels[modalType]} telah ${verb} dan tersinkron dengan dashboard.`,
+      });
       closeModal();
       fetchAllData();
     } catch (err) {
       console.error('Error saving:', err);
-      alert(`Gagal menyimpan: ${err.message}`);
+      setToast({
+        type: 'error',
+        title: 'Jadwal gagal disimpan',
+        message: err.message || 'Terjadi kesalahan saat menyimpan jadwal.',
+      });
     } finally {
       setSaving(false);
     }
@@ -1804,121 +1945,142 @@ export default function JadwalPageAdmin() {
     } else if (modalType === 'karya_akhir') {
       return (
         <>
-          <SearchableSelect
-            label="Angkatan"
-            value={form.nama_angkatan || ''}
-            onChange={(v) => handleChange('nama_angkatan', v)}
-            options={options.angkatan}
-            displayKey="nama_angkatan"
-            required
-          />
-          <InputField
-            label="Nama Mahasiswa"
-            value={form.nama_mahasiswa || ''}
-            onChange={(v) => handleChange('nama_mahasiswa', v)}
-            placeholder="Masukkan nama mahasiswa"
-            required
-          />
-          <SearchableSelect
-            label="Agenda"
-            value={form.agenda_jadwal_karya_akhir}
-            onChange={(v) => handleChange('agenda_jadwal_karya_akhir', v)}
-            options={options.agenda}
-            displayKey="agenda_karya_akhir"
-            required
-          />
-          <MultiSelect
-            label="Dosen Pembimbing"
-            values={form.dosen_ids || []}
-            onChange={(v) => handleChange('dosen_ids', v)}
-            options={options.dosen}
-            displayKey="nama_dosen"
-            maxSelections={4}
-            itemLabel="dosen"
-          />
-          <MultiSelect
-            label="Penguji"
-            values={form.penguji_ids || []}
-            onChange={(v) => handleChange('penguji_ids', v)}
-            options={options.dosen}
-            displayKey="nama_dosen"
-            maxSelections={4}
-            itemLabel="dosen"
-          />
-          <SearchableSelect
-            label="Dosen Seminar"
-            value={form.moderator || ''}
-            onChange={(v) => handleChange('moderator', v)}
-            options={options.dosen
-              .filter((dosen) => dosen.nama_dosen)
-              .map((dosen) => ({
-                ...dosen,
-                id: dosen.nama_dosen,
-              }))}
-            displayKey="nama_dosen"
-            placeholder="Pilih dosen seminar"
-          />
-          <SelectField
-            label="Jenis Pertemuan"
-            value={form.jenis_pertemuan || 'luring'}
-            onChange={(v) => {
-              handleChange('jenis_pertemuan', v);
-              if (v === 'daring') {
-                handleChange('nama_ruangan', '');
-              }
-            }}
-            options={[
-              { id: 'daring', label: 'Daring (Online)' },
-              { id: 'luring', label: 'Luring (Offline)' },
-              { id: 'hybrid', label: 'Hybrid' },
-            ]}
-            displayKey="label"
-          />
-          {usesPhysicalRoom(form.jenis_pertemuan) && (
+          <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="border-b border-slate-200 pb-3">
+              <h4 className="text-sm font-semibold text-slate-900">
+                Informasi kegiatan
+              </h4>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Data mahasiswa, agenda, dan lokasi pelaksanaan.
+              </p>
+            </div>
             <SearchableSelect
-              label="Ruangan"
-              value={form.nama_ruangan}
-              onChange={(v) => handleChange('nama_ruangan', v)}
-              options={options.ruangan}
-              displayKey="nama_ruangan"
+              label="Angkatan"
+              value={form.nama_angkatan || ''}
+              onChange={(v) => handleChange('nama_angkatan', v)}
+              options={options.angkatan}
+              displayKey="nama_angkatan"
               required
             />
-          )}
-          {/* <InputField
-            label="Petugas Zoom"
-            value={form.petugas_zoom || ''}
-            onChange={(v) => handleChange('petugas_zoom', v)}
-            placeholder="Nama petugas/operator Zoom"
-          /> */}
-          {(form.jenis_pertemuan === 'hybrid' ||
-            form.jenis_pertemuan === 'daring') && (
-            <>
-              <InputField
-                label="Link ID"
-                value={form.zoom_id || ''}
-                onChange={(v) => handleChange('zoom_id', v)}
-                placeholder="Masukkan Link ID"
+            <InputField
+              label="Nama Mahasiswa"
+              value={form.nama_mahasiswa || ''}
+              onChange={(v) => handleChange('nama_mahasiswa', v)}
+              placeholder="Masukkan nama mahasiswa"
+              required
+            />
+            <SearchableSelect
+              label="Agenda"
+              value={form.agenda_jadwal_karya_akhir}
+              onChange={(v) => handleChange('agenda_jadwal_karya_akhir', v)}
+              options={options.agenda}
+              displayKey="agenda_karya_akhir"
+              required
+            />
+            <SelectField
+              label="Jenis Pertemuan"
+              value={form.jenis_pertemuan || 'luring'}
+              onChange={(v) => {
+                handleChange('jenis_pertemuan', v);
+                if (v === 'daring') {
+                  handleChange('nama_ruangan', '');
+                }
+              }}
+              options={[
+                { id: 'daring', label: 'Daring (Online)' },
+                { id: 'luring', label: 'Luring (Offline)' },
+                { id: 'hybrid', label: 'Hybrid' },
+              ]}
+              displayKey="label"
+            />
+            {usesPhysicalRoom(form.jenis_pertemuan) && (
+              <SearchableSelect
+                label="Ruangan"
+                value={form.nama_ruangan}
+                onChange={(v) => handleChange('nama_ruangan', v)}
+                options={options.ruangan}
+                displayKey="nama_ruangan"
+                required
               />
-              <InputField
-                label="Password"
-                value={form.zoom_password || ''}
-                onChange={(v) => handleChange('zoom_password', v)}
-                placeholder="Masukkan Password"
+            )}
+            <InputField
+              label="Catatan / Permintaan"
+              value={form.note || ''}
+              onChange={(v) => handleChange('note', v)}
+              placeholder="Masukkan catatan atau permintaan khusus (opsional)"
+            />
+          </section>
+
+          <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="border-b border-slate-200 pb-3">
+              <h4 className="text-sm font-semibold text-slate-900">
+                Dosen dan waktu
+              </h4>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Susunan dosen serta rentang waktu kegiatan.
+              </p>
+            </div>
+            <MultiSelect
+              label="Dosen Pembimbing"
+              values={form.dosen_ids || []}
+              onChange={(v) => handleChange('dosen_ids', v)}
+              options={options.dosen}
+              displayKey="nama_dosen"
+              maxSelections={4}
+              itemLabel="dosen"
+            />
+            <MultiSelect
+              label="Penguji"
+              values={form.penguji_ids || []}
+              onChange={(v) => handleChange('penguji_ids', v)}
+              options={options.dosen}
+              displayKey="nama_dosen"
+              maxSelections={4}
+              itemLabel="dosen"
+            />
+            <SearchableSelect
+              label="Dosen Seminar"
+              value={form.moderator || ''}
+              onChange={(v) => handleChange('moderator', v)}
+              options={options.dosen
+                .filter((dosen) => dosen.nama_dosen)
+                .map((dosen) => ({
+                  ...dosen,
+                  id: dosen.nama_dosen,
+                }))}
+              displayKey="nama_dosen"
+              placeholder="Pilih dosen seminar"
+            />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <DateTimeField
+                label="Waktu Mulai"
+                value={form.mulai_jadwal}
+                onChange={(v) => handleChange('mulai_jadwal', v)}
               />
-            </>
-          )}
-          {/* <InputField
-            label="Pintang / SPs"
-            value={form.pintang_sps || ''}
-            onChange={(v) => handleChange('pintang_sps', v)}
-            placeholder="Info Pembimbing Tamu / SPs"
-          /> */}
-          <InputField
-            label="Catatan / Permintaan"
-            value={form.note || ''}
-            onChange={(v) => handleChange('note', v)}
-            placeholder="Masukkan catatan atau permintaan khusus (opsional)"
-          />
+              <DateTimeField
+                label="Waktu Selesai"
+                value={form.akhir_jadwal}
+                onChange={(v) => handleChange('akhir_jadwal', v)}
+              />
+            </div>
+            {(form.jenis_pertemuan === 'hybrid' ||
+              form.jenis_pertemuan === 'daring') && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <InputField
+                  label="Link ID"
+                  value={form.zoom_id || ''}
+                  onChange={(v) => handleChange('zoom_id', v)}
+                  placeholder="Masukkan Link ID"
+                />
+                <InputField
+                  label="Password"
+                  value={form.zoom_password || ''}
+                  onChange={(v) => handleChange('zoom_password', v)}
+                  placeholder="Masukkan Password"
+                />
+              </div>
+            )}
+          </section>
         </>
       );
     } else {
@@ -2019,6 +2181,11 @@ export default function JadwalPageAdmin() {
 
   return (
     <div className="ui-page">
+      <ScheduleToast toast={toast} onClose={() => setToast(null)} />
+      <ConflictDialog
+        message={conflictAlert}
+        onClose={() => setConflictAlert('')}
+      />
       <PageHeader title="Kelola Jadwal" />
       {/* Download Button dipindah ke baris search & CRUD (lihat JadwalTab) */}
 
@@ -2128,26 +2295,32 @@ export default function JadwalPageAdmin() {
 
       {/* Modal Form */}
       {modalOpen && (
-        <Modal onClose={closeModal}>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">
+        <Modal onClose={closeModal} size="wide">
+          <form onSubmit={handleSubmit}>
+            <h3 className="mb-5 text-lg font-semibold text-slate-900">
               {modalTitles[modalType][modalMode]}
             </h3>
 
-            {renderFormFields()}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {renderFormFields()}
 
-            <DateTimeField
-              label="Waktu Mulai"
-              value={form.mulai_jadwal}
-              onChange={(v) => handleChange('mulai_jadwal', v)}
-            />
-            <DateTimeField
-              label="Waktu Selesai"
-              value={form.akhir_jadwal}
-              onChange={(v) => handleChange('akhir_jadwal', v)}
-            />
+              {modalType !== 'karya_akhir' && (
+                <>
+                  <DateTimeField
+                    label="Waktu Mulai"
+                    value={form.mulai_jadwal}
+                    onChange={(v) => handleChange('mulai_jadwal', v)}
+                  />
+                  <DateTimeField
+                    label="Waktu Selesai"
+                    value={form.akhir_jadwal}
+                    onChange={(v) => handleChange('akhir_jadwal', v)}
+                  />
+                </>
+              )}
+            </div>
 
-            <div className="flex gap-2 pt-4">
+            <div className="mt-5 flex gap-3 border-t border-slate-200 bg-white pt-4">
               <button
                 type="button"
                 onClick={closeModal}
@@ -3220,7 +3393,7 @@ function DeleteConfirmationModal({
   );
 }
 
-function Modal({ children, onClose }) {
+function Modal({ children, onClose, size = 'default' }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
@@ -3230,7 +3403,9 @@ function Modal({ children, onClose }) {
       aria-label="Form jadwal"
     >
       <div
-        className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6"
+        className={`max-h-[calc(100vh-2rem)] w-full overflow-y-auto rounded-xl bg-white p-5 shadow-xl sm:p-6 ${
+          size === 'wide' ? 'max-w-5xl' : 'max-w-lg'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

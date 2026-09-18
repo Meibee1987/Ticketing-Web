@@ -183,6 +183,19 @@ export default function NewOverviewPage() {
     return cleanup;
   }, [selectedDate, loadKPI, loadCharts, loadTable]);
 
+  // Ambil ulang data saat pengguna kembali dari halaman Jadwal Admin. Ini
+  // menjadi pengaman jika koneksi realtime sempat terputus saat import/edit.
+  useEffect(() => {
+    const refreshWhenFocused = () => {
+      loadKPI(selectedDate);
+      loadCharts(selectedDate);
+      loadTable(selectedDate);
+    };
+
+    window.addEventListener('focus', refreshWhenFocused);
+    return () => window.removeEventListener('focus', refreshWhenFocused);
+  }, [selectedDate, loadKPI, loadCharts, loadTable]);
+
   // ── KPI trend calculations ──
   const jadwalTrend = (() => {
     const diff = kpi.totalJadwal - prevKpi.totalJadwal;
@@ -396,7 +409,7 @@ export default function NewOverviewPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari angkatan, agenda, tempat, dosen..."
+                placeholder="Cari angkatan, agenda, tempat, dosen/user/mahasiswa..."
                 className="w-full pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-slate-50"
               />
               {searchQuery && (

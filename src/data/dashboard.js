@@ -5,6 +5,8 @@
  * Realtime subscription with notification builder
  */
 import { supabase } from '../supabaseClient';
+import { usesPhysicalRoom } from '../utils/meetingRoom';
+import { formatAngkatanLabel } from '../utils/scheduleLabels';
 import { assertSupabaseResults } from '../utils/supabaseResults';
 import { buildScheduleNotification } from '../utils/notifications';
 
@@ -33,6 +35,18 @@ function getMonday(date) {
 }
 
 const isSameDate = (d1, d2) => d1.toDateString() === d2.toDateString();
+
+const parseIdList = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 // ────────────────────────────────────────
 // UNIFIED BOOKING FETCH
@@ -274,18 +288,38 @@ export async function fetchJadwalHariIni(date = new Date()) {
   const dosenMap = toMap(dosenAllRes.data, 'nama_dosen');
 
   // Normalize perkuliahan (uses FK joins – works fine for this table)
-  const perkuliahan = (perkuliahanRes.data || []).map((r) => ({
-    id: `pk-${r.id}`,
-    source: 'Perkuliahan',
-    nama_angkatan: r.angkatan?.nama_angkatan || '-',
-    waktu_display: toTimeDisplay(r.mulai_jadwal, r.akhir_jadwal),
-    nama_matkul:
-      r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',
-    nama_ruangan: r.ruangan?.nama_ruangan || '-',
-    nama_dosen: r.dosen?.nama_dosen || '-',
-    jenis_pertemuan: r.jenis_pertemuan || 'luring',
-    mulai_jadwal: r.mulai_jadwal,
-  }));
+  const perkuliahan = (perkuliahanRes.data || []).map((r) => {
+    const angkatanNames = parseIdList(r.id_angkatans)
+      .map((id) => angkatanMap[id])
+      .filter(Boolean);
+    const primaryDosen = r.dosen?.nama_dosen;
+    const dosenNames = [
+      primaryDosen,
+      ...parseIdList(r.dosen_ids).map((id) => dosenMap[id]),
+    ].filter((name, index, names) => name && names.indexOf(name) === index);
+    const jenisPertemuan = r.jenis_pertemuan || 'luring';
+
+    return {
+      id: `pk-${r.id}`,
+      source: 'Perkuliahan',
+      nama_angkatan: formatAngkatanLabel(
+        angkatanNames.length > 0
+          ? angkatanNames.join(', ')
+          : r.angkatan?.nama_angkatan || '-',
+        r.paralel,
+        r.kelas
+      ),
+      waktu_display: toTimeDisplay(r.mulai_jadwal, r.akhir_jadwal),
+      nama_matkul:
+        r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',
+      nama_ruangan: usesPhysicalRoom(jenisPertemuan)
+        ? r.ruangan?.nama_ruangan || '-'
+        : '-',
+      nama_dosen: dosenNames.join(', ') || '-',
+      jenis_pertemuan: jenisPertemuan,
+      mulai_jadwal: r.mulai_jadwal,
+    };
+  });
 
   // Normalize karya_akhir (raw select + map, same as admin page)
   const karyaAkhir = (karyaAkhirRes.data || []).map((r) => {
@@ -304,31 +338,41 @@ export async function fetchJadwalHariIni(date = new Date()) {
       }
     }
 
+    const jenisPertemuan = r.jenis_pertemuan || 'luring';
+
     return {
       id: `ka-${r.id}`,
       source: 'Karya Akhir',
       nama_angkatan: angkatanMap[r.nama_angkatan] || '-',
       waktu_display: toTimeDisplay(r.mulai_jadwal, r.akhir_jadwal),
       nama_matkul: agendaMap[r.agenda_jadwal_karya_akhir] || 'Sidang/Seminar',
-      nama_ruangan: ruanganMap[r.nama_ruangan] || '-',
-      nama_dosen: dosenNames,
-      jenis_pertemuan: r.jenis_pertemuan || 'luring',
+      nama_ruangan: usesPhysicalRoom(jenisPertemuan)
+        ? ruanganMap[r.nama_ruangan] || '-'
+        : '-',
+      nama_dosen: r.nama_mahasiswa || dosenNames,
+      jenis_pertemuan: jenisPertemuan,
       mulai_jadwal: r.mulai_jadwal,
     };
   });
 
   // Normalize lain_lain (raw select + map, same as admin page)
-  const lainLain = (lainLainRes.data || []).map((r) => ({
-    id: `ll-${r.id}`,
-    source: 'Lain-lain',
-    nama_angkatan: '-',
-    waktu_display: toTimeDisplay(r.mulai_jadwal, r.akhir_jadwal),
-    nama_matkul: r.agenda || 'Kegiatan',
-    nama_ruangan: ruanganMap[r.nama_ruangan] || '-',
-    nama_dosen: r.nama_user || '-',
-    jenis_pertemuan: r.jenis_pertemuan || 'luring',
-    mulai_jadwal: r.mulai_jadwal,
-  }));
+  const lainLain = (lainLainRes.data || []).map((r) => {
+    const jenisPertemuan = r.jenis_pertemuan || 'luring';
+
+    return {
+      id: `ll-${r.id}`,
+      source: 'Lain-lain',
+      nama_angkatan: '-',
+      waktu_display: toTimeDisplay(r.mulai_jadwal, r.akhir_jadwal),
+      nama_matkul: r.agenda || 'Kegiatan',
+      nama_ruangan: usesPhysicalRoom(jenisPertemuan)
+        ? ruanganMap[r.nama_ruangan] || '-'
+        : '-',
+      nama_dosen: r.nama_user || '-',
+      jenis_pertemuan: jenisPertemuan,
+      mulai_jadwal: r.mulai_jadwal,
+    };
+  });
 
   // Merge and sort by mulai_jadwal
   return [...perkuliahan, ...karyaAkhir, ...lainLain].sort(

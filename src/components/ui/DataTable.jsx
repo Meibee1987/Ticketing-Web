@@ -1,6 +1,6 @@
 /**
  * DataTable – "Jadwal Hari Ini" table matching Figma
- * Columns: Angkatan | Waktu | Agenda | Tempat | Dosen | Jenis | Aksi
+ * Columns: Angkatan | Waktu | Agenda | Tempat | Dosen/User/Mahasiswa | Jenis | Aksi
  * Row hover, soft shadow container, rounded-16
  */
 import { Pencil, Trash2 } from 'lucide-react';
@@ -51,7 +51,7 @@ export default function DataTable({
             <th className="text-left">Waktu</th>
             <th className="text-left">Agenda</th>
             <th className="text-left">Tempat</th>
-            <th className="text-left">Dosen</th>
+            <th className="text-left">Dosen / User / Mahasiswa</th>
             <th className="text-left">Jenis</th>
             {showActions && <th className="text-right">Aksi</th>}
           </tr>
