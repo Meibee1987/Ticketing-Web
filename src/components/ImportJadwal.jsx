@@ -1080,8 +1080,12 @@ export default function ImportJadwal({
                 .map((name) => fuzzyLookup(name, lookups.angkatanByName))
                 .filter(Boolean)
                 .slice(0, 3);
-              record.id_angkatan = angkatanIds[0] || null;
-              if (angkatanIds.length) record.id_angkatans = angkatanIds;
+              if (jenis === 'karya_akhir') {
+                record.nama_angkatan = angkatanIds[0] || null;
+              } else if (jenis === 'perkuliahan') {
+                record.id_angkatan = angkatanIds[0] || null;
+                if (angkatanIds.length) record.id_angkatans = angkatanIds;
+              }
               break;
             }
             case '_lookup_ruangan': {

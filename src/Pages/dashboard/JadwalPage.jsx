@@ -411,16 +411,20 @@ function useJadwalKaryaAkhir() {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
 
-      const [jadwalRes, ruanganRes, agendaRes] = await Promise.all([
-        supabase.from('jadwal_karya_akhir').select('*').order('mulai_jadwal'),
-        supabase.from('ruangan').select('id, nama_ruangan'),
-        supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
-      ]);
+      const [jadwalRes, ruanganRes, agendaRes, angkatanRes] = await Promise.all(
+        [
+          supabase.from('jadwal_karya_akhir').select('*').order('mulai_jadwal'),
+          supabase.from('ruangan').select('id, nama_ruangan'),
+          supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
+          supabase.from('angkatan').select('id, nama_angkatan'),
+        ]
+      );
 
       assertSupabaseResults([
         ['Jadwal karya akhir', jadwalRes],
         ['Referensi ruangan', ruanganRes],
         ['Referensi agenda', agendaRes],
+        ['Referensi angkatan', angkatanRes],
       ]);
 
       const ruanganMap = Object.fromEntries(
@@ -429,10 +433,14 @@ function useJadwalKaryaAkhir() {
       const agendaMap = Object.fromEntries(
         (agendaRes.data || []).map((a) => [a.id, a.agenda_karya_akhir])
       );
+      const angkatanMap = Object.fromEntries(
+        (angkatanRes.data || []).map((a) => [a.id, a.nama_angkatan])
+      );
 
       const merged = (jadwalRes.data || []).map((j) => ({
         ...j,
         display_ruangan: ruanganMap[j.nama_ruangan] || '-',
+        display_angkatan: angkatanMap[j.nama_angkatan] || '-',
         display_mahasiswa: j.nama_mahasiswa || '-',
         display_agenda: agendaMap[j.agenda_jadwal_karya_akhir] || '-',
         mulai_jadwal: j.mulai_jadwal || '-',
@@ -485,6 +493,14 @@ function JadwalKaryaAkhirTable({ selectedDate }) {
   });
 
   const columns = [
+    {
+      label: 'Angkatan',
+      render: (r) => (
+        <span className="font-semibold text-slate-800">
+          {r.display_angkatan}
+        </span>
+      ),
+    },
     {
       label: 'Nama Mahasiswa',
       render: (r) => (

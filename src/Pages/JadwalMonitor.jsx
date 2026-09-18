@@ -283,6 +283,7 @@ export default function JadwalMonitor() {
           const merged = {
             ...item,
             display_ruangan: ruanganMap[item.nama_ruangan] || '-',
+            display_angkatan: angkatanMap[item.nama_angkatan] || '-',
             display_mahasiswa: item.nama_mahasiswa || '-',
             display_agenda: agendaMap[item.agenda_jadwal_karya_akhir] || '-',
           };
@@ -290,7 +291,7 @@ export default function JadwalMonitor() {
           allSchedules.push({
             id: `K${merged.id}`,
             type: 'karya_akhir',
-            kode: 'KARYA AKHIR',
+            kode: merged.display_angkatan,
             jam: `${formatTime(merged.mulai_jadwal)} - ${formatTime(merged.akhir_jadwal)}`,
             kegiatan: `${merged.display_agenda}`,
             tempat:

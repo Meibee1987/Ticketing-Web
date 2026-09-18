@@ -825,10 +825,12 @@ export default function JadwalPageAdmin() {
           ...j,
           jenis: 'karya_akhir',
           nama_ruangan: ruanganMap[j.nama_ruangan] || '-',
+          nama_angkatan: angkatanMap[j.nama_angkatan] || '-',
           nama_mahasiswa: j.nama_mahasiswa || '-',
           agenda_display: agendaMap[j.agenda_jadwal_karya_akhir] || '-',
           keterangan: j.nama_mahasiswa || '-',
           ruangan_id_raw: j.nama_ruangan,
+          angkatan_id_raw: j.nama_angkatan,
           agenda_id_raw: j.agenda_jadwal_karya_akhir,
           dosen_ids: dosenIds,
           dosen_names: dosenNames,
@@ -967,6 +969,7 @@ export default function JadwalPageAdmin() {
     } else if (type === 'karya_akhir') {
       return {
         id: null,
+        nama_angkatan: '',
         nama_ruangan: '',
         nama_mahasiswa: '',
         mulai_jadwal: '',
@@ -1071,6 +1074,7 @@ export default function JadwalPageAdmin() {
     } else if (row.jenis === 'karya_akhir') {
       setForm({
         id: row.id,
+        nama_angkatan: row.angkatan_id_raw || '',
         nama_ruangan: row.ruangan_id_raw || '',
         nama_mahasiswa: row.nama_mahasiswa || '',
         agenda_jadwal_karya_akhir: row.agenda_id_raw || '',
@@ -1205,6 +1209,13 @@ export default function JadwalPageAdmin() {
           form.id_angkatans.filter(Boolean).length === 0)
       ) {
         alert('Pilih minimal satu angkatan');
+        setSaving(false);
+        return;
+      }
+
+      if (modalType === 'karya_akhir' && !form.nama_angkatan) {
+        alert('Pilih angkatan');
+        setSaving(false);
         return;
       }
 
@@ -1605,7 +1616,9 @@ export default function JadwalPageAdmin() {
 
         return [
           d.jenis,
-          d.jenis === 'perkuliahan' ? d.nama_angkatan || '' : '',
+          d.jenis === 'perkuliahan' || d.jenis === 'karya_akhir'
+            ? d.nama_angkatan || ''
+            : '',
           d.jenis === 'perkuliahan' ? d.nama_matkul || '' : '',
           d.jenis === 'karya_akhir' ? d.nama_mahasiswa || '' : '',
           d.jenis === 'lain_lain' ? d.nama_user || '' : '',
@@ -1785,6 +1798,14 @@ export default function JadwalPageAdmin() {
     } else if (modalType === 'karya_akhir') {
       return (
         <>
+          <SearchableSelect
+            label="Angkatan"
+            value={form.nama_angkatan || ''}
+            onChange={(v) => handleChange('nama_angkatan', v)}
+            options={options.angkatan}
+            displayKey="nama_angkatan"
+            required
+          />
           <InputField
             label="Nama Mahasiswa"
             value={form.nama_mahasiswa || ''}
@@ -2549,6 +2570,9 @@ function JadwalTab({
                   {jenis === 'karya_akhir' && (
                     <>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Angkatan
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Nama Mahasiswa
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
@@ -2741,6 +2765,11 @@ function JadwalTab({
                     )}
                     {jenis === 'karya_akhir' && (
                       <>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="font-semibold text-slate-800">
+                            {row.nama_angkatan}
+                          </span>
+                        </td>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="font-semibold text-slate-800">
                             {row.nama_mahasiswa}
