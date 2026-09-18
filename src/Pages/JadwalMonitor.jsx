@@ -315,19 +315,20 @@ export default function JadwalMonitor() {
             ...item,
             ruangan_display: ruanganMap[item.nama_ruangan] || '-',
             user_display: item.nama_user || '-',
+            keterangan_display: item.keterangan || '',
           };
 
           allSchedules.push({
             id: `L${merged.id}`,
             type: 'lain_lain',
-            kode: 'LAINNYA',
+            kode: merged.user_display,
             jam: `${formatTime(merged.mulai_jadwal)} - ${formatTime(merged.akhir_jadwal)}`,
             kegiatan: merged.agenda || 'Kegiatan Lain',
             tempat:
               merged.jenis_pertemuan === 'daring'
                 ? 'Daring (Online)'
                 : merged.ruangan_display || '-',
-            dosen: merged.user_display || '-',
+            dosen: merged.keterangan_display,
             status: getStatus(merged.mulai_jadwal, merged.akhir_jadwal),
             mulai: new Date(merged.mulai_jadwal),
             akhir: new Date(merged.akhir_jadwal),

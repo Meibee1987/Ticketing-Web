@@ -113,6 +113,7 @@ const PERKULIAHAN_MAP = {
   'id-password': '_parse_zoom_info',
   link: '_parse_zoom_info',
   'zoom id': 'zoom_id',
+  'link id': 'zoom_id',
   zoom_id: 'zoom_id',
   'zoom password': 'zoom_password',
   zoom_password: 'zoom_password',
@@ -170,6 +171,7 @@ const KARYA_AKHIR_MAP = {
   petugas_zoom: 'petugas_zoom',
   'id - password': '_parse_zoom_info',
   'zoom id': 'zoom_id',
+  'link id': 'zoom_id',
   'zoom password': 'zoom_password',
   'dosen 1': '_lookup_dosen_ka',
   dosen1: '_lookup_dosen_ka',
@@ -191,6 +193,7 @@ const KARYA_AKHIR_MAP = {
 const LAIN_LAIN_MAP = {
   'nama user': 'nama_user',
   nama_user: 'nama_user',
+  keterangan: 'keterangan',
   agenda: 'agenda',
   jam: '_parse_jam',
   waktu: '_parse_jam',
@@ -205,6 +208,7 @@ const LAIN_LAIN_MAP = {
   petugas_zoom: 'petugas_zoom',
   'id - password': '_parse_zoom_info',
   'zoom id': 'zoom_id',
+  'link id': 'zoom_id',
   'zoom password': 'zoom_password',
   catatan: 'note',
   note: 'note',
@@ -609,6 +613,7 @@ export default function ImportJadwal({
     }
     return [
       { key: 'nama_user', label: 'Nama User' },
+      { key: 'keterangan', label: 'Keterangan' },
       { key: 'agenda', label: 'Agenda' },
       { key: '_parse_jam', label: 'Jam (Mulai - Selesai)' },
       { key: '_parse_jenis_pertemuan', label: 'Jenis Pertemuan' },
@@ -731,7 +736,7 @@ export default function ImportJadwal({
             ? '_lookup_dosen1'
             : jenis === 'karya_akhir'
               ? 'nama_mahasiswa'
-              : 'nama_user';
+              : 'keterangan';
       }
 
       // Pada Google Sheet jadwal, kolom A tidak memiliki judul: baris kuning
@@ -1052,6 +1057,7 @@ export default function ImportJadwal({
             case 'note':
             case 'nama_mahasiswa':
             case 'nama_user':
+            case 'keterangan':
             case 'agenda':
               record[target] = val;
               break;

@@ -8,6 +8,7 @@ import {
   CircleAlert,
   CircleDot,
   Clock3,
+  FileText,
   ImageOff,
   MapPin,
   UserRound,
@@ -234,12 +235,16 @@ export function MonitorScheduleCard({ item }) {
   const status = STATUS_STYLES[item.status] || STATUS_STYLES.default;
   const agenda = getDisplayText(item.kegiatan, 'Agenda belum tersedia');
   const location = getDisplayText(item.tempat);
-  const lecturer = getDisplayText(item.dosen);
+  const lecturer = getDisplayText(
+    item.dosen,
+    item.type === 'lain_lain' ? '' : 'Belum ditentukan'
+  );
   const category = getDisplayText(item.kode, 'Kategori');
   const time = getDisplayText(item.jam, 'Waktu belum ditentukan').replace(
     ' - ',
     '–'
   );
+  const DetailIcon = item.type === 'lain_lain' ? FileText : UserRound;
 
   return (
     <article
@@ -295,24 +300,28 @@ export function MonitorScheduleCard({ item }) {
           </div>
         </div>
 
-        <div className="flex min-w-0 items-start gap-2.5">
-          <UserRound
-            size={19}
-            className="mt-0.5 shrink-0 text-primary-600"
-            strokeWidth={1.9}
-            aria-hidden="true"
-          />
-          <p
-            className={`line-clamp-2 min-w-0 text-sm leading-5 3xl:text-base 3xl:leading-6 ${
-              lecturer === 'Belum ditentukan'
-                ? 'text-slate-500'
-                : 'font-medium text-slate-800'
-            }`}
-            title={lecturer}
-          >
-            {lecturer}
-          </p>
-        </div>
+        {lecturer ? (
+          <div className="flex min-w-0 items-start gap-2.5">
+            <DetailIcon
+              size={19}
+              className="mt-0.5 shrink-0 text-primary-600"
+              strokeWidth={1.9}
+              aria-hidden="true"
+            />
+            <p
+              className={`line-clamp-2 min-w-0 text-sm leading-5 3xl:text-base 3xl:leading-6 ${
+                lecturer === 'Belum ditentukan'
+                  ? 'text-slate-500'
+                  : 'font-medium text-slate-800'
+              }`}
+              title={lecturer}
+            >
+              {lecturer}
+            </p>
+          </div>
+        ) : (
+          <div aria-hidden="true" />
+        )}
 
         <div className="hidden justify-self-end xl:block">
           <StatusBadge status={item.status} />

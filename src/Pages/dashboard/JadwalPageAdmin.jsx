@@ -887,7 +887,7 @@ export default function JadwalPageAdmin() {
         jenis: 'lain_lain',
         nama_ruangan: ruanganMap[j.nama_ruangan] || '-',
         agenda_display: j.agenda || '-',
-        keterangan: j.nama_user || '-',
+        keterangan: j.keterangan || '-',
         ruangan_id_raw: j.nama_ruangan,
         mulai_formatted: formatTimestamp(j.mulai_jadwal),
         akhir_formatted: formatTimestamp(j.akhir_jadwal),
@@ -990,6 +990,7 @@ export default function JadwalPageAdmin() {
         id: null,
         nama_ruangan: '',
         nama_user: '',
+        keterangan: '',
         mulai_jadwal: '',
         akhir_jadwal: '',
         agenda: '',
@@ -1092,6 +1093,7 @@ export default function JadwalPageAdmin() {
         id: row.id,
         nama_ruangan: row.ruangan_id_raw || '',
         nama_user: row.nama_user || '',
+        keterangan: row.keterangan === '-' ? '' : row.keterangan || '',
         agenda: row.agenda || '',
         mulai_jadwal: toDatetimeLocal(row.mulai_jadwal),
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
@@ -1582,6 +1584,7 @@ export default function JadwalPageAdmin() {
         'Mata Kuliah',
         'Nama Mahasiswa',
         'Nama User',
+        'Keterangan',
         'Agenda',
         'Tanggal',
         'Mulai',
@@ -1595,7 +1598,7 @@ export default function JadwalPageAdmin() {
         'Paralel',
         'Real Perkuliahan',
         'Petugas Zoom',
-        'Zoom ID',
+        'Link ID',
         'Zoom Password',
         'Moderator',
         'Penguji 1',
@@ -1622,6 +1625,9 @@ export default function JadwalPageAdmin() {
           d.jenis === 'perkuliahan' ? d.nama_matkul || '' : '',
           d.jenis === 'karya_akhir' ? d.nama_mahasiswa || '' : '',
           d.jenis === 'lain_lain' ? d.nama_user || '' : '',
+          d.jenis === 'lain_lain' && d.keterangan !== '-'
+            ? d.keterangan || ''
+            : '',
           d.jenis === 'karya_akhir' || d.jenis === 'lain_lain'
             ? d.agenda_display || ''
             : '',
@@ -1768,10 +1774,10 @@ export default function JadwalPageAdmin() {
             form.jenis_pertemuan === 'daring') && (
             <>
               <InputField
-                label="Zoom ID"
+                label="Link ID"
                 value={form.zoom_id || ''}
                 onChange={(v) => handleChange('zoom_id', v)}
-                placeholder="Masukkan Zoom Meeting ID"
+                placeholder="Masukkan Link ID"
               />
               <InputField
                 label="Zoom Password"
@@ -1881,10 +1887,10 @@ export default function JadwalPageAdmin() {
             form.jenis_pertemuan === 'daring') && (
             <>
               <InputField
-                label="Zoom ID"
+                label="Link ID"
                 value={form.zoom_id || ''}
                 onChange={(v) => handleChange('zoom_id', v)}
-                placeholder="Masukkan Zoom Meeting ID"
+                placeholder="Masukkan Link ID"
               />
               <InputField
                 label="Zoom Password"
@@ -1916,6 +1922,12 @@ export default function JadwalPageAdmin() {
             value={form.nama_user || ''}
             onChange={(v) => handleChange('nama_user', v)}
             placeholder="Masukkan nama user"
+          />
+          <InputField
+            label="Keterangan"
+            value={form.keterangan || ''}
+            onChange={(v) => handleChange('keterangan', v)}
+            placeholder="Masukkan keterangan"
           />
           <InputField
             label="Agenda"
@@ -1959,10 +1971,10 @@ export default function JadwalPageAdmin() {
             form.jenis_pertemuan === 'daring') && (
             <>
               <InputField
-                label="Zoom ID"
+                label="Link ID"
                 value={form.zoom_id || ''}
                 onChange={(v) => handleChange('zoom_id', v)}
-                placeholder="Masukkan Zoom Meeting ID"
+                placeholder="Masukkan Link ID"
               />
               <InputField
                 label="Zoom Password"
@@ -2607,6 +2619,9 @@ function JadwalTab({
                         Nama User
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
+                        Keterangan
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-center border border-slate-300">
                         Waktu
                       </th>
                       <th className="py-3 px-4 font-semibold text-center border border-slate-300">
@@ -2710,7 +2725,7 @@ function JadwalTab({
                             row.zoom_id && (
                               <div className="mt-1 text-xs text-slate-600">
                                 <div className="font-semibold">
-                                  Zoom ID: {row.zoom_id}
+                                  Link ID: {row.zoom_id}
                                 </div>
                                 {row.zoom_password && (
                                   <div>Pass: {row.zoom_password}</div>
@@ -2865,7 +2880,7 @@ function JadwalTab({
                             row.zoom_id && (
                               <div className="mt-1 text-xs text-slate-600">
                                 <div className="font-semibold">
-                                  Zoom ID: {row.zoom_id}
+                                  Link ID: {row.zoom_id}
                                 </div>
                                 {row.zoom_password && (
                                   <div>Pass: {row.zoom_password}</div>
@@ -2884,7 +2899,12 @@ function JadwalTab({
                       <>
                         <td className="py-3 px-4 border border-slate-200">
                           <span className="font-semibold text-slate-800">
-                            {row.nama_user || row.keterangan}
+                            {row.nama_user || '-'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 border border-slate-200">
+                          <span className="text-slate-800">
+                            {row.keterangan || '-'}
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">
@@ -2928,7 +2948,7 @@ function JadwalTab({
                           {row.jenis_pertemuan === 'hybrid' && row.zoom_id && (
                             <div className="mt-1 text-xs text-slate-600">
                               <div className="font-semibold">
-                                Zoom ID: {row.zoom_id}
+                                Link ID: {row.zoom_id}
                               </div>
                               {row.zoom_password && (
                                 <div>Pass: {row.zoom_password}</div>
