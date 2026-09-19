@@ -521,6 +521,9 @@ export default function ImportJadwal({
   const [resolvingConflictId, setResolvingConflictId] = useState(null);
   const [checkingConflictId, setCheckingConflictId] = useState(null);
   const [expandedConflictIds, setExpandedConflictIds] = useState([]);
+  const [roomAvailabilityByConflict, setRoomAvailabilityByConflict] = useState(
+    {}
+  );
   const [undoing, setUndoing] = useState(false);
   const [importBatchTag, setImportBatchTag] = useState('');
   const [allRuangan, setAllRuangan] = useState([]);
@@ -1463,9 +1466,7 @@ export default function ImportJadwal({
     }
 
     setImportResult(results);
-    setExpandedConflictIds(
-      results.conflicts.length > 0 ? [results.conflicts[0].id] : []
-    );
+    setExpandedConflictIds([]);
     setImporting(false);
 
     // Kirim notifikasi ke dashboard
@@ -1515,6 +1516,13 @@ export default function ImportJadwal({
   };
 
   const handleConflictChange = (conflictId, field, value) => {
+    if (field === 'mulai_jadwal' || field === 'akhir_jadwal') {
+      setRoomAvailabilityByConflict((current) => {
+        const next = { ...current };
+        delete next[conflictId];
+        return next;
+      });
+    }
     setImportResult((current) => {
       if (!current) return current;
 
@@ -1548,6 +1556,11 @@ export default function ImportJadwal({
     setExpandedConflictIds((current) =>
       current.filter((id) => id !== conflictId)
     );
+    setRoomAvailabilityByConflict((current) => {
+      const next = { ...current };
+      delete next[conflictId];
+      return next;
+    });
     setImportResult((current) => {
       if (!current) return current;
       return {
@@ -1561,11 +1574,99 @@ export default function ImportJadwal({
   };
 
   const toggleConflict = (conflictId) => {
+    if (!expandedConflictIds.includes(conflictId)) {
+      void handleLoadRoomAvailability(conflictId);
+    }
     setExpandedConflictIds((current) =>
       current.includes(conflictId)
         ? current.filter((id) => id !== conflictId)
         : [...current, conflictId]
     );
+  };
+
+  const handleLoadRoomAvailability = async (conflictId) => {
+    const conflict = importResult?.conflicts.find(
+      (item) => item.id === conflictId
+    );
+    if (!conflict) return;
+
+    const { mulai_jadwal: mulai, akhir_jadwal: akhir } = conflict.record;
+    const start = new Date(mulai);
+    const end = new Date(akhir);
+    if (
+      !mulai ||
+      !akhir ||
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      end <= start
+    ) {
+      setRoomAvailabilityByConflict((current) => ({
+        ...current,
+        [conflictId]: {
+          loading: false,
+          error:
+            'Lengkapi waktu yang valid untuk melihat ketersediaan ruangan.',
+          occupied: {},
+        },
+      }));
+      return;
+    }
+
+    setRoomAvailabilityByConflict((current) => ({
+      ...current,
+      [conflictId]: { loading: true, error: '', occupied: {} },
+    }));
+
+    try {
+      const { data, error } = await supabase
+        .from('view_jadwal_union')
+        .select('ruangan_id, jenis_jadwal, id_asli, mulai_jadwal, akhir_jadwal')
+        .lt('mulai_jadwal', akhir)
+        .gt('akhir_jadwal', mulai);
+      if (error) throw error;
+
+      const currentType = {
+        perkuliahan: 'PERKULIAHAN',
+        karya_akhir: 'KARYA_AKHIR',
+        lain_lain: 'LAIN_LAIN',
+      }[jenis];
+      const typeLabels = {
+        PERKULIAHAN: 'Perkuliahan',
+        KARYA_AKHIR: 'Karya Akhir',
+        LAIN_LAIN: 'Lain-lain',
+      };
+      const occupied = {};
+      (data || []).forEach((schedule) => {
+        if (
+          conflict.existingId != null &&
+          schedule.jenis_jadwal === currentType &&
+          String(schedule.id_asli) === String(conflict.existingId)
+        ) {
+          return;
+        }
+        if (!schedule.ruangan_id) return;
+
+        occupied[String(schedule.ruangan_id)] = {
+          label: typeLabels[schedule.jenis_jadwal] || schedule.jenis_jadwal,
+          start: schedule.mulai_jadwal,
+          end: schedule.akhir_jadwal,
+        };
+      });
+
+      setRoomAvailabilityByConflict((current) => ({
+        ...current,
+        [conflictId]: { loading: false, error: '', occupied },
+      }));
+    } catch (error) {
+      setRoomAvailabilityByConflict((current) => ({
+        ...current,
+        [conflictId]: {
+          loading: false,
+          error: error.message || 'Ketersediaan ruangan gagal dimuat.',
+          occupied: {},
+        },
+      }));
+    }
   };
 
   const handleCheckConflict = async (conflictId) => {
@@ -1766,6 +1867,11 @@ export default function ImportJadwal({
       setExpandedConflictIds((current) =>
         current.filter((id) => id !== conflictId)
       );
+      setRoomAvailabilityByConflict((current) => {
+        const next = { ...current };
+        delete next[conflictId];
+        return next;
+      });
     } catch (error) {
       setImportResult((current) => ({
         ...current,
@@ -1800,6 +1906,7 @@ export default function ImportJadwal({
     setResolvingConflictId(null);
     setCheckingConflictId(null);
     setExpandedConflictIds([]);
+    setRoomAvailabilityByConflict({});
     setUndoing(false);
     setImportBatchTag('');
     setGoogleSheetLoading(false);
@@ -2685,6 +2792,8 @@ export default function ImportJadwal({
                                 String(room.id) ===
                                 String(conflict.record[roomField])
                             );
+                            const roomAvailability =
+                              roomAvailabilityByConflict[conflict.id];
                             const isBusy = isChecking || isResolving;
 
                             return (
@@ -2831,6 +2940,11 @@ export default function ImportJadwal({
                                               event.target.value
                                             )
                                           }
+                                          onFocus={() =>
+                                            handleLoadRoomAvailability(
+                                              conflict.id
+                                            )
+                                          }
                                           className="ui-field mt-1 w-full text-xs"
                                         >
                                           <option value="luring">Luring</option>
@@ -2865,15 +2979,49 @@ export default function ImportJadwal({
                                           <option value="">
                                             Tanpa ruangan
                                           </option>
-                                          {roomOptions.map((room) => (
-                                            <option
-                                              key={room.id}
-                                              value={room.id}
-                                            >
-                                              {room.nama_ruangan}
-                                            </option>
-                                          ))}
+                                          {roomOptions.map((room) => {
+                                            const occupancy =
+                                              roomAvailability?.occupied?.[
+                                                String(room.id)
+                                              ];
+                                            return (
+                                              <option
+                                                key={room.id}
+                                                value={room.id}
+                                                disabled={Boolean(occupancy)}
+                                              >
+                                                {room.nama_ruangan}
+                                                {roomAvailability?.loading
+                                                  ? ' — Memeriksa...'
+                                                  : occupancy
+                                                    ? ` — Sedang dipakai (${occupancy.label})`
+                                                    : roomAvailability
+                                                      ? ' — ✓ Tersedia'
+                                                      : ''}
+                                              </option>
+                                            );
+                                          })}
                                         </select>
+                                        {roomAvailability?.loading && (
+                                          <span className="mt-1 block text-[11px] text-blue-600">
+                                            Memeriksa seluruh ruangan pada waktu
+                                            tersebut...
+                                          </span>
+                                        )}
+                                        {roomAvailability?.error && (
+                                          <span className="mt-1 block text-[11px] text-red-600">
+                                            {roomAvailability.error}
+                                          </span>
+                                        )}
+                                        {roomAvailability &&
+                                          !roomAvailability.loading &&
+                                          !roomAvailability.error && (
+                                            <span className="mt-1 block text-[11px] text-slate-500">
+                                              Ruangan bertanda tersedia dapat
+                                              dipilih; ruangan terpakai
+                                              dinonaktifkan.
+                                            </span>
+                                          )}
                                       </label>
                                     </div>
 
