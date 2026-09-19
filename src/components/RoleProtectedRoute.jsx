@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { isEmailAllowed } from '../constants/accessControl';
 
 const Spinner = () => (
   <div className="min-h-screen flex items-center justify-center">
@@ -29,12 +30,18 @@ const AccessDenied = ({ roleName }) => (
   </div>
 );
 
-export default function RoleProtectedRoute({ children, allowedRoles = [] }) {
+export default function RoleProtectedRoute({
+  children,
+  allowedRoles = [],
+  allowedEmails = [],
+}) {
   const { user, userRole, loading } = useAuth();
 
   if (loading) return <Spinner />;
   if (!user) return <Navigate to="/login" replace />;
-  if (!allowedRoles.length || allowedRoles.includes(userRole?.roleName))
-    return children;
+  const roleAllowed =
+    !allowedRoles.length || allowedRoles.includes(userRole?.roleName);
+  const emailAllowed = isEmailAllowed(user.email, allowedEmails);
+  if (roleAllowed && emailAllowed) return children;
   return <AccessDenied roleName={userRole?.roleName} />;
 }

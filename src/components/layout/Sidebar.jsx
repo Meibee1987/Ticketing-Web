@@ -1,11 +1,16 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import {
+  HONOR_DOSEN_ALLOWED_EMAILS,
+  isEmailAllowed,
+} from '../../constants/accessControl';
+import {
   Building2,
   CalendarDays,
   Database,
   LayoutDashboard,
   LogOut,
+  Banknote,
   MonitorPlay,
   ShieldCheck,
   Users,
@@ -20,6 +25,12 @@ const MENU_ITEMS = [
     icon: ShieldCheck,
     label: 'Jadwal Admin',
     roles: ['admin', 'super admin'],
+  },
+  {
+    to: '/dashboard/honor-dosen',
+    icon: Banknote,
+    label: 'Honor Dosen',
+    emails: HONOR_DOSEN_ALLOWED_EMAILS,
   },
   {
     to: '/dashboard/monitor-settings',
@@ -43,7 +54,7 @@ const MENU_ITEMS = [
 ];
 
 export default function Sidebar({ open, onClose }) {
-  const { userRole, signOut } = useAuth();
+  const { user, userRole, signOut } = useAuth();
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -57,7 +68,9 @@ export default function Sidebar({ open, onClose }) {
   };
 
   const visibleItems = MENU_ITEMS.filter(
-    (item) => !item.roles || item.roles.includes(userRole?.roleName)
+    (item) =>
+      (!item.roles || item.roles.includes(userRole?.roleName)) &&
+      (!item.emails || isEmailAllowed(user?.email, item.emails))
   );
 
   const navigationClass = ({ isActive }) =>

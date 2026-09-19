@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
+import { HONOR_DOSEN_ALLOWED_EMAILS } from './constants/accessControl';
 
 const LoginPage = lazy(() => import('./Pages/LoginPage'));
 const LoginPageOTP = lazy(() => import('./Pages/LoginPageOTP'));
@@ -19,6 +20,7 @@ const UsersPage = lazy(() => import('./Pages/dashboard/UsersPage'));
 const SettingsPage = lazy(() => import('./Pages/dashboard/SettingsPage'));
 const JadwalPage = lazy(() => import('./Pages/dashboard/JadwalPage'));
 const JadwalPageAdmin = lazy(() => import('./Pages/dashboard/JadwalPageAdmin'));
+const HonorDosenPage = lazy(() => import('./Pages/dashboard/HonorDosenPage'));
 const RuanganPage = lazy(() => import('./Pages/dashboard/RuanganPage'));
 const MasterData = lazy(() => import('./Pages/dashboard/MasterData'));
 const MonitorSettings = lazy(() => import('./Pages/dashboard/MonitorSettings'));
@@ -105,6 +107,16 @@ export default function App() {
                   element={
                     <RoleProtectedRoute allowedRoles={['super admin', 'admin']}>
                       <JadwalPageAdmin />
+                    </RoleProtectedRoute>
+                  }
+                />
+                <Route
+                  path="honor-dosen"
+                  element={
+                    <RoleProtectedRoute
+                      allowedEmails={HONOR_DOSEN_ALLOWED_EMAILS}
+                    >
+                      <HonorDosenPage />
                     </RoleProtectedRoute>
                   }
                 />

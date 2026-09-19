@@ -12,6 +12,7 @@ const ROUTE_TITLES = {
   '/dashboard': 'Dashboard',
   '/dashboard/jadwal': 'Jadwal',
   '/dashboard/jadwal-admin': 'Jadwal Admin',
+  '/dashboard/honor-dosen': 'Honor Dosen',
   '/dashboard/ruangan': 'Ruangan',
   '/dashboard/database': 'Master Data',
   '/dashboard/users': 'Users',

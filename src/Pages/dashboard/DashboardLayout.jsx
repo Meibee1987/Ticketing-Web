@@ -2,9 +2,13 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { supabase, TOKEN_KEY } from '../../supabaseClient';
 import { useAuth } from '../../hooks/useAuth';
 import { useState } from 'react';
+import {
+  HONOR_DOSEN_ALLOWED_EMAILS,
+  isEmailAllowed,
+} from '../../constants/accessControl';
 
 export default function DashboardLayout() {
-  const { userRole, signOut } = useAuth();
+  const { user, userRole, signOut } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -58,6 +62,13 @@ export default function DashboardLayout() {
             <NavLink to="/dashboard/jadwal-admin" className={menuItemClass}>
               <span>🔐</span>
               <span>Jadwal Admin</span>
+            </NavLink>
+          )}
+
+          {isEmailAllowed(user?.email, HONOR_DOSEN_ALLOWED_EMAILS) && (
+            <NavLink to="/dashboard/honor-dosen" className={menuItemClass}>
+              <span>Rp</span>
+              <span>Honor Dosen</span>
             </NavLink>
           )}
 
