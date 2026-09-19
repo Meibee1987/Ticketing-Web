@@ -49,7 +49,20 @@ const formatTimestamp = (ts) => {
 
 // Helper untuk format input date (YYYY-MM-DD)
 const formatDateInput = (date) => {
-  return date.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDateQueryRange = (date) => {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + 1);
+
+  return {
+    start: `${formatDateInput(date)}T00:00:00`,
+    end: `${formatDateInput(nextDate)}T00:00:00`,
+  };
 };
 
 // Helper untuk format tanggal display (Indonesia)
@@ -261,15 +274,21 @@ function ViewDataTable({ data, columns }) {
 // ================================================================================
 // SECTION: JADWAL PERKULIAHAN (VIEW ONLY dengan Realtime)
 // ================================================================================
-function useJadwal() {
+function useJadwal(selectedDate) {
   const [state, setState] = useState(INITIAL_STATE);
+  const selectedDateKey = formatDateInput(selectedDate);
 
   const fetchJadwal = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
+      const { start, end } = getDateQueryRange(
+        new Date(`${selectedDateKey}T00:00:00`)
+      );
       const { data, error } = await supabase
         .from('jadwal_perkuliahan')
         .select('*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)')
+        .gte('mulai_jadwal', start)
+        .lt('mulai_jadwal', end)
         .order('mulai_jadwal');
 
       if (error) throw error;
@@ -293,7 +312,7 @@ function useJadwal() {
         error: err.message || 'Gagal mengambil data',
       });
     }
-  }, []);
+  }, [selectedDateKey]);
 
   useEffect(() => {
     fetchJadwal();
@@ -319,7 +338,7 @@ function useJadwal() {
 }
 
 function JadwalTable({ selectedDate }) {
-  const { jadwal, loading, error } = useJadwal();
+  const { jadwal, loading, error } = useJadwal(selectedDate);
 
   // Filter jadwal berdasarkan tanggal yang dipilih
   const filteredJadwal = jadwal.filter((j) => {
@@ -404,16 +423,25 @@ function JadwalTable({ selectedDate }) {
 // ================================================================================
 // SECTION: JADWAL KARYA AKHIR (VIEW ONLY dengan Realtime)
 // ================================================================================
-function useJadwalKaryaAkhir() {
+function useJadwalKaryaAkhir(selectedDate) {
   const [state, setState] = useState(INITIAL_STATE);
+  const selectedDateKey = formatDateInput(selectedDate);
 
   const fetchJadwal = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
+      const { start, end } = getDateQueryRange(
+        new Date(`${selectedDateKey}T00:00:00`)
+      );
 
       const [jadwalRes, ruanganRes, agendaRes, angkatanRes] = await Promise.all(
         [
-          supabase.from('jadwal_karya_akhir').select('*').order('mulai_jadwal'),
+          supabase
+            .from('jadwal_karya_akhir')
+            .select('*')
+            .gte('mulai_jadwal', start)
+            .lt('mulai_jadwal', end)
+            .order('mulai_jadwal'),
           supabase.from('ruangan').select('id, nama_ruangan'),
           supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
           supabase.from('angkatan').select('id, nama_angkatan'),
@@ -455,7 +483,7 @@ function useJadwalKaryaAkhir() {
         error: err.message || 'Gagal mengambil data',
       });
     }
-  }, []);
+  }, [selectedDateKey]);
 
   useEffect(() => {
     // Initial synchronization with the external schedule data source.
@@ -483,7 +511,7 @@ function useJadwalKaryaAkhir() {
 }
 
 function JadwalKaryaAkhirTable({ selectedDate }) {
-  const { jadwal, loading, error } = useJadwalKaryaAkhir();
+  const { jadwal, loading, error } = useJadwalKaryaAkhir(selectedDate);
 
   // Filter jadwal berdasarkan tanggal yang dipilih
   const filteredJadwal = jadwal.filter((j) => {
@@ -577,15 +605,24 @@ function JadwalKaryaAkhirTable({ selectedDate }) {
 // ================================================================================
 // SECTION: JADWAL LAIN-LAIN (VIEW ONLY dengan Realtime)
 // ================================================================================
-function useJadwalLainLain() {
+function useJadwalLainLain(selectedDate) {
   const [state, setState] = useState(INITIAL_STATE);
+  const selectedDateKey = formatDateInput(selectedDate);
 
   const fetchJadwal = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }));
+      const { start, end } = getDateQueryRange(
+        new Date(`${selectedDateKey}T00:00:00`)
+      );
 
       const [jadwalRes, ruanganRes] = await Promise.all([
-        supabase.from('jadwal_lain_lain').select('*').order('mulai_jadwal'),
+        supabase
+          .from('jadwal_lain_lain')
+          .select('*')
+          .gte('mulai_jadwal', start)
+          .lt('mulai_jadwal', end)
+          .order('mulai_jadwal'),
         supabase.from('ruangan').select('id, nama_ruangan'),
       ]);
 
@@ -614,7 +651,7 @@ function useJadwalLainLain() {
         error: err.message || 'Gagal mengambil data',
       });
     }
-  }, []);
+  }, [selectedDateKey]);
 
   useEffect(() => {
     // Initial synchronization with the external schedule data source.
@@ -642,7 +679,7 @@ function useJadwalLainLain() {
 }
 
 function JadwalLainLainTable({ selectedDate }) {
-  const { jadwal, loading, error } = useJadwalLainLain();
+  const { jadwal, loading, error } = useJadwalLainLain(selectedDate);
 
   // Filter jadwal berdasarkan tanggal yang dipilih
   const filteredJadwal = jadwal.filter((j) => {

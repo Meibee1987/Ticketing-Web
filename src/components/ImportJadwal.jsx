@@ -16,6 +16,7 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
   Database,
   FileSpreadsheet,
   Info,
@@ -381,6 +382,63 @@ function hasImportedChanges(existingRecord, importedRecord) {
   );
 }
 
+function matchesImportedRecord(existingRecord, importedRecord, jenis) {
+  if (
+    !importedRecord.mulai_jadwal ||
+    existingRecord.mulai_jadwal !== importedRecord.mulai_jadwal
+  ) {
+    return false;
+  }
+
+  if (jenis === 'perkuliahan') {
+    return (
+      (!importedRecord.id_mata_kuliah ||
+        String(existingRecord.id_mata_kuliah) ===
+          String(importedRecord.id_mata_kuliah)) &&
+      (importedRecord.paralel != null
+        ? String(existingRecord.paralel) === String(importedRecord.paralel)
+        : existingRecord.paralel == null) &&
+      (!importedRecord.id_angkatan ||
+        String(existingRecord.id_angkatan) ===
+          String(importedRecord.id_angkatan)) &&
+      (!importedRecord.kelas || existingRecord.kelas === importedRecord.kelas)
+    );
+  }
+
+  if (jenis === 'karya_akhir') {
+    return (
+      !importedRecord.nama_mahasiswa ||
+      existingRecord.nama_mahasiswa === importedRecord.nama_mahasiswa
+    );
+  }
+
+  return (
+    !importedRecord.nama_user ||
+    existingRecord.nama_user === importedRecord.nama_user
+  );
+}
+
+async function fetchExistingSchedulesFrom(tableName, startTimestamp) {
+  const pageSize = 1000;
+  const rows = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('*')
+      .gte('mulai_jadwal', startTimestamp)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    const pageRows = data || [];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) return rows;
+    from += pageSize;
+  }
+}
+
 async function findImportedRoomConflict({
   record,
   tableName,
@@ -460,6 +518,9 @@ export default function ImportJadwal({
   const [step, setStep] = useState(1); // 1=upload, 2=mapping, 3=preview, 4=importing
   const [importResult, setImportResult] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [resolvingConflictId, setResolvingConflictId] = useState(null);
+  const [checkingConflictId, setCheckingConflictId] = useState(null);
+  const [expandedConflictIds, setExpandedConflictIds] = useState([]);
   const [undoing, setUndoing] = useState(false);
   const [importBatchTag, setImportBatchTag] = useState('');
   const [allRuangan, setAllRuangan] = useState([]);
@@ -495,9 +556,6 @@ export default function ImportJadwal({
     const activityColumn = normalizedHeaders.indexOf('kegiatan');
     const hasRowType = typeColumn >= 0 || activityColumn >= 0;
 
-    // File biasa tanpa kolom kategori tetap mengikuti perilaku import manual.
-    if (dataSource !== 'google' && !hasRowType) return previewData;
-
     const selectedSourceSheet =
       dataSource === 'google' ? selectedGoogleSheet : selectedSheet;
     const isFlatScheduleSheet =
@@ -506,16 +564,24 @@ export default function ImportJadwal({
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const selectedDateColumn = Number.parseInt(dateColumn, 10);
-    if (!Number.isInteger(selectedDateColumn)) return [];
 
     let sectionDate = null;
     let sectionType = null;
     const scheduleRows = [];
 
     previewData.forEach((row) => {
-      const scheduleDate = excelDateToJS(row[selectedDateColumn]);
-      const nonEmpty = row.filter((cell) => cell !== '' && cell != null).length;
       const firstCell = String(row[0] || '').trim();
+      const dateFromColumn = Number.isInteger(selectedDateColumn)
+        ? excelDateToJS(row[selectedDateColumn])
+        : null;
+      const dateFromFirstCell =
+        /\d{1,2}\s+(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{2,4}/i.test(
+          firstCell
+        )
+          ? excelDateToJS(firstCell)
+          : null;
+      const scheduleDate = dateFromColumn || dateFromFirstCell;
+      const nonEmpty = row.filter((cell) => cell !== '' && cell != null).length;
 
       if (scheduleDate) {
         sectionDate = new Date(
@@ -536,7 +602,7 @@ export default function ImportJadwal({
           );
           if (rowType && rowType !== jenis) return;
           if (!rowType && hasRowType) return;
-          if (dataSource !== 'google' || sectionDate >= today) {
+          if (sectionDate >= today) {
             const scheduleRow = [...row];
             scheduleRow._scheduleDate = sectionDate;
             scheduleRows.push(scheduleRow);
@@ -554,11 +620,23 @@ export default function ImportJadwal({
         return;
       }
 
-      if (sectionType !== jenis) return;
-      if (dataSource === 'google' && sectionDate < today) return;
+      if (isFlatScheduleSheet) {
+        const rowType = getScheduleTypeFromLabel(
+          row[typeColumn >= 0 ? typeColumn : activityColumn]
+        );
+        if (rowType && rowType !== jenis) return;
+        if (!rowType && hasRowType) return;
+      } else if (dataSource === 'google' && sectionType !== jenis) {
+        return;
+      }
+
+      // Baris sebelum hari import tidak perlu masuk proses database. Baris
+      // tanpa tanggal tetap dipertahankan agar validasi import dapat memberi
+      // pesan yang tepat, bukan menghilangkannya tanpa penjelasan.
+      if (sectionDate && sectionDate < today) return;
 
       const scheduleRow = [...row];
-      scheduleRow._scheduleDate = sectionDate;
+      if (sectionDate) scheduleRow._scheduleDate = sectionDate;
       scheduleRows.push(scheduleRow);
     });
 
@@ -957,6 +1035,7 @@ export default function ImportJadwal({
       inserted: 0,
       updated: 0,
       errors: [],
+      conflicts: [],
       skipped: 0,
     };
     const tableName =
@@ -974,6 +1053,25 @@ export default function ImportJadwal({
     });
 
     let rowDate = null; // running date for grouped rows
+    const importNow = new Date();
+    const importDayStart = new Date(
+      importNow.getFullYear(),
+      importNow.getMonth(),
+      importNow.getDate()
+    );
+    let existingSchedules = null;
+    try {
+      existingSchedules = await fetchExistingSchedulesFrom(
+        tableName,
+        `${dateToLocalStr(importDayStart)}T00:00:00`
+      );
+    } catch (cacheError) {
+      // Tetap lanjut dengan query per baris jika prefetch tidak tersedia.
+      console.warn(
+        '[Import] Gagal memuat cache jadwal, memakai pencocokan per baris:',
+        cacheError
+      );
+    }
 
     for (let rowIdx = 0; rowIdx < filteredPreviewData.length; rowIdx++) {
       const row = filteredPreviewData[rowIdx];
@@ -1037,6 +1135,10 @@ export default function ImportJadwal({
           results.skipped++;
           continue;
         }
+
+        // Filter pengaman: jadwal sebelum hari import tidak menjalankan query
+        // pencocokan, pengecekan konflik, maupun proses simpan.
+        if (rowDate && rowDate < importDayStart) continue;
 
         const record = {};
         let jamStr = null;
@@ -1246,39 +1348,47 @@ export default function ImportJadwal({
         // Upsert logic: cek apakah data sudah ada → update, belum ada → insert
         let existingRecord = null;
         if (record.mulai_jadwal) {
-          let matchQuery = supabase.from(tableName).select('*');
-          if (jenis === 'perkuliahan') {
-            matchQuery = matchQuery.eq('mulai_jadwal', record.mulai_jadwal);
-            if (record.id_mata_kuliah)
-              matchQuery = matchQuery.eq(
-                'id_mata_kuliah',
-                record.id_mata_kuliah
-              );
-            if (record.paralel != null)
-              matchQuery = matchQuery.eq('paralel', record.paralel);
-            else matchQuery = matchQuery.is('paralel', null);
-            if (record.id_angkatan)
-              matchQuery = matchQuery.eq('id_angkatan', record.id_angkatan);
-            if (record.kelas) matchQuery = matchQuery.eq('kelas', record.kelas);
-          } else if (jenis === 'karya_akhir') {
-            matchQuery = matchQuery.eq('mulai_jadwal', record.mulai_jadwal);
-            if (record.nama_mahasiswa)
-              matchQuery = matchQuery.eq(
-                'nama_mahasiswa',
-                record.nama_mahasiswa
-              );
+          if (existingSchedules) {
+            existingRecord =
+              existingSchedules.find((item) =>
+                matchesImportedRecord(item, record, jenis)
+              ) || null;
           } else {
-            matchQuery = matchQuery.eq('mulai_jadwal', record.mulai_jadwal);
-            if (record.nama_user)
-              matchQuery = matchQuery.eq('nama_user', record.nama_user);
+            let matchQuery = supabase.from(tableName).select('*');
+            if (jenis === 'perkuliahan') {
+              matchQuery = matchQuery.eq('mulai_jadwal', record.mulai_jadwal);
+              if (record.id_mata_kuliah)
+                matchQuery = matchQuery.eq(
+                  'id_mata_kuliah',
+                  record.id_mata_kuliah
+                );
+              if (record.paralel != null)
+                matchQuery = matchQuery.eq('paralel', record.paralel);
+              else matchQuery = matchQuery.is('paralel', null);
+              if (record.id_angkatan)
+                matchQuery = matchQuery.eq('id_angkatan', record.id_angkatan);
+              if (record.kelas)
+                matchQuery = matchQuery.eq('kelas', record.kelas);
+            } else if (jenis === 'karya_akhir') {
+              matchQuery = matchQuery.eq('mulai_jadwal', record.mulai_jadwal);
+              if (record.nama_mahasiswa)
+                matchQuery = matchQuery.eq(
+                  'nama_mahasiswa',
+                  record.nama_mahasiswa
+                );
+            } else {
+              matchQuery = matchQuery.eq('mulai_jadwal', record.mulai_jadwal);
+              if (record.nama_user)
+                matchQuery = matchQuery.eq('nama_user', record.nama_user);
+            }
+            const { data: existing, error: matchError } =
+              await matchQuery.limit(1);
+            if (matchError)
+              throw new Error(
+                `Pengecekan data yang sama gagal: ${matchError.message}`
+              );
+            existingRecord = existing?.[0] || null;
           }
-          const { data: existing, error: matchError } =
-            await matchQuery.limit(1);
-          if (matchError)
-            throw new Error(
-              `Pengecekan data yang sama gagal: ${matchError.message}`
-            );
-          existingRecord = existing?.[0] || null;
         }
 
         if (existingRecord && !hasImportedChanges(existingRecord, record)) {
@@ -1296,9 +1406,16 @@ export default function ImportJadwal({
           roomNameById,
         });
         if (roomConflict) {
-          results.errors.push(
-            `Baris ${rowIdx + 1}: Konflik ruangan. ${roomConflict}`
-          );
+          results.conflicts.push({
+            id: `${rowIdx + 1}-${record.mulai_jadwal || Date.now()}`,
+            rowNumber: rowIdx + 1,
+            message: roomConflict,
+            record,
+            existingRecord,
+            existingId: existingRecord?.id || null,
+            verificationStatus: 'idle',
+            verificationMessage: '',
+          });
           continue;
         }
 
@@ -1315,6 +1432,17 @@ export default function ImportJadwal({
           if (!error) {
             results.updated++;
             results.success++;
+            if (existingSchedules) {
+              const cachedIndex = existingSchedules.findIndex(
+                (item) => String(item.id) === String(existingRecord.id)
+              );
+              if (cachedIndex >= 0) {
+                existingSchedules[cachedIndex] = {
+                  ...existingRecord,
+                  ...updateRecord,
+                };
+              }
+            }
           }
         } else {
           // Data belum ada → insert baru
@@ -1323,6 +1451,7 @@ export default function ImportJadwal({
           if (!error) {
             results.inserted++;
             results.success++;
+            if (existingSchedules) existingSchedules.push({ ...record });
           }
         }
         if (dbError) {
@@ -1334,6 +1463,9 @@ export default function ImportJadwal({
     }
 
     setImportResult(results);
+    setExpandedConflictIds(
+      results.conflicts.length > 0 ? [results.conflicts[0].id] : []
+    );
     setImporting(false);
 
     // Kirim notifikasi ke dashboard
@@ -1352,15 +1484,22 @@ export default function ImportJadwal({
           description: `${results.updated} data lama memiliki perubahan dan berhasil diperbarui dari file import oleh ${userName || 'User'}.`,
         });
       }
-      if (results.errors.length > 0) {
+      const failureMessages = [
+        ...results.errors,
+        ...results.conflicts.map(
+          (conflict) =>
+            `Baris ${conflict.rowNumber}: Konflik ruangan. ${conflict.message}`
+        ),
+      ];
+      if (failureMessages.length > 0) {
         onNotify({
           type: 'error',
           tag: 'ERROR',
-          title: `Import ${jenisLabel}: ${results.errors.length} Baris Gagal`,
+          title: `Import ${jenisLabel}: ${failureMessages.length} Baris Perlu Diperiksa`,
           description:
-            results.errors.slice(0, 3).join(' | ') +
-            (results.errors.length > 3
-              ? ` (+${results.errors.length - 3} lainnya)`
+            failureMessages.slice(0, 3).join(' | ') +
+            (failureMessages.length > 3
+              ? ` (+${failureMessages.length - 3} lainnya)`
               : ''),
         });
       }
@@ -1372,6 +1511,275 @@ export default function ImportJadwal({
           description: `${results.inserted} data baru berhasil diimport oleh ${userName || 'User'}.`,
         });
       }
+    }
+  };
+
+  const handleConflictChange = (conflictId, field, value) => {
+    setImportResult((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        conflicts: current.conflicts.map((conflict) => {
+          if (conflict.id !== conflictId) return conflict;
+
+          const nextRecord = {
+            ...conflict.record,
+            [field]: value,
+          };
+          if (field === 'jenis_pertemuan' && !usesPhysicalRoom(value)) {
+            if (jenis === 'perkuliahan') nextRecord.ruangan_id = null;
+            else nextRecord.nama_ruangan = null;
+          }
+
+          return {
+            ...conflict,
+            record: nextRecord,
+            saveError: '',
+            verificationStatus: 'idle',
+            verificationMessage: '',
+          };
+        }),
+      };
+    });
+  };
+
+  const handleSkipConflict = (conflictId) => {
+    setExpandedConflictIds((current) =>
+      current.filter((id) => id !== conflictId)
+    );
+    setImportResult((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        conflicts: current.conflicts.filter(
+          (conflict) => conflict.id !== conflictId
+        ),
+        skipped: current.skipped + 1,
+      };
+    });
+  };
+
+  const toggleConflict = (conflictId) => {
+    setExpandedConflictIds((current) =>
+      current.includes(conflictId)
+        ? current.filter((id) => id !== conflictId)
+        : [...current, conflictId]
+    );
+  };
+
+  const handleCheckConflict = async (conflictId) => {
+    const conflict = importResult?.conflicts.find(
+      (item) => item.id === conflictId
+    );
+    if (!conflict) return;
+
+    const start = new Date(conflict.record.mulai_jadwal);
+    const end = new Date(conflict.record.akhir_jadwal);
+    const roomField = jenis === 'perkuliahan' ? 'ruangan_id' : 'nama_ruangan';
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      end <= start
+    ) {
+      setImportResult((current) => ({
+        ...current,
+        conflicts: current.conflicts.map((item) =>
+          item.id === conflictId
+            ? {
+                ...item,
+                verificationStatus: 'invalid',
+                verificationMessage:
+                  'Waktu mulai dan selesai belum valid. Waktu selesai harus setelah waktu mulai.',
+              }
+            : item
+        ),
+      }));
+      return;
+    }
+    if (
+      usesPhysicalRoom(conflict.record.jenis_pertemuan) &&
+      !conflict.record[roomField]
+    ) {
+      setImportResult((current) => ({
+        ...current,
+        conflicts: current.conflicts.map((item) =>
+          item.id === conflictId
+            ? {
+                ...item,
+                verificationStatus: 'invalid',
+                verificationMessage:
+                  'Pilih ruangan untuk pertemuan luring atau hybrid.',
+              }
+            : item
+        ),
+      }));
+      return;
+    }
+
+    setCheckingConflictId(conflictId);
+    const tableName =
+      jenis === 'perkuliahan'
+        ? 'jadwal_perkuliahan'
+        : jenis === 'karya_akhir'
+          ? 'jadwal_karya_akhir'
+          : 'jadwal_lain_lain';
+    const roomNameById = Object.fromEntries(
+      (allRuangan.length > 0 ? allRuangan : options.ruangan || []).map(
+        (room) => [String(room.id), room.nama_ruangan]
+      )
+    );
+
+    try {
+      const effectiveRecord = conflict.existingRecord
+        ? { ...conflict.existingRecord, ...conflict.record }
+        : conflict.record;
+      const roomConflict = await findImportedRoomConflict({
+        record: effectiveRecord,
+        tableName,
+        existingId: conflict.existingId,
+        roomNameById,
+      });
+
+      setImportResult((current) => ({
+        ...current,
+        conflicts: current.conflicts.map((item) =>
+          item.id === conflictId
+            ? {
+                ...item,
+                message: roomConflict || item.message,
+                verificationStatus: roomConflict ? 'conflict' : 'ready',
+                verificationMessage: roomConflict
+                  ? `Masih konflik: ${roomConflict}`
+                  : 'Pemeriksaan berhasil. Waktu dan ruangan tersedia; data siap disimpan.',
+                saveError: '',
+              }
+            : item
+        ),
+      }));
+    } catch (error) {
+      setImportResult((current) => ({
+        ...current,
+        conflicts: current.conflicts.map((item) =>
+          item.id === conflictId
+            ? {
+                ...item,
+                verificationStatus: 'invalid',
+                verificationMessage:
+                  error.message || 'Pemeriksaan konflik gagal.',
+              }
+            : item
+        ),
+      }));
+    } finally {
+      setCheckingConflictId(null);
+    }
+  };
+
+  const handleRetryConflict = async (conflictId) => {
+    const conflict = importResult?.conflicts.find(
+      (item) => item.id === conflictId
+    );
+    if (!conflict) return;
+    if (conflict.verificationStatus !== 'ready') {
+      setImportResult((current) => ({
+        ...current,
+        conflicts: current.conflicts.map((item) =>
+          item.id === conflictId
+            ? {
+                ...item,
+                saveError:
+                  'Periksa perubahan terlebih dahulu sebelum menyimpan.',
+              }
+            : item
+        ),
+      }));
+      return;
+    }
+
+    setResolvingConflictId(conflictId);
+    const tableName =
+      jenis === 'perkuliahan'
+        ? 'jadwal_perkuliahan'
+        : jenis === 'karya_akhir'
+          ? 'jadwal_karya_akhir'
+          : 'jadwal_lain_lain';
+    const roomNameById = Object.fromEntries(
+      (allRuangan.length > 0 ? allRuangan : options.ruangan || []).map(
+        (room) => [String(room.id), room.nama_ruangan]
+      )
+    );
+
+    try {
+      const effectiveRecord = conflict.existingRecord
+        ? { ...conflict.existingRecord, ...conflict.record }
+        : conflict.record;
+      const roomConflict = await findImportedRoomConflict({
+        record: effectiveRecord,
+        tableName,
+        existingId: conflict.existingId,
+        roomNameById,
+      });
+
+      if (roomConflict) {
+        setImportResult((current) => ({
+          ...current,
+          conflicts: current.conflicts.map((item) =>
+            item.id === conflictId
+              ? {
+                  ...item,
+                  message: roomConflict,
+                  saveError: '',
+                  verificationStatus: 'conflict',
+                  verificationMessage: `Konflik baru ditemukan: ${roomConflict}`,
+                }
+              : item
+          ),
+        }));
+        return;
+      }
+
+      let dbError;
+      if (conflict.existingId) {
+        const updateRecord = { ...conflict.record };
+        delete updateRecord.created_by;
+        const { error } = await supabase
+          .from(tableName)
+          .update(updateRecord)
+          .eq('id', conflict.existingId);
+        dbError = error;
+      } else {
+        const { error } = await supabase
+          .from(tableName)
+          .insert([conflict.record]);
+        dbError = error;
+      }
+      if (dbError) throw dbError;
+
+      setImportResult((current) => ({
+        ...current,
+        success: current.success + 1,
+        inserted: current.inserted + (conflict.existingId ? 0 : 1),
+        updated: current.updated + (conflict.existingId ? 1 : 0),
+        conflicts: current.conflicts.filter((item) => item.id !== conflictId),
+      }));
+      setExpandedConflictIds((current) =>
+        current.filter((id) => id !== conflictId)
+      );
+    } catch (error) {
+      setImportResult((current) => ({
+        ...current,
+        conflicts: current.conflicts.map((item) =>
+          item.id === conflictId
+            ? {
+                ...item,
+                saveError: error.message || 'Gagal menyimpan perubahan.',
+              }
+            : item
+        ),
+      }));
+    } finally {
+      setResolvingConflictId(null);
     }
   };
 
@@ -1389,6 +1797,9 @@ export default function ImportJadwal({
     setStep(1);
     setImportResult(null);
     setImporting(false);
+    setResolvingConflictId(null);
+    setCheckingConflictId(null);
+    setExpandedConflictIds([]);
     setUndoing(false);
     setImportBatchTag('');
     setGoogleSheetLoading(false);
@@ -1449,6 +1860,81 @@ export default function ImportJadwal({
     karya_akhir: 'Karya Akhir',
     lain_lain: 'Lain-lain',
   };
+  const findOptionById = (items, id) =>
+    (items || []).find((item) => String(item.id) === String(id));
+  const parseRecordIds = (value) => {
+    if (Array.isArray(value)) return value;
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+  const getConflictDetails = (record) => {
+    const details = [{ label: 'Kategori', value: jenisLabels[jenis] || jenis }];
+
+    if (jenis === 'perkuliahan') {
+      const mataKuliah = findOptionById(
+        options.mataKuliah,
+        record.id_mata_kuliah
+      );
+      const mataKuliahName =
+        mataKuliah?.mata_kuliah || mataKuliah?.nama_matkul || record.kegiatan;
+      const mataKuliahCode = mataKuliah?.kode_mata_kuliah;
+      const angkatanIds = parseRecordIds(record.id_angkatans);
+      if (angkatanIds.length === 0 && record.id_angkatan) {
+        angkatanIds.push(record.id_angkatan);
+      }
+      const angkatanNames = angkatanIds
+        .map((id) => findOptionById(options.angkatan, id)?.nama_angkatan || id)
+        .join(', ');
+      const dosen = findOptionById(options.dosen, record.dosen_id);
+
+      details.push(
+        {
+          label: 'Kegiatan',
+          value: mataKuliahName
+            ? `${mataKuliahCode ? `${mataKuliahCode} — ` : ''}${mataKuliahName}`
+            : '-',
+        },
+        { label: 'Angkatan', value: angkatanNames || '-' },
+        {
+          label: 'Kelas / Paralel',
+          value: [
+            record.kelas && `Kelas ${record.kelas}`,
+            record.paralel != null && `Paralel ${record.paralel}`,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        },
+        { label: 'Dosen', value: dosen?.nama_dosen || '-' }
+      );
+    } else if (jenis === 'karya_akhir') {
+      const agenda = findOptionById(
+        options.agenda,
+        record.agenda_jadwal_karya_akhir
+      );
+      const angkatan = findOptionById(options.angkatan, record.nama_angkatan);
+      details.push(
+        {
+          label: 'Kegiatan',
+          value: agenda?.agenda_karya_akhir || '-',
+        },
+        { label: 'Mahasiswa', value: record.nama_mahasiswa || '-' },
+        { label: 'Angkatan', value: angkatan?.nama_angkatan || '-' }
+      );
+    } else {
+      details.push(
+        { label: 'Kegiatan', value: record.agenda || '-' },
+        { label: 'Pengguna', value: record.nama_user || '-' },
+        { label: 'Keterangan', value: record.keterangan || '-' }
+      );
+    }
+
+    return details.filter((detail) => detail.value);
+  };
   const steps = [
     { number: 1, label: 'Sumber data' },
     { number: 2, label: 'Mapping kolom' },
@@ -1456,6 +1942,9 @@ export default function ImportJadwal({
     { number: 4, label: 'Hasil import' },
   ];
   const mappedColumnCount = Object.keys(columnMapping).length;
+  const unresolvedConflictCount = importResult?.conflicts?.length || 0;
+  const failureCount =
+    (importResult?.errors?.length || 0) + unresolvedConflictCount;
   const fileSize = file
     ? file.size < 1024 * 1024
       ? `${Math.max(1, Math.round(file.size / 1024))} KB`
@@ -1931,28 +2420,27 @@ export default function ImportJadwal({
           {/* ──────────── STEP 3: Preview & Confirm ──────────── */}
           {step === 3 && (
             <div className="space-y-5">
-              {dataSource === 'google' && (
-                <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-5">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900">
-                      Cakupan sinkronisasi
-                    </h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Jadwal mulai hari ini dan seluruh tanggal setelahnya akan
-                      diambil. Baris warna kuning dipakai sebagai penanda
-                      tanggal dan tidak dianggap sebagai data jadwal.
-                    </p>
-                    <p className="mt-2 text-xs font-semibold text-slate-700">
-                      {googleSyncDateLabel}
-                    </p>
-                  </div>
-
-                  <p className="mt-3 text-xs font-medium text-emerald-700">
-                    {filteredPreviewData.length} baris akan diproses. Data yang
-                    sama akan dilewati dan konflik ruangan tidak akan disimpan.
+              <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-5">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Cakupan import
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Hanya jadwal mulai hari ini dan seluruh tanggal setelahnya
+                    yang diambil. Jadwal sebelum hari ini tidak ikut diproses ke
+                    database.
+                  </p>
+                  <p className="mt-2 text-xs font-semibold text-slate-700">
+                    {googleSyncDateLabel}
                   </p>
                 </div>
-              )}
+
+                <p className="mt-3 text-xs font-medium text-emerald-700">
+                  {filteredPreviewData.length} baris akan diproses. Data yang
+                  sama dilewati, sedangkan konflik dapat diedit atau dilewati
+                  pada hasil import.
+                </p>
+              </div>
 
               <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 sm:p-5">
                 <div className="flex items-start gap-3">
@@ -2064,15 +2552,51 @@ export default function ImportJadwal({
               ) : (
                 importResult && (
                   <div className="space-y-4">
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-5 text-center">
-                      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-500/25">
-                        <Check size={24} strokeWidth={2.5} aria-hidden="true" />
+                    <div
+                      className={`rounded-xl border p-5 text-center ${
+                        unresolvedConflictCount > 0
+                          ? 'border-amber-200 bg-amber-50/70'
+                          : 'border-emerald-200 bg-emerald-50/70'
+                      }`}
+                    >
+                      <span
+                        className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full text-white shadow-sm ${
+                          unresolvedConflictCount > 0
+                            ? 'bg-amber-500 shadow-amber-500/25'
+                            : 'bg-emerald-500 shadow-emerald-500/25'
+                        }`}
+                      >
+                        {unresolvedConflictCount > 0 ? (
+                          <AlertCircle size={24} aria-hidden="true" />
+                        ) : (
+                          <Check
+                            size={24}
+                            strokeWidth={2.5}
+                            aria-hidden="true"
+                          />
+                        )}
                       </span>
-                      <h3 className="mt-3 text-base font-semibold text-emerald-950">
-                        Proses import selesai
+                      <h3
+                        className={`mt-3 text-base font-semibold ${
+                          unresolvedConflictCount > 0
+                            ? 'text-amber-950'
+                            : 'text-emerald-950'
+                        }`}
+                      >
+                        {unresolvedConflictCount > 0
+                          ? 'Import perlu diperiksa'
+                          : 'Proses import selesai'}
                       </h3>
-                      <p className="mt-1 text-sm text-emerald-800">
-                        Ringkasan hasil pemrosesan file Anda.
+                      <p
+                        className={`mt-1 text-sm ${
+                          unresolvedConflictCount > 0
+                            ? 'text-amber-800'
+                            : 'text-emerald-800'
+                        }`}
+                      >
+                        {unresolvedConflictCount > 0
+                          ? 'Selesaikan atau lewati konflik di bawah ini.'
+                          : 'Ringkasan hasil pemrosesan file Anda.'}
                       </p>
                     </div>
 
@@ -2104,10 +2628,10 @@ export default function ImportJadwal({
                       </div>
                       <div className="rounded-xl border border-red-200 bg-white p-4 text-center shadow-sm">
                         <div className="text-2xl font-bold text-red-600">
-                          {importResult.errors.length}
+                          {failureCount}
                         </div>
                         <div className="mt-1 text-xs font-medium text-slate-500">
-                          Gagal
+                          Perlu diperiksa
                         </div>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-white p-4 text-center shadow-sm">
@@ -2120,12 +2644,313 @@ export default function ImportJadwal({
                       </div>
                     </div>
 
+                    {/* Editable room conflicts */}
+                    {unresolvedConflictCount > 0 && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                        <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                          <AlertCircle size={17} aria-hidden="true" />
+                          Konflik ruangan ({unresolvedConflictCount})
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-amber-800">
+                          Buka setiap konflik, ubah datanya, lalu pilih Periksa
+                          perubahan. Tombol Simpan aktif setelah tidak ada
+                          konflik. Pilih Lewati jika data tidak perlu diimpor.
+                        </p>
+
+                        <div className="mt-3 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                          {importResult.conflicts.map((conflict) => {
+                            const roomField =
+                              jenis === 'perkuliahan'
+                                ? 'ruangan_id'
+                                : 'nama_ruangan';
+                            const isResolving =
+                              resolvingConflictId === conflict.id;
+                            const isChecking =
+                              checkingConflictId === conflict.id;
+                            const isExpanded = expandedConflictIds.includes(
+                              conflict.id
+                            );
+                            const roomOptions =
+                              allRuangan.length > 0
+                                ? allRuangan
+                                : options.ruangan || [];
+                            const conflictDetails = getConflictDetails(
+                              conflict.record
+                            );
+                            const activityDetail = conflictDetails.find(
+                              (detail) => detail.label === 'Kegiatan'
+                            );
+                            const selectedRoom = roomOptions.find(
+                              (room) =>
+                                String(room.id) ===
+                                String(conflict.record[roomField])
+                            );
+                            const isBusy = isChecking || isResolving;
+
+                            return (
+                              <div
+                                key={conflict.id}
+                                className="overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => toggleConflict(conflict.id)}
+                                  aria-expanded={isExpanded}
+                                  className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50/70"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block text-xs font-semibold text-slate-900">
+                                      Baris {conflict.rowNumber} ·{' '}
+                                      {activityDetail?.value ||
+                                        jenisLabels[jenis]}
+                                    </span>
+                                    <span className="mt-1 block truncate text-[11px] text-slate-600">
+                                      {conflict.record.mulai_jadwal
+                                        ? new Date(
+                                            conflict.record.mulai_jadwal
+                                          ).toLocaleString('id-ID', {
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })
+                                        : 'Waktu belum tersedia'}
+                                      {' · '}
+                                      {selectedRoom?.nama_ruangan ||
+                                        (usesPhysicalRoom(
+                                          conflict.record.jenis_pertemuan
+                                        )
+                                          ? 'Ruangan belum dipilih'
+                                          : 'Daring')}
+                                    </span>
+                                  </span>
+                                  <span className="flex shrink-0 items-center gap-2">
+                                    <span
+                                      className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+                                        conflict.verificationStatus === 'ready'
+                                          ? 'bg-emerald-100 text-emerald-700'
+                                          : conflict.verificationStatus ===
+                                              'idle'
+                                            ? 'bg-amber-100 text-amber-700'
+                                            : 'bg-red-100 text-red-700'
+                                      }`}
+                                    >
+                                      {conflict.verificationStatus === 'ready'
+                                        ? 'Siap disimpan'
+                                        : conflict.verificationStatus === 'idle'
+                                          ? 'Belum diperiksa'
+                                          : 'Masih konflik'}
+                                    </span>
+                                    <ChevronDown
+                                      size={17}
+                                      aria-hidden="true"
+                                      className={`text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                    />
+                                  </span>
+                                </button>
+
+                                {isExpanded && (
+                                  <div className="border-t border-amber-100 p-3">
+                                    <p className="text-xs font-semibold text-red-700">
+                                      Konflik awal: {conflict.message}
+                                    </p>
+
+                                    <div className="mt-3 grid gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+                                      {conflictDetails.map((detail) => (
+                                        <div
+                                          key={detail.label}
+                                          className={
+                                            detail.label === 'Kegiatan'
+                                              ? 'sm:col-span-2'
+                                              : undefined
+                                          }
+                                        >
+                                          <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                            {detail.label}
+                                          </span>
+                                          <span className="mt-0.5 block text-xs font-medium text-slate-800">
+                                            {detail.value}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                      <label className="text-xs font-medium text-slate-700">
+                                        Mulai
+                                        <input
+                                          type="datetime-local"
+                                          value={
+                                            conflict.record.mulai_jadwal?.slice(
+                                              0,
+                                              16
+                                            ) || ''
+                                          }
+                                          onChange={(event) =>
+                                            handleConflictChange(
+                                              conflict.id,
+                                              'mulai_jadwal',
+                                              event.target.value
+                                            )
+                                          }
+                                          className="ui-field mt-1 w-full text-xs"
+                                        />
+                                      </label>
+                                      <label className="text-xs font-medium text-slate-700">
+                                        Selesai
+                                        <input
+                                          type="datetime-local"
+                                          value={
+                                            conflict.record.akhir_jadwal?.slice(
+                                              0,
+                                              16
+                                            ) || ''
+                                          }
+                                          onChange={(event) =>
+                                            handleConflictChange(
+                                              conflict.id,
+                                              'akhir_jadwal',
+                                              event.target.value
+                                            )
+                                          }
+                                          className="ui-field mt-1 w-full text-xs"
+                                        />
+                                      </label>
+                                      <label className="text-xs font-medium text-slate-700">
+                                        Jenis pertemuan
+                                        <select
+                                          value={
+                                            conflict.record.jenis_pertemuan ||
+                                            'luring'
+                                          }
+                                          onChange={(event) =>
+                                            handleConflictChange(
+                                              conflict.id,
+                                              'jenis_pertemuan',
+                                              event.target.value
+                                            )
+                                          }
+                                          className="ui-field mt-1 w-full text-xs"
+                                        >
+                                          <option value="luring">Luring</option>
+                                          <option value="hybrid">Hybrid</option>
+                                          <option value="daring">Daring</option>
+                                        </select>
+                                      </label>
+                                      <label className="text-xs font-medium text-slate-700">
+                                        Ruangan
+                                        <select
+                                          value={
+                                            conflict.record[roomField] == null
+                                              ? ''
+                                              : String(
+                                                  conflict.record[roomField]
+                                                )
+                                          }
+                                          onChange={(event) =>
+                                            handleConflictChange(
+                                              conflict.id,
+                                              roomField,
+                                              event.target.value || null
+                                            )
+                                          }
+                                          disabled={
+                                            !usesPhysicalRoom(
+                                              conflict.record.jenis_pertemuan
+                                            )
+                                          }
+                                          className="ui-field mt-1 w-full text-xs disabled:bg-slate-100"
+                                        >
+                                          <option value="">
+                                            Tanpa ruangan
+                                          </option>
+                                          {roomOptions.map((room) => (
+                                            <option
+                                              key={room.id}
+                                              value={room.id}
+                                            >
+                                              {room.nama_ruangan}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                    </div>
+
+                                    {conflict.verificationMessage && (
+                                      <p
+                                        className={`mt-3 rounded-lg border px-3 py-2 text-xs font-medium ${
+                                          conflict.verificationStatus ===
+                                          'ready'
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                            : 'border-red-200 bg-red-50 text-red-700'
+                                        }`}
+                                      >
+                                        {conflict.verificationMessage}
+                                      </p>
+                                    )}
+
+                                    {conflict.saveError && (
+                                      <p className="mt-2 text-xs font-medium text-red-700">
+                                        {conflict.saveError}
+                                      </p>
+                                    )}
+
+                                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleSkipConflict(conflict.id)
+                                        }
+                                        disabled={isBusy}
+                                        className="ui-button ui-button-secondary justify-center text-xs"
+                                      >
+                                        Lewati
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleCheckConflict(conflict.id)
+                                        }
+                                        disabled={isBusy}
+                                        className="ui-button justify-center border border-blue-200 bg-blue-50 text-xs text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                                      >
+                                        {isChecking
+                                          ? 'Memeriksa...'
+                                          : 'Periksa perubahan'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleRetryConflict(conflict.id)
+                                        }
+                                        disabled={
+                                          isBusy ||
+                                          conflict.verificationStatus !==
+                                            'ready'
+                                        }
+                                        className="ui-button justify-center bg-emerald-600 text-xs text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        {isResolving
+                                          ? 'Menyimpan...'
+                                          : 'Simpan'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Error details */}
                     {importResult.errors.length > 0 && (
                       <div className="rounded-xl border border-red-200 bg-red-50 p-4">
                         <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-800">
                           <AlertCircle size={17} aria-hidden="true" />
-                          Detail kegagalan
+                          Kegagalan lainnya
                         </p>
                         <div className="max-h-40 space-y-1 overflow-y-auto text-xs leading-5 text-red-700">
                           {importResult.errors.map((err, idx) => (
