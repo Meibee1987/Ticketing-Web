@@ -179,6 +179,9 @@ export default function Sidebar({ open, onClose }) {
             <p className="mt-0.5 text-[10px] text-slate-500">
               Academic Year {academicYear}
             </p>
+            <p className="mt-1.5 border-t border-white/5 pt-1.5 text-[10px] text-slate-400">
+              Developed by Wanda Saputra
+            </p>
           </div>
         </div>
       </aside>

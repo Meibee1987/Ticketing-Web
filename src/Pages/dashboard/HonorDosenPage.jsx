@@ -135,7 +135,7 @@ export default function HonorDosenPage() {
     <div className="ui-page">
       <PageHeader
         title="Honor Dosen"
-        description="Rekap honor mengajar S1, S2, dan S3 per tanggal 1–15 dan 16–akhir bulan."
+        description="Rekap honor mengajar S1 serta gabungan S2 dan S3 per tanggal 1–15 dan 16–akhir bulan."
       />
       <div className="ui-card p-4 sm:p-5">
         <HonorDosenTab data={schedules} loading={loading} error={error} />

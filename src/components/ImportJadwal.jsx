@@ -32,10 +32,45 @@ import { normalizeKelasForDatabase } from '../utils/scheduleLabels';
 const GOOGLE_SHEET_ID =
   import.meta.env.VITE_GOOGLE_SHEET_ID ||
   '137da0j_AaZhDNwrPjQkV1jA8572xVjHyRYFKMGbBIIM';
+const GOOGLE_KARYA_AKHIR_SHEET_ID =
+  import.meta.env.VITE_GOOGLE_KARYA_AKHIR_SHEET_ID ||
+  '1qB9ixFMEAb7L7jIPDKfV1mhhFh0VqUGhrI0pLQt3138';
+const GOOGLE_KARYA_AKHIR_GID =
+  import.meta.env.VITE_GOOGLE_KARYA_AKHIR_GID || '1583765831';
 const GOOGLE_SCHEDULE_SHEET_NAME = 'Jadwal';
 
-function buildGoogleSheetExportUrl() {
-  return `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx&cacheBust=${Date.now()}`;
+function getGoogleSheetSource(jenis) {
+  if (jenis === 'karya_akhir') {
+    return {
+      label: 'Google Sheets Karya Akhir',
+      sourceUrl: `https://docs.google.com/spreadsheets/d/${GOOGLE_KARYA_AKHIR_SHEET_ID}/edit?gid=${GOOGLE_KARYA_AKHIR_GID}#gid=${GOOGLE_KARYA_AKHIR_GID}`,
+      exportUrl: `https://docs.google.com/spreadsheets/d/${GOOGLE_KARYA_AKHIR_SHEET_ID}/export?format=csv&gid=${GOOGLE_KARYA_AKHIR_GID}&cacheBust=${Date.now()}`,
+      singleSheet: true,
+    };
+  }
+
+  return {
+    label: 'Google Sheets Jadwal',
+    sourceUrl: `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/edit`,
+    exportUrl: `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx&cacheBust=${Date.now()}`,
+    singleSheet: false,
+  };
+}
+
+function buildGoogleSheetExportUrl(jenis) {
+  return getGoogleSheetSource(jenis).exportUrl;
+}
+
+function getGoogleSheetSourceUrl(jenis) {
+  return getGoogleSheetSource(jenis).sourceUrl;
+}
+
+function getGoogleSheetSourceLabel(jenis) {
+  return getGoogleSheetSource(jenis).label;
+}
+
+function isSingleGoogleSheetSource(jenis) {
+  return getGoogleSheetSource(jenis).singleSheet;
 }
 
 function getSelectableGoogleSheets(remoteWorkbook) {
@@ -154,8 +189,12 @@ const PERKULIAHAN_MAP = {
 };
 
 const KARYA_AKHIR_MAP = {
+  angkatan: '_lookup_angkatan',
+  akt: '_lookup_angkatan',
+  cohort: '_lookup_angkatan',
   mahasiswa: 'nama_mahasiswa',
   'nama mahasiswa': 'nama_mahasiswa',
+  'nama mhs': 'nama_mahasiswa',
   nama_mahasiswa: 'nama_mahasiswa',
   'mahasiswa/mata kuliah': 'nama_mahasiswa',
   kegiatan: '_lookup_agenda',
@@ -166,8 +205,10 @@ const KARYA_AKHIR_MAP = {
   selesai: '_waktu_selesai',
   'waktu selesai': '_waktu_selesai',
   status: '_parse_jenis_pertemuan',
+  pelaksanaan: '_parse_jenis_pertemuan',
   'jenis pertemuan': '_parse_jenis_pertemuan',
   ruangan: '_lookup_ruangan',
+  tempat: '_lookup_ruangan',
   agenda: '_lookup_agenda',
   'petugas zoom': 'petugas_zoom',
   petugas_zoom: 'petugas_zoom',
@@ -179,6 +220,8 @@ const KARYA_AKHIR_MAP = {
   'dosen 1': '_lookup_dosen_ka',
   dosen1: '_lookup_dosen_ka',
   dosen: '_lookup_dosen_ka',
+  pembimbing: '_lookup_dosen_ka',
+  'dosen pembimbing': '_lookup_dosen_ka',
   'dosen 2': '_lookup_dosen_ka',
   dosen2: '_lookup_dosen_ka',
   'dosen 3': '_lookup_dosen_ka',
@@ -186,6 +229,8 @@ const KARYA_AKHIR_MAP = {
   moderator: 'moderator',
   'penguji 1': '_lookup_penguji',
   penguji1: '_lookup_penguji',
+  penguji: '_lookup_penguji',
+  'dosen penguji': '_lookup_penguji',
   'penguji 2': '_lookup_penguji',
   penguji2: '_lookup_penguji',
   'pintang/sps': 'pintang_sps',
@@ -564,6 +609,8 @@ export default function ImportJadwal({
     const isFlatScheduleSheet =
       selectedSourceSheet.trim().toLowerCase() ===
         GOOGLE_SCHEDULE_SHEET_NAME.toLowerCase() || hasRowType;
+    const isDedicatedKaryaAkhirSource =
+      dataSource === 'google' && jenis === 'karya_akhir';
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const selectedDateColumn = Number.parseInt(dateColumn, 10);
@@ -629,7 +676,11 @@ export default function ImportJadwal({
         );
         if (rowType && rowType !== jenis) return;
         if (!rowType && hasRowType) return;
-      } else if (dataSource === 'google' && sectionType !== jenis) {
+      } else if (
+        dataSource === 'google' &&
+        !isDedicatedKaryaAkhirSource &&
+        sectionType !== jenis
+      ) {
         return;
       }
 
@@ -681,6 +732,7 @@ export default function ImportJadwal({
     }
     if (jenis === 'karya_akhir') {
       return [
+        { key: '_lookup_angkatan', label: 'Angkatan' },
         { key: 'nama_mahasiswa', label: 'Nama Mahasiswa' },
         { key: '_lookup_agenda', label: 'Agenda' },
         { key: '_parse_jam', label: 'Jam (Mulai - Selesai)' },
@@ -867,7 +919,7 @@ export default function ImportJadwal({
     setGoogleSheetError('');
 
     try {
-      const response = await fetch(buildGoogleSheetExportUrl(), {
+      const response = await fetch(buildGoogleSheetExportUrl(jenis), {
         cache: 'no-store',
       });
       if (!response.ok) {
@@ -906,7 +958,22 @@ export default function ImportJadwal({
         (name) =>
           name.trim().toLowerCase() === GOOGLE_SCHEDULE_SHEET_NAME.toLowerCase()
       );
-      setSelectedGoogleSheet(scheduleSheet || '');
+      const automaticallySelectedSheet =
+        scheduleSheet ||
+        (isSingleGoogleSheetSource(jenis) && selectableSheets.length === 1
+          ? selectableSheets[0]
+          : '');
+      setSelectedGoogleSheet(automaticallySelectedSheet);
+
+      if (isSingleGoogleSheetSource(jenis) && automaticallySelectedSheet) {
+        const remoteWorksheet =
+          remoteWorkbook.Sheets[automaticallySelectedSheet];
+        const jsonData = XLSX.utils.sheet_to_json(remoteWorksheet, {
+          header: 1,
+          defval: '',
+        });
+        prepareSheetData(jsonData, 'google');
+      }
     } catch (error) {
       console.error('Gagal membaca Google Sheets:', error);
       setGoogleSheetError(
@@ -916,7 +983,7 @@ export default function ImportJadwal({
     } finally {
       setGoogleSheetLoading(false);
     }
-  }, []);
+  }, [jenis, prepareSheetData]);
 
   const handleReadGoogleSheet = useCallback(() => {
     if (!googleWorkbook || !selectedGoogleSheet) {
@@ -2183,13 +2250,21 @@ export default function ImportJadwal({
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-slate-900">
-                          Google Sheets Jadwal
+                          {getGoogleSheetSourceLabel(jenis)}
                         </p>
                         <p className="mt-1 text-xs leading-5 text-slate-600">
-                          Muat spreadsheet. Sheet Jadwal akan dipilih otomatis,
-                          lalu hanya baris {jenisLabels[jenis]} yang akan
-                          diproses.
+                          {jenis === 'karya_akhir'
+                            ? 'Ambil data terbaru langsung dari sheet Karya Akhir yang terhubung.'
+                            : `Muat spreadsheet. Sheet Jadwal akan dipilih otomatis, lalu hanya baris ${jenisLabels[jenis]} yang akan diproses.`}
                         </p>
+                        <a
+                          href={getGoogleSheetSourceUrl(jenis)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1.5 inline-flex text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                        >
+                          Buka spreadsheet sumber ↗
+                        </a>
                       </div>
                     </div>
 

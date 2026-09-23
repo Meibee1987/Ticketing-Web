@@ -20,13 +20,27 @@ export const normalizeStrata = (strata) =>
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
 
-export const getHonorValue = (mulai, akhir) => {
+const matchesStrataFilter = (strata, strataFilter) => {
+  const normalizedStrata = normalizeStrata(strata);
+  const normalizedFilter = normalizeStrata(strataFilter);
+
+  if (normalizedFilter === 'S2S3') {
+    return normalizedStrata === 'S2' || normalizedStrata === 'S3';
+  }
+
+  return normalizedStrata === normalizedFilter;
+};
+
+export const getHonorValue = (mulai, akhir, strata = '') => {
   const start = new Date(mulai);
   const end = new Date(akhir);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
 
   const durationMinutes = (end.getTime() - start.getTime()) / 60000;
   if (durationMinutes <= 0) return 0;
+  if (normalizeStrata(strata) === 'S1') {
+    return durationMinutes > 120 ? 2.5 : 2;
+  }
   return durationMinutes > 150 ? 4 : 2;
 };
 
@@ -69,9 +83,7 @@ export const buildHonorDosenRows = (
       : [schedule.strata_angkatan];
     if (
       strataFilter &&
-      !strata.some(
-        (value) => normalizeStrata(value) === normalizeStrata(strataFilter)
-      )
+      !strata.some((value) => matchesStrataFilter(value, strataFilter))
     )
       return;
 
@@ -91,7 +103,11 @@ export const buildHonorDosenRows = (
         mataKuliah: cleanText(schedule.nama_matkul || schedule.agenda_display),
         angkatan: cleanText(schedule.nama_angkatan),
         kegiatan: cleanText(schedule.jenis_pertemuan, 'luring'),
-        ket: getHonorValue(schedule.mulai_jadwal, schedule.akhir_jadwal),
+        ket: getHonorValue(
+          schedule.mulai_jadwal,
+          schedule.akhir_jadwal,
+          strataFilter
+        ),
       });
     });
   });

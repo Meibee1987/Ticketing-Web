@@ -32,6 +32,11 @@ const titleCase = (value) =>
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
 
+const STRATA_OPTIONS = [
+  { value: 'S1', label: 'S1' },
+  { value: 'S2_S3', label: 'S2 & S3' },
+];
+
 export default function HonorDosenTab({ data, loading, error }) {
   const now = new Date();
   const [monthValue, setMonthValue] = useState(defaultMonth);
@@ -51,6 +56,9 @@ export default function HonorDosenTab({ data, loading, error }) {
     [groups]
   );
   const periodLabel = getHonorPeriodLabel(monthValue, period);
+  const strataLabel =
+    STRATA_OPTIONS.find((option) => option.value === strataFilter)?.label ||
+    strataFilter;
 
   const downloadExcel = async () => {
     if (rows.length === 0) return;
@@ -162,7 +170,7 @@ export default function HonorDosenTab({ data, loading, error }) {
       const safePeriod = period === 'first' ? '01-15' : '16-akhir';
       XLSX.writeFile(
         workbook,
-        `Honor Dosen Mengajar ${strataFilter} ${safePeriod} ${monthValue}.xlsx`,
+        `Honor Dosen Mengajar ${strataLabel.replace(' & ', '-')} ${safePeriod} ${monthValue}.xlsx`,
         { cellStyles: true, compression: true }
       );
     } catch (downloadError) {
@@ -220,19 +228,19 @@ export default function HonorDosenTab({ data, loading, error }) {
             Strata
           </legend>
           <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
-            {['S1', 'S2', 'S3'].map((strata) => (
+            {STRATA_OPTIONS.map((strata) => (
               <button
-                key={strata}
+                key={strata.value}
                 type="button"
-                onClick={() => setStrataFilter(strata)}
+                onClick={() => setStrataFilter(strata.value)}
                 className={`min-w-16 rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
-                  strataFilter === strata
+                  strataFilter === strata.value
                     ? 'bg-primary-600 text-white shadow-sm'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
-                aria-pressed={strataFilter === strata}
+                aria-pressed={strataFilter === strata.value}
               >
-                {strata}
+                {strata.label}
               </button>
             ))}
           </div>
@@ -251,7 +259,7 @@ export default function HonorDosenTab({ data, loading, error }) {
       <div className="flex flex-col gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="font-semibold text-blue-900">
-            Honor dosen {strataFilter} periode {periodLabel}
+            Honor dosen {strataLabel} periode {periodLabel}
           </div>
           <div className="text-blue-700">
             {groups.length} dosen · {rows.length} kegiatan · total {grandTotal}{' '}
@@ -259,7 +267,9 @@ export default function HonorDosenTab({ data, loading, error }) {
           </div>
         </div>
         <div className="text-xs text-blue-700">
-          Ket: durasi sampai 150 menit = 2, lebih dari 150 menit = 4.
+          {strataFilter === 'S1'
+            ? 'Ket: durasi sampai 2 jam = 2, lebih dari 2 jam = 2,5.'
+            : 'Ket: 1 sesi (2–2,5 jam) = 2, lebih dari 2,5 jam (2 sesi) = 4.'}
         </div>
       </div>
 

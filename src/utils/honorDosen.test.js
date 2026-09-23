@@ -13,9 +13,21 @@ test('mengenali strata pascasarjana', () => {
   assert.equal(isHonorStrata('S1'), false);
 });
 
-test('nilai honor mengikuti durasi pada format contoh', () => {
+test('nilai honor S2 dan S3 mengikuti jumlah sesi', () => {
+  assert.equal(getHonorValue('2026-09-01T19:00:00', '2026-09-01T21:00:00'), 2);
   assert.equal(getHonorValue('2026-09-01T19:00:00', '2026-09-01T21:30:00'), 2);
   assert.equal(getHonorValue('2026-09-01T19:00:00', '2026-09-01T22:00:00'), 4);
+});
+
+test('nilai honor S1 menggunakan batas durasi 2 jam', () => {
+  assert.equal(
+    getHonorValue('2026-09-01T08:00:00', '2026-09-01T10:00:00', 'S1'),
+    2
+  );
+  assert.equal(
+    getHonorValue('2026-09-01T08:00:00', '2026-09-01T10:01:00', 'S1'),
+    2.5
+  );
 });
 
 test('membatasi periode dan membuat satu baris untuk setiap dosen', () => {
@@ -52,7 +64,7 @@ test('membatasi periode dan membuat satu baris untuk setiap dosen', () => {
   assert.equal(groupHonorRows(rows)[0].total, 4);
 });
 
-test('dapat memisahkan laporan S1, S2, dan S3', () => {
+test('memisahkan laporan S1 serta menggabungkan laporan S2 dan S3', () => {
   const schedules = ['S1', 'S2', 'S3'].map((strata, index) => ({
     id: index + 1,
     mulai_jadwal: '2026-09-10T08:00:00',
@@ -63,15 +75,23 @@ test('dapat memisahkan laporan S1, S2, dan S3', () => {
     strata_angkatans: [strata],
   }));
 
-  for (const strata of ['S1', 'S2', 'S3']) {
-    const rows = buildHonorDosenRows(schedules, {
-      monthValue: '2026-09',
-      period: 'first',
-      strataFilter: strata,
-    });
-    assert.deepEqual(
-      rows.map((row) => row.dosen),
-      [`Dosen ${strata}`]
-    );
-  }
+  const s1Rows = buildHonorDosenRows(schedules, {
+    monthValue: '2026-09',
+    period: 'first',
+    strataFilter: 'S1',
+  });
+  assert.deepEqual(
+    s1Rows.map((row) => row.dosen),
+    ['Dosen S1']
+  );
+
+  const postgraduateRows = buildHonorDosenRows(schedules, {
+    monthValue: '2026-09',
+    period: 'first',
+    strataFilter: 'S2_S3',
+  });
+  assert.deepEqual(
+    postgraduateRows.map((row) => row.dosen),
+    ['Dosen S2', 'Dosen S3']
+  );
 });
