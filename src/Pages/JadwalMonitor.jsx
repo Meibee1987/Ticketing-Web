@@ -245,7 +245,7 @@ export default function JadwalMonitor() {
                 ? parseIdList(item.id_angkatans)
                     .map((id) => angkatanMap[id])
                     .filter(Boolean)
-                    .join(', ')
+                    .join(' & ')
                 : item.angkatan?.nama_angkatan) || '-',
             nama_matkul:
               item.mata_kuliah?.mata_kuliah ||

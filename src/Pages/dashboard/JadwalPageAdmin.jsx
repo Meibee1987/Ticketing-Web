@@ -862,7 +862,7 @@ export default function JadwalPageAdmin() {
             ? parseIdList(r.id_angkatans)
                 .map((id) => angkatanMap[id])
                 .filter(Boolean)
-                .join(', ')
+                .join(' & ')
             : r.angkatan?.nama_angkatan) || '-',
         nama_matkul:
           r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',
@@ -2882,7 +2882,7 @@ function JadwalTab({
                           <span className="text-slate-800">
                             {usesPhysicalRoom(row.jenis_pertemuan)
                               ? row.nama_ruangan
-                              : '-'}
+                              : row.lokasi_virtual || '-'}
                           </span>
                         </td>
                         <td className="py-3 px-4 border border-slate-200">

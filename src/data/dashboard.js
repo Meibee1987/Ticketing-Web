@@ -314,7 +314,7 @@ export async function fetchJadwalHariIni(date = new Date()) {
         r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',
       nama_ruangan: usesPhysicalRoom(jenisPertemuan)
         ? r.ruangan?.nama_ruangan || '-'
-        : '-',
+        : r.lokasi_virtual || 'Daring (Online)',
       nama_dosen: dosenNames.join(', ') || '-',
       jenis_pertemuan: jenisPertemuan,
       mulai_jadwal: r.mulai_jadwal,

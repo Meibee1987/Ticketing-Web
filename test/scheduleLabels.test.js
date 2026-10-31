@@ -4,7 +4,17 @@ import test from 'node:test';
 import {
   formatAngkatanLabel,
   normalizeKelasForDatabase,
+  splitAngkatanLabels,
 } from '../src/utils/scheduleLabels.js';
+
+test('memisahkan beberapa angkatan termasuk yang memakai tanda ampersand', () => {
+  assert.deepEqual(splitAngkatanLabels('DMB26 & DMB27'), ['DMB26', 'DMB27']);
+  assert.deepEqual(splitAngkatanLabels('DMB26, DMB27; DMB28'), [
+    'DMB26',
+    'DMB27',
+    'DMB28',
+  ]);
+});
 
 test('format label angkatan dengan paralel dan kelas internasional', () => {
   assert.equal(formatAngkatanLabel('SB61', 1, 'Reguler'), 'SB61 (1)');

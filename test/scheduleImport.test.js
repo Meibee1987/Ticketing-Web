@@ -1,0 +1,268 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  buildCanonicalImportLookup,
+  buildPreferredImportLookup,
+  buildPerkuliahanImportKey,
+  exactImportLookup,
+  importedSchedulesOverlapInSameRoom,
+  isRoomConflictExempt,
+  normalizeImportLookup,
+  normalizePerkuliahanSyncRecord,
+  shouldSkipScheduleImportRow,
+  splitDosenLabels,
+  validatePerkuliahanImportRecord,
+} from '../src/utils/scheduleImport.js';
+
+test('lookup import hanya menerima nilai exact setelah normalisasi aman', () => {
+  const lookup = { 'manajemen strategik lanjut': 17 };
+
+  assert.equal(
+    exactImportLookup('  Manajemen   Strategik Lanjut ', lookup),
+    17
+  );
+  assert.equal(exactImportLookup('Manajemen Strategik', lookup), null);
+  assert.equal(normalizeImportLookup(' DMB26 '), 'dmb26');
+});
+
+test('lookup mata kuliah menggunakan kode meskipun namanya sama', () => {
+  const mataKuliah = [
+    {
+      id: 101,
+      kode_mata_kuliah: 'SBI134C',
+      mata_kuliah: 'Dinamika Operasi dan rantai pasok',
+      aktif_nonaktif: true,
+    },
+    {
+      id: 202,
+      kode_mata_kuliah: 'SBI134K',
+      mata_kuliah: 'Dinamika Operasi dan rantai pasok',
+      aktif_nonaktif: true,
+    },
+  ];
+  const lookup = buildPreferredImportLookup(
+    mataKuliah,
+    (item) => item.kode_mata_kuliah
+  );
+
+  assert.equal(exactImportLookup('SBI134C', lookup), 101);
+  assert.equal(exactImportLookup('sbi134k', lookup), 202);
+  assert.equal(
+    exactImportLookup('Dinamika Operasi dan rantai pasok', lookup),
+    null
+  );
+});
+
+test('lookup dosen mengabaikan variasi apostrof dan tanda baca gelar', () => {
+  const masterName = 'Prof. Dr. Ir. Mohammad Syamsul Maarif, M.Eng.';
+  const sheetName = 'Prof. Dr. Ir. Mohammad Syamsul Ma’arif M.Eng.';
+  const normalizedMasterName = normalizeImportLookup(masterName);
+  const lookup = { [normalizedMasterName]: 50 };
+
+  assert.equal(normalizeImportLookup(sheetName), normalizedMasterName);
+  assert.equal(exactImportLookup(sheetName, lookup), 50);
+});
+
+test('memisahkan banyak dosen tanpa memecah tanda baca gelar', () => {
+  assert.deepEqual(
+    splitDosenLabels(
+      'Dr. Linda Karlina Sari S.Stat. M.Si. & Dr. Zenal Asikin, SE, M.Si.'
+    ),
+    ['Dr. Linda Karlina Sari S.Stat. M.Si.', 'Dr. Zenal Asikin, SE, M.Si.']
+  );
+  assert.deepEqual(
+    splitDosenLabels('Prof. Ujang, M.Sc. / Prof. Hartoyo, M.Sc.'),
+    ['Prof. Ujang, M.Sc.', 'Prof. Hartoyo, M.Sc.']
+  );
+  assert.deepEqual(
+    splitDosenLabels('Nawangsita Noorardini Winoto, B.Econ, MIntEcon&F'),
+    ['Nawangsita Noorardini Winoto, B.Econ, MIntEcon&F']
+  );
+});
+
+test('melewati baris tidak tampil dan header yang berulang', () => {
+  const headers = ['Kode', 'Angkatan', 'Dosen Matakuliah', 'Tampil'];
+
+  assert.equal(
+    shouldSkipScheduleImportRow(headers, [
+      'SBI1212',
+      'SB61',
+      'Dr. Tanti',
+      'Tidak',
+    ]),
+    true
+  );
+  assert.equal(
+    shouldSkipScheduleImportRow(headers, [
+      'Kode',
+      'Angkatan',
+      'Dosen Matakuliah',
+      'View',
+    ]),
+    true
+  );
+  assert.equal(
+    shouldSkipScheduleImportRow(headers, [
+      'SBI134C',
+      'SB61',
+      'Dr. Tanti',
+      'Tampil',
+    ]),
+    false
+  );
+});
+
+test('ruangan kosong tidak dianggap sebagai konflik dengan ruangan kosong lain', () => {
+  const base = {
+    mulai_jadwal: '2026-11-07T08:00:00',
+    akhir_jadwal: '2026-11-07T10:30:00',
+  };
+
+  assert.equal(
+    importedSchedulesOverlapInSameRoom(
+      { ...base, ruangan_id: null },
+      { ...base, ruangan_id: null }
+    ),
+    false
+  );
+  assert.equal(
+    importedSchedulesOverlapInSameRoom(
+      { ...base, ruangan_id: 10 },
+      { ...base, ruangan_id: 10 }
+    ),
+    true
+  );
+});
+
+test('lookup duplikat memilih satu master data yang aktif', () => {
+  const rows = [
+    {
+      id: 11,
+      nama_dosen: 'Annisa Ramadanti S.E., M.M.',
+      aktif_nonaktif: false,
+    },
+    {
+      id: 20,
+      nama_dosen: 'Annisa Ramadanti, S.E., M.M.',
+      aktif_nonaktif: true,
+    },
+  ];
+  const buildLookup = (items) =>
+    buildPreferredImportLookup(items, (item) => item.nama_dosen);
+
+  assert.equal(
+    exactImportLookup('Annisa Ramadanti, S.E., M.M.', buildLookup(rows)),
+    20
+  );
+  assert.equal(
+    exactImportLookup(
+      'Annisa Ramadanti, S.E., M.M.',
+      buildLookup([...rows].reverse())
+    ),
+    20
+  );
+});
+
+test('lookup tetap menolak nama yang dimiliki lebih dari satu data aktif', () => {
+  const lookup = buildPreferredImportLookup(
+    [
+      { id: 20, nama_ruangan: 'Gardenia (Gd.B)', aktif_nonaktif: true },
+      { id: 58, nama_ruangan: 'Gardenia (Gd.B)', aktif_nonaktif: true },
+    ],
+    (item) => item.nama_ruangan
+  );
+
+  assert.equal(exactImportLookup('Gardenia (Gd.B)', lookup), null);
+});
+
+test('lookup tetap menerima satu data nonaktif tanpa kandidat lain', () => {
+  const lookup = buildPreferredImportLookup(
+    [{ id: 50, nama_ruangan: 'Gardenia (Gd.B)', aktif_nonaktif: false }],
+    (item) => item.nama_ruangan
+  );
+
+  assert.equal(exactImportLookup('Gardenia (Gd.B)', lookup), 50);
+});
+
+test('Gardenia memilih record aktif terlama dan dikecualikan dari konflik', () => {
+  const lookup = buildCanonicalImportLookup(
+    [
+      { id: 58, nama_ruangan: 'Gardenia (Gd.B)', aktif_nonaktif: true },
+      { id: 50, nama_ruangan: 'Gardenia (Gd.B)', aktif_nonaktif: true },
+    ],
+    (item) => item.nama_ruangan,
+    ['Gardenia (Gd.B)']
+  );
+
+  assert.equal(exactImportLookup('Gardenia (Gd.B)', lookup), 50);
+  assert.equal(isRoomConflictExempt('Gardenia (Gd.B)'), true);
+  assert.equal(isRoomConflictExempt('Gardenia 1 (Gd.B)'), false);
+});
+
+test('kunci import perkuliahan stabil untuk urutan angkatan berbeda', () => {
+  const base = {
+    mulai_jadwal: '2026-10-03T13:30:00',
+    id_mata_kuliah: 10,
+    paralel: null,
+    kelas: 'REG',
+    real_perkuliahan: 7,
+    dosen_id: 5,
+  };
+
+  assert.equal(
+    buildPerkuliahanImportKey({ ...base, id_angkatans: [27, 26] }),
+    buildPerkuliahanImportKey({ ...base, id_angkatans: [26, 27] })
+  );
+});
+
+test('validasi ketat menolak jadwal dengan referensi wajib yang hilang', () => {
+  const issues = validatePerkuliahanImportRecord({
+    mulai_jadwal: '2026-10-03T13:30:00',
+    akhir_jadwal: '2026-10-03T16:00:00',
+    id_angkatans: [],
+  });
+
+  assert.deepEqual(issues, [
+    'mata kuliah tidak ditemukan',
+    'angkatan tidak ditemukan',
+    'dosen pengampu tidak ditemukan',
+  ]);
+});
+
+test('validasi tidak menggandakan pesan referensi yang sudah spesifik', () => {
+  const issues = validatePerkuliahanImportRecord(
+    {
+      mulai_jadwal: '2026-10-03T13:30:00',
+      akhir_jadwal: '2026-10-03T16:00:00',
+      id_mata_kuliah: 10,
+      id_angkatan: 26,
+      id_angkatans: [26],
+    },
+    ['dosen "Nama Tidak Ada" tidak ada di master data']
+  );
+
+  assert.deepEqual(issues, ['dosen "Nama Tidak Ada" tidak ada di master data']);
+});
+
+test('record sinkronisasi mengosongkan nilai lama dan mempertahankan lokasi daring', () => {
+  const record = normalizePerkuliahanSyncRecord(
+    {
+      dosen_id: 5,
+      id_angkatan: 26,
+      id_angkatans: [26, 27],
+      id_mata_kuliah: 10,
+      mulai_jadwal: '2026-10-03T08:00:00',
+      akhir_jadwal: '2026-10-03T10:30:00',
+      jenis_pertemuan: 'daring',
+      lokasi_virtual: 'Google Meet',
+    },
+    'batch-1'
+  );
+
+  assert.equal(record.lokasi_virtual, 'Google Meet');
+  assert.equal(record.ruangan_id, null);
+  assert.equal(record.note, null);
+  assert.deepEqual(record.id_angkatans, [26, 27]);
+  assert.equal(record.import_source, 'google_jadwal');
+});

@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { BookOpen, ClipboardList, GraduationCap } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
+import { usesPhysicalRoom } from '../../utils/meetingRoom';
 import { assertSupabaseResults } from '../../utils/supabaseResults';
 import DateNavigator from '../../components/ui/DateNavigator';
 import StatePanel from '../../components/ui/StatePanel';
@@ -296,7 +297,9 @@ function useJadwal(selectedDate) {
       const merged = (data || []).map((r) => ({
         ...r,
         nama_dosen: r.dosen?.nama_dosen || '-',
-        nama_ruangan: r.ruangan?.nama_ruangan || '-',
+        nama_ruangan: usesPhysicalRoom(r.jenis_pertemuan)
+          ? r.ruangan?.nama_ruangan || '-'
+          : r.lokasi_virtual || 'Daring (Online)',
         nama_angkatan: r.angkatan?.nama_angkatan || '-',
         nama_matkul:
           r.mata_kuliah?.mata_kuliah || r.mata_kuliah?.nama_matkul || '-',

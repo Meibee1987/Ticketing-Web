@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Database,
+  Download,
   FileSpreadsheet,
   Info,
   LoaderCircle,
@@ -26,8 +27,29 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { getImportStartDay } from '../utils/importScheduleDate';
+import { buildImportErrorReport } from '../utils/importErrorReport';
+import { normalizeKaryaAkhirAgenda } from '../utils/karyaAkhir';
 import { usesPhysicalRoom } from '../utils/meetingRoom';
-import { normalizeKelasForDatabase } from '../utils/scheduleLabels';
+import {
+  normalizeKelasForDatabase,
+  splitAngkatanLabels,
+} from '../utils/scheduleLabels';
+import {
+  buildCanonicalImportLookup,
+  buildPreferredImportLookup,
+  exactImportLookup,
+  importedSchedulesOverlapInSameRoom,
+  isRoomConflictExempt,
+  isLegacyScheduleImport,
+  normalizeImportLookup,
+  normalizePerkuliahanSyncRecord,
+  ROOM_CONFLICT_EXEMPT_NAMES,
+  shouldSkipScheduleImportRow,
+  splitDosenLabels,
+  validatePerkuliahanImportRecord,
+} from '../utils/scheduleImport';
+import { parseSpreadsheetDate as excelDateToJS } from '../utils/spreadsheetDate';
 
 const GOOGLE_SHEET_ID =
   import.meta.env.VITE_GOOGLE_SHEET_ID ||
@@ -52,13 +74,18 @@ function getGoogleSheetSource(jenis) {
   return {
     label: 'Google Sheets Jadwal',
     sourceUrl: `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/edit`,
+    // Workbook XLSX harus menjadi sumber utama karena CSV gviz mengikuti
+    // filter/baris tersembunyi pada Google Sheet. Setelah workbook dibaca,
+    // aplikasi tetap otomatis memilih hanya sheet Jadwal untuk diproses.
     exportUrl: `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx&cacheBust=${Date.now()}`,
-    singleSheet: false,
+    fallbackExportUrl: `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(GOOGLE_SCHEDULE_SHEET_NAME)}&cacheBust=${Date.now()}`,
+    singleSheet: true,
   };
 }
 
-function buildGoogleSheetExportUrl(jenis) {
-  return getGoogleSheetSource(jenis).exportUrl;
+function buildGoogleSheetExportUrls(jenis) {
+  const source = getGoogleSheetSource(jenis);
+  return [source.exportUrl, source.fallbackExportUrl].filter(Boolean);
 }
 
 function getGoogleSheetSourceUrl(jenis) {
@@ -103,24 +130,30 @@ const PERKULIAHAN_MAP = {
   // Header spreadsheet → kolom database
   // Angkatan
   angkatan: '_lookup_angkatan',
-  // Mata Kuliah (by code or name)
+  // Mata kuliah wajib dibaca dari kode. Nama hanya ditampilkan sebagai
+  // informasi dan tidak boleh menjadi fallback karena nama dapat berulang.
   // Pada sheet "Jadwal", Kegiatan berisi kategori seperti "Kuliah",
-  // bukan kode mata kuliah. Nama mata kuliah diambil dari kolom berikutnya.
+  // bukan kode mata kuliah.
+  kode: '_lookup_matkul_kode',
   'matakuliah h': '_lookup_matkul_kode',
   'matakuliah h (kode)': '_lookup_matkul_kode',
   'kode mk': '_lookup_matkul_kode',
+  'kode matkul': '_lookup_matkul_kode',
   kode_mata_kuliah: '_lookup_matkul_kode',
   'kode mata kuliah': '_lookup_matkul_kode',
-  'mata kuliah': '_lookup_matkul',
-  'mata kuliah (nama)': '_lookup_matkul',
-  agenda: '_lookup_matkul',
-  'mahasiswa/mata kuliah': '_lookup_matkul',
-  matakuliah: '_lookup_matkul',
-  mata_kuliah: '_lookup_matkul',
-  konsentrasi: '_lookup_matkul', // Kolom Konsentrasi diperlakukan sebagai Mata Kuliah
+  'kode matakuliah': '_lookup_matkul_kode',
+  'mata kuliah': '_matkul_nama_source',
+  'mata kuliah (nama)': '_matkul_nama_source',
+  agenda: '_matkul_nama_source',
+  'mahasiswa/mata kuliah': '_matkul_nama_source',
+  matakuliah: '_matkul_nama_source',
+  mata_kuliah: '_matkul_nama_source',
   // Numerik
   paralel: 'paralel',
   pararel: 'paralel',
+  para: 'paralel',
+  quota: 'quota',
+  kuota: 'quota',
   kelas: 'kelas',
   'real perkuliahan': 'real_perkuliahan',
   real_perkuliahan: 'real_perkuliahan',
@@ -162,6 +195,8 @@ const PERKULIAHAN_MAP = {
   dosen: '_lookup_dosen1',
   id_dosen: '_lookup_dosen1',
   'id dosen': '_lookup_dosen1',
+  'email dosen': '_dosen_email_source',
+  email_dosen: '_dosen_email_source',
   'dosen 2': '_lookup_dosen_extra',
   dosen2: '_lookup_dosen_extra',
   'dosen 3': '_lookup_dosen_extra',
@@ -185,6 +220,7 @@ const PERKULIAHAN_MAP = {
   pintang_sps: 'pintang_sps',
   // Catatan
   catatan: 'note',
+  topik: 'note',
   note: 'note',
 };
 
@@ -192,12 +228,14 @@ const KARYA_AKHIR_MAP = {
   angkatan: '_lookup_angkatan',
   akt: '_lookup_angkatan',
   cohort: '_lookup_angkatan',
+  nama: 'nama_mahasiswa',
   mahasiswa: 'nama_mahasiswa',
   'nama mahasiswa': 'nama_mahasiswa',
   'nama mhs': 'nama_mahasiswa',
   nama_mahasiswa: 'nama_mahasiswa',
   'mahasiswa/mata kuliah': 'nama_mahasiswa',
   kegiatan: '_lookup_agenda',
+  judul: 'note',
   jam: '_parse_jam',
   waktu: '_parse_jam',
   mulai: '_waktu_mulai',
@@ -214,9 +252,15 @@ const KARYA_AKHIR_MAP = {
   petugas_zoom: 'petugas_zoom',
   'id - password': '_parse_zoom_info',
   'zoom id': 'zoom_id',
+  'meeting id': 'zoom_id',
   'link id': 'zoom_id',
   'zoom password': 'zoom_password',
   password: 'zoom_password',
+  passcode: 'zoom_password',
+  'ketua komisi pembimbing': '_lookup_dosen_ka',
+  'anggota komisi pembimbing 1': '_lookup_dosen_ka',
+  'anggota komisi pembimbing 2': '_lookup_dosen_ka',
+  'anggota komisi pembimbing 3': '_lookup_dosen_ka',
   'dosen 1': '_lookup_dosen_ka',
   dosen1: '_lookup_dosen_ka',
   dosen: '_lookup_dosen_ka',
@@ -233,6 +277,11 @@ const KARYA_AKHIR_MAP = {
   'dosen penguji': '_lookup_penguji',
   'penguji 2': '_lookup_penguji',
   penguji2: '_lookup_penguji',
+  'penguji luar komisi 1': '_lookup_penguji',
+  'penguji luar komisi 2': '_lookup_penguji',
+  'penguji luar komisi 3': '_lookup_penguji',
+  'perwakilan prodi': '_lookup_penguji',
+  'pimpinan sidang': 'moderator',
   'pintang/sps': 'pintang_sps',
   catatan: 'note',
   note: 'note',
@@ -337,48 +386,6 @@ function parseZoomInfo(str) {
   };
 }
 
-// Excel serial date → JS Date
-function excelDateToJS(serial) {
-  if (serial instanceof Date) return serial;
-  if (typeof serial === 'number') {
-    if (serial < 20000 || serial > 100000) return null;
-    // Excel serial → local date (avoid UTC timezone shift)
-    const utcDays = Math.floor(serial - 25569);
-    const d = new Date(utcDays * 86400 * 1000);
-    // Compensate: create local date to avoid timezone offset
-    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  }
-  // Try to parse Indonesian date string like "2 Maret 2026"
-  const str = String(serial).trim();
-  const idMatch = str.match(
-    /(\d{1,2})\s+(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+(\d{2}|\d{4})/i
-  );
-  if (idMatch) {
-    const monthMap = {
-      januari: 0,
-      februari: 1,
-      maret: 2,
-      april: 3,
-      mei: 4,
-      juni: 5,
-      juli: 6,
-      agustus: 7,
-      september: 8,
-      oktober: 9,
-      november: 10,
-      desember: 11,
-    };
-    const parsedYear = parseInt(idMatch[3]);
-    return new Date(
-      parsedYear < 100 ? 2000 + parsedYear : parsedYear,
-      monthMap[idMatch[2].toLowerCase()],
-      parseInt(idMatch[1])
-    );
-  }
-  const d = new Date(str);
-  return isNaN(d.getTime()) ? null : d;
-}
-
 // Format Date to 'YYYY-MM-DD' string using local timezone
 function dateToLocalStr(d) {
   if (!d) return null;
@@ -436,16 +443,18 @@ function matchesImportedRecord(existingRecord, importedRecord, jenis) {
   }
 
   if (jenis === 'perkuliahan') {
+    if (!importedRecord.id_mata_kuliah || !importedRecord.id_angkatan) {
+      return false;
+    }
+
     return (
-      (!importedRecord.id_mata_kuliah ||
-        String(existingRecord.id_mata_kuliah) ===
-          String(importedRecord.id_mata_kuliah)) &&
+      String(existingRecord.id_mata_kuliah) ===
+        String(importedRecord.id_mata_kuliah) &&
       (importedRecord.paralel != null
         ? String(existingRecord.paralel) === String(importedRecord.paralel)
         : existingRecord.paralel == null) &&
-      (!importedRecord.id_angkatan ||
-        String(existingRecord.id_angkatan) ===
-          String(importedRecord.id_angkatan)) &&
+      String(existingRecord.id_angkatan) ===
+        String(importedRecord.id_angkatan) &&
       (!importedRecord.kelas || existingRecord.kelas === importedRecord.kelas)
     );
   }
@@ -488,6 +497,7 @@ async function findImportedRoomConflict({
   record,
   tableName,
   existingId,
+  excludedIds = [],
   roomNameById,
 }) {
   if (
@@ -503,6 +513,7 @@ async function findImportedRoomConflict({
       ? record.ruangan_id
       : record.nama_ruangan;
   if (!roomId) return null;
+  if (isRoomConflictExempt(roomNameById[String(roomId)])) return null;
 
   const { data, error } = await supabase
     .from('view_jadwal_union')
@@ -520,12 +531,13 @@ async function findImportedRoomConflict({
     jadwal_karya_akhir: 'KARYA_AKHIR',
     jadwal_lain_lain: 'LAIN_LAIN',
   }[tableName];
+  const excludedIdSet = new Set(excludedIds.map(String));
   const conflict = (data || []).find(
     (item) =>
       !(
-        existingId != null &&
         item.jenis_jadwal === currentType &&
-        String(item.id_asli) === String(existingId)
+        ((existingId != null && String(item.id_asli) === String(existingId)) ||
+          excludedIdSet.has(String(item.id_asli)))
       )
   );
   if (!conflict) return null;
@@ -572,6 +584,11 @@ export default function ImportJadwal({
   const [undoing, setUndoing] = useState(false);
   const [importBatchTag, setImportBatchTag] = useState('');
   const [allRuangan, setAllRuangan] = useState([]);
+  const [allImportReferences, setAllImportReferences] = useState({
+    dosen: [],
+    angkatan: [],
+    mataKuliah: [],
+  });
   const [googleSheetLoading, setGoogleSheetLoading] = useState(false);
   const [googleSheetError, setGoogleSheetError] = useState('');
   const [googleWorkbook, setGoogleWorkbook] = useState(null);
@@ -579,14 +596,26 @@ export default function ImportJadwal({
   const [selectedGoogleSheet, setSelectedGoogleSheet] = useState('');
   const fileInputRef = useRef(null);
 
-  // Fetch semua ruangan (tanpa filter aktif) untuk keperluan import lookup
+  // Ambil semua referensi. Jika nama sama muncul beberapa kali, lookup akan
+  // memprioritaskan satu data aktif dan tetap menolak kandidat aktif ganda.
   useEffect(() => {
-    supabase
-      .from('ruangan')
-      .select('id, nama_ruangan')
-      .then(({ data }) => {
-        if (data) setAllRuangan(data);
-      });
+    Promise.all([
+      supabase.from('ruangan').select('id, nama_ruangan, aktif_nonaktif'),
+      supabase
+        .from('dosen')
+        .select('id, nama_dosen, id_dosen, email, aktif_nonaktif'),
+      supabase.from('angkatan').select('id, nama_angkatan, aktif_nonaktif'),
+      supabase.from('mata_kuliah').select('*'),
+    ]).then(
+      ([ruanganResult, dosenResult, angkatanResult, mataKuliahResult]) => {
+        if (ruanganResult.data) setAllRuangan(ruanganResult.data);
+        setAllImportReferences({
+          dosen: dosenResult.data || [],
+          angkatan: angkatanResult.data || [],
+          mataKuliah: mataKuliahResult.data || [],
+        });
+      }
+    );
   }, []);
 
   // Get the right column map based on jenis
@@ -606,13 +635,15 @@ export default function ImportJadwal({
 
     const selectedSourceSheet =
       dataSource === 'google' ? selectedGoogleSheet : selectedSheet;
-    const isFlatScheduleSheet =
-      selectedSourceSheet.trim().toLowerCase() ===
-        GOOGLE_SCHEDULE_SHEET_NAME.toLowerCase() || hasRowType;
     const isDedicatedKaryaAkhirSource =
       dataSource === 'google' && jenis === 'karya_akhir';
+    const isFlatScheduleSheet =
+      !isDedicatedKaryaAkhirSource &&
+      (selectedSourceSheet.trim().toLowerCase() ===
+        GOOGLE_SCHEDULE_SHEET_NAME.toLowerCase() ||
+        hasRowType);
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const importStartDay = getImportStartDay(now);
     const selectedDateColumn = Number.parseInt(dateColumn, 10);
 
     let sectionDate = null;
@@ -620,6 +651,8 @@ export default function ImportJadwal({
     const scheduleRows = [];
 
     previewData.forEach((row) => {
+      if (shouldSkipScheduleImportRow(previewHeaders, row)) return;
+
       const firstCell = String(row[0] || '').trim();
       const dateFromColumn = Number.isInteger(selectedDateColumn)
         ? excelDateToJS(row[selectedDateColumn])
@@ -632,6 +665,29 @@ export default function ImportJadwal({
           : null;
       const scheduleDate = dateFromColumn || dateFromFirstCell;
       const nonEmpty = row.filter((cell) => cell !== '' && cell != null).length;
+
+      // Sumber Google Karya Akhir berupa tabel datar dan setiap baris memiliki
+      // tanggal sendiri. Saring secara ketat per baris agar data historis dan
+      // baris tanpa tanggal valid tidak masuk preview maupun proses import.
+      if (isDedicatedKaryaAkhirSource) {
+        if (!scheduleDate) return;
+
+        const scheduleDay = new Date(
+          scheduleDate.getFullYear(),
+          scheduleDate.getMonth(),
+          scheduleDate.getDate()
+        );
+        if (scheduleDay < importStartDay) return;
+
+        const scheduleRow = [...row];
+        scheduleRow._scheduleDate = scheduleDay;
+        scheduleRows.push(scheduleRow);
+        return;
+      }
+
+      // Tabel datar wajib memakai tanggal dari barisnya sendiri. Jangan
+      // mewarisi tanggal baris sebelumnya untuk baris kosong/nonjadwal.
+      if (isFlatScheduleSheet && !scheduleDate) return;
 
       if (scheduleDate) {
         sectionDate = new Date(
@@ -652,7 +708,7 @@ export default function ImportJadwal({
           );
           if (rowType && rowType !== jenis) return;
           if (!rowType && hasRowType) return;
-          if (sectionDate >= today) {
+          if (sectionDate >= importStartDay) {
             const scheduleRow = [...row];
             scheduleRow._scheduleDate = sectionDate;
             scheduleRows.push(scheduleRow);
@@ -684,10 +740,10 @@ export default function ImportJadwal({
         return;
       }
 
-      // Baris sebelum hari import tidak perlu masuk proses database. Baris
-      // tanpa tanggal tetap dipertahankan agar validasi import dapat memberi
-      // pesan yang tepat, bukan menghilangkannya tanpa penjelasan.
-      if (sectionDate && sectionDate < today) return;
+      // Hanya baris dengan tanggal yang berhasil dikenali dan masih berada
+      // dalam cakupan tanggal import yang boleh lanjut ke proses database.
+      // Baris jadwal berkelompok tetap memakai tanggal section sebelumnya.
+      if (!sectionDate || sectionDate < importStartDay) return;
 
       const scheduleRow = [...row];
       if (sectionDate) scheduleRow._scheduleDate = sectionDate;
@@ -711,9 +767,13 @@ export default function ImportJadwal({
       return [
         { key: '_lookup_angkatan', label: 'Angkatan' },
         { key: '_lookup_matkul_kode', label: 'Kode Mata Kuliah' },
-        { key: '_lookup_matkul', label: 'Nama Mata Kuliah' },
+        {
+          key: '_matkul_nama_source',
+          label: 'Nama Mata Kuliah (informasi)',
+        },
         { key: 'paralel', label: 'Paralel' },
         { key: 'kelas', label: 'Kelas' },
+        { key: 'quota', label: 'Kuota' },
         { key: 'real_perkuliahan', label: 'Pertemuan / Real' },
         { key: '_parse_jam', label: 'Waktu (Mulai - Selesai)' },
         { key: '_waktu_mulai', label: 'Jam Mulai' },
@@ -723,6 +783,7 @@ export default function ImportJadwal({
         { key: 'petugas_zoom', label: 'Petugas Zoom' },
         { key: '_parse_zoom_info', label: 'Link / Zoom Info' },
         { key: '_lookup_dosen1', label: 'Dosen Pengampu' },
+        { key: '_dosen_email_source', label: 'Email Dosen (referensi)' },
         { key: '_lookup_dosen_extra', label: 'Dosen Tambahan (2,3,4)' },
         { key: 'moderator', label: 'Moderator' },
         { key: '_lookup_penguji', label: 'Penguji' },
@@ -813,8 +874,33 @@ export default function ImportJadwal({
       // Auto-map columns
       const colMap = columnMap;
       const autoMapping = {};
+      const normalizedHeaderSet = new Set(
+        headers.map((header) => header.toLowerCase().trim())
+      );
+      const isKaryaAkhirRegistrySheet =
+        jenis === 'karya_akhir' &&
+        normalizedHeaderSet.has('tanggal pelaksanaan') &&
+        normalizedHeaderSet.has('ketua komisi pembimbing');
+      const ignoredKaryaAkhirHeaders = new Set([
+        'id',
+        'strata',
+        'nim',
+        'nomor dokumen',
+        'jk',
+        'dosen',
+        'email',
+      ]);
       headers.forEach((header, idx) => {
         const key = header.toLowerCase().trim();
+        // Tanggal dipakai sebagai tanggal jadwal, bukan sebagai kolom
+        // "Pelaksanaan" (daring/luring). Kolom agregat/metadata pada sumber
+        // Karya Akhir juga tidak perlu disimpan kembali ke tabel jadwal.
+        if (
+          key.includes('tanggal') ||
+          key === 'date' ||
+          (isKaryaAkhirRegistrySheet && ignoredKaryaAkhirHeaders.has(key))
+        )
+          return;
         // "Jenis" pada file hasil download menunjukkan kategori jadwal
         // (perkuliahan/karya akhir/lain-lain), bukan jenis pertemuan.
         if (key === 'jenis') return;
@@ -837,7 +923,8 @@ export default function ImportJadwal({
           if (
             target === '_lookup_dosen_extra' ||
             target === '_lookup_dosen_ka' ||
-            target === '_lookup_penguji'
+            target === '_lookup_penguji' ||
+            target === 'moderator'
           ) {
             // Multiple columns can map to same target (dosen 2,3,4)
             if (!autoMapping[idx]) autoMapping[idx] = target;
@@ -885,14 +972,20 @@ export default function ImportJadwal({
 
       // Auto-detect date column, including the combined Indonesian date/time
       // produced by Download Jadwal Admin (for example 26 Agustus 2026, 08.00).
-      let dateIdx = headers.findIndex((h) => {
-        const l = h.toLowerCase();
-        return (
-          l.includes('tanggal') ||
-          l.includes('date') ||
-          l.includes('waktu mulai')
-        );
-      });
+      const exactKaryaAkhirDateIdx = normalizedHeaders.indexOf(
+        'tanggal pelaksanaan'
+      );
+      let dateIdx =
+        exactKaryaAkhirDateIdx >= 0
+          ? exactKaryaAkhirDateIdx
+          : headers.findIndex((h) => {
+              const l = h.toLowerCase();
+              return (
+                l.includes('tanggal') ||
+                l.includes('date') ||
+                l.includes('waktu mulai')
+              );
+            });
       if (dateIdx < 0) {
         dateIdx = headers.findIndex((_, idx) =>
           rows
@@ -919,19 +1012,35 @@ export default function ImportJadwal({
     setGoogleSheetError('');
 
     try {
-      const response = await fetch(buildGoogleSheetExportUrl(jenis), {
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(
-            'Google Sheets belum dapat diakses. Ubah akses spreadsheet menjadi "Siapa saja yang memiliki link" sebagai Pelihat, lalu coba lagi.'
-          );
+      let response = null;
+      let responseError = null;
+      const exportUrls = buildGoogleSheetExportUrls(jenis);
+
+      for (const exportUrl of exportUrls) {
+        try {
+          const candidateResponse = await fetch(exportUrl, {
+            cache: 'no-store',
+          });
+          if (candidateResponse.ok) {
+            response = candidateResponse;
+            break;
+          }
+
+          responseError =
+            candidateResponse.status === 401 || candidateResponse.status === 403
+              ? new Error(
+                  'Google Sheets belum dapat diakses. Ubah akses spreadsheet menjadi "Siapa saja yang memiliki link" sebagai Pelihat, lalu coba lagi.'
+                )
+              : new Error(
+                  `Google Sheets merespons dengan status ${candidateResponse.status}`
+                );
+        } catch (fetchError) {
+          responseError = fetchError;
         }
-        throw new Error(
-          `Google Sheets merespons dengan status ${response.status}`
-        );
       }
+
+      if (!response)
+        throw responseError || new Error('Google Sheets gagal dibaca.');
 
       const workbookData = new Uint8Array(await response.arrayBuffer());
       const remoteWorkbook = XLSX.read(workbookData, {
@@ -1013,50 +1122,69 @@ export default function ImportJadwal({
 
   // ──────────── Build lookup maps ────────────
   const buildLookups = useCallback(() => {
-    const dosenByName = {};
-    const dosenByIdDosen = {};
-    (options.dosen || []).forEach((d) => {
-      dosenByName[d.nama_dosen.toLowerCase().trim()] = d.id;
-      if (d.id_dosen) dosenByIdDosen[d.id_dosen.toLowerCase().trim()] = d.id;
-    });
-    const ruanganByName = {};
-    // Gunakan allRuangan (semua, tanpa filter aktif) agar ruangan non-aktif tetap bisa di-import
+    const dosenSource =
+      allImportReferences.dosen.length > 0
+        ? allImportReferences.dosen
+        : options.dosen || [];
+    const dosenByName = buildPreferredImportLookup(
+      dosenSource,
+      (d) => d.nama_dosen
+    );
+    const dosenByIdDosen = buildPreferredImportLookup(
+      dosenSource,
+      (d) => d.id_dosen
+    );
+    const dosenByEmail = buildPreferredImportLookup(
+      dosenSource,
+      (d) => d.email
+    );
+
+    // Data nonaktif tetap dapat dipakai jika tidak ada kandidat aktif dengan
+    // nama yang sama. Untuk nama duplikat, kandidat aktif diprioritaskan.
     const ruanganSource =
       allRuangan.length > 0 ? allRuangan : options.ruangan || [];
-    ruanganSource.forEach((r) => {
-      ruanganByName[r.nama_ruangan.toLowerCase().trim()] = r.id;
-    });
-    const matkulByName = {};
-    const matkulByKode = {};
-    (options.mataKuliah || []).forEach((m) => {
-      const name = (m.mata_kuliah || m.nama_matkul || '').toLowerCase().trim();
-      if (name) matkulByName[name] = m.id;
-      const kode = (m.kode_mata_kuliah || '').toLowerCase().trim();
-      if (kode) matkulByKode[kode] = m.id;
-    });
-    const angkatanByName = {};
-    (options.angkatan || []).forEach((a) => {
-      angkatanByName[a.nama_angkatan.toLowerCase().trim()] = a.id;
-    });
-    const agendaByName = {};
-    (options.agenda || []).forEach((a) => {
-      agendaByName[a.agenda_karya_akhir.toLowerCase().trim()] = a.id;
-    });
+    const ruanganByName = buildCanonicalImportLookup(
+      ruanganSource,
+      (r) => r.nama_ruangan,
+      ROOM_CONFLICT_EXEMPT_NAMES
+    );
+
+    const mataKuliahSource =
+      allImportReferences.mataKuliah.length > 0
+        ? allImportReferences.mataKuliah
+        : options.mataKuliah || [];
+    const matkulByKode = buildPreferredImportLookup(
+      mataKuliahSource,
+      (m) => m.kode_mata_kuliah
+    );
+
+    const angkatanSource =
+      allImportReferences.angkatan.length > 0
+        ? allImportReferences.angkatan
+        : options.angkatan || [];
+    const angkatanByName = buildPreferredImportLookup(
+      angkatanSource,
+      (a) => a.nama_angkatan
+    );
+    const agendaByName = buildPreferredImportLookup(
+      options.agenda || [],
+      (a) => a.agenda_karya_akhir
+    );
     return {
       dosenByName,
       dosenByIdDosen,
+      dosenByEmail,
       ruanganByName,
-      matkulByName,
       matkulByKode,
       angkatanByName,
       agendaByName,
     };
-  }, [options, allRuangan]);
+  }, [options, allRuangan, allImportReferences]);
 
   // Fuzzy lookup by name (exact first, then contains match)
   const fuzzyLookup = (name, map) => {
     if (!name) return null;
-    const lower = String(name).toLowerCase().trim();
+    const lower = normalizeImportLookup(name);
     if (!lower || lower === '-') return null;
     // Exact match first
     if (map[lower]) return map[lower];
@@ -1066,14 +1194,15 @@ export default function ImportJadwal({
     }
     return null;
   };
-  const findDosen = (name, dosenByName, dosenByIdDosen) => {
+  const findDosen = (name, dosenByName, dosenByIdDosen, strict = false) => {
     if (!name) return null;
-    const val = String(name).toLowerCase().trim();
+    const val = normalizeImportLookup(name);
     if (!val || val === '-') return null;
     // Try id_dosen match first (most reliable)
     if (dosenByIdDosen && dosenByIdDosen[val]) return dosenByIdDosen[val];
-    // Fallback to name lookup
-    return fuzzyLookup(name, dosenByName);
+    return strict
+      ? exactImportLookup(name, dosenByName)
+      : fuzzyLookup(name, dosenByName);
   };
 
   // ──────────── STEP 3: Import to DB ────────────
@@ -1093,17 +1222,21 @@ export default function ImportJadwal({
     );
     console.log('[Import] Column mapping:', columnMapping);
     console.log(
-      '[Import] Matkul lookup keys:',
-      Object.keys(lookups.matkulByName)
+      '[Import] Kode matkul lookup keys:',
+      Object.keys(lookups.matkulByKode)
     );
     console.log(
       '[Import] Ruangan lookup keys:',
       Object.keys(lookups.ruanganByName)
     );
+    const strictGoogleSync = jenis === 'perkuliahan' && dataSource === 'google';
+    const strictReferenceValidation = jenis === 'perkuliahan';
     const results = {
+      strictSync: strictGoogleSync,
       success: 0,
       inserted: 0,
       updated: 0,
+      deleted: 0,
       errors: [],
       conflicts: [],
       skipped: 0,
@@ -1114,6 +1247,8 @@ export default function ImportJadwal({
         : jenis === 'karya_akhir'
           ? 'jadwal_karya_akhir'
           : 'jadwal_lain_lain';
+    const preparedRows = [];
+    const preparedImportKeys = new Set();
 
     // Group column mapping by target
     const mappingByTarget = {};
@@ -1124,16 +1259,12 @@ export default function ImportJadwal({
 
     let rowDate = null; // running date for grouped rows
     const importNow = new Date();
-    const importDayStart = new Date(
-      importNow.getFullYear(),
-      importNow.getMonth(),
-      importNow.getDate()
-    );
+    const importStartDay = getImportStartDay(importNow);
     let existingSchedules = null;
     try {
       existingSchedules = await fetchExistingSchedulesFrom(
         tableName,
-        `${dateToLocalStr(importDayStart)}T00:00:00`
+        `${dateToLocalStr(importStartDay)}T00:00:00`
       );
     } catch (cacheError) {
       // Tetap lanjut dengan query per baris jika prefetch tidak tersedia.
@@ -1142,6 +1273,15 @@ export default function ImportJadwal({
         cacheError
       );
     }
+    const managedScheduleIds = new Set(
+      (existingSchedules || [])
+        .filter(
+          (schedule) =>
+            schedule.import_source === 'google_jadwal' ||
+            isLegacyScheduleImport(schedule)
+        )
+        .map((schedule) => String(schedule.id))
+    );
 
     for (let rowIdx = 0; rowIdx < filteredPreviewData.length; rowIdx++) {
       const row = filteredPreviewData[rowIdx];
@@ -1206,9 +1346,20 @@ export default function ImportJadwal({
           continue;
         }
 
-        // Filter pengaman: jadwal sebelum hari import tidak menjalankan query
-        // pencocokan, pengecekan konflik, maupun proses simpan.
-        if (rowDate && rowDate < importDayStart) continue;
+        // Filter pengaman terakhir: baris tanpa tanggal valid atau di luar
+        // cakupan import tidak menjalankan lookup, pengecekan konflik, maupun
+        // proses simpan ke database.
+        const normalizedRowDay = rowDate
+          ? new Date(
+              rowDate.getFullYear(),
+              rowDate.getMonth(),
+              rowDate.getDate()
+            )
+          : null;
+        if (!normalizedRowDay || normalizedRowDay < importStartDay) {
+          results.skipped++;
+          continue;
+        }
 
         const record = {};
         let jamStr = null;
@@ -1217,6 +1368,12 @@ export default function ImportJadwal({
         let dosenExtraIds = [];
         let dosenKaIds = [];
         let pengujiIds = [];
+        const rowIssues = [];
+        let unresolvedRoomLabel = '';
+        let sourceLocationLabel = '';
+        let sourceDosenEmail = '';
+        const sourceDosenNames = [];
+        let meetingTypeWasProvided = false;
 
         // Process each mapped column
         Object.entries(columnMapping).forEach(([colIdxStr, target]) => {
@@ -1241,6 +1398,7 @@ export default function ImportJadwal({
               break;
             case 'paralel':
             case 'real_perkuliahan':
+            case 'quota':
               record[target] = parseInt(val) || null;
               break;
             case '_parse_jam':
@@ -1254,13 +1412,30 @@ export default function ImportJadwal({
               break;
             case '_parse_jenis_pertemuan':
               record.jenis_pertemuan = parseJenisPertemuan(val);
+              meetingTypeWasProvided = true;
               break;
             case '_lookup_angkatan': {
-              const angkatanIds = val
-                .split(/[,;|]/)
-                .map((name) => fuzzyLookup(name, lookups.angkatanByName))
-                .filter(Boolean)
-                .slice(0, 3);
+              const angkatanLabels = splitAngkatanLabels(val);
+              const resolvedAngkatanIds = angkatanLabels.map((name) => ({
+                name,
+                id: strictReferenceValidation
+                  ? exactImportLookup(name, lookups.angkatanByName)
+                  : fuzzyLookup(name, lookups.angkatanByName),
+              }));
+              if (strictReferenceValidation) {
+                resolvedAngkatanIds
+                  .filter(({ id }) => !id)
+                  .forEach(({ name }) =>
+                    rowIssues.push(
+                      `angkatan "${name}" tidak ada di master data`
+                    )
+                  );
+              }
+              const angkatanIds = [
+                ...new Set(
+                  resolvedAngkatanIds.map(({ id }) => id).filter(Boolean)
+                ),
+              ].slice(0, 3);
               if (jenis === 'karya_akhir') {
                 record.nama_angkatan = angkatanIds[0] || null;
               } else if (jenis === 'perkuliahan') {
@@ -1270,73 +1445,83 @@ export default function ImportJadwal({
               break;
             }
             case '_lookup_ruangan': {
-              const rid = fuzzyLookup(val, lookups.ruanganByName);
+              sourceLocationLabel = val;
+              const rid = strictReferenceValidation
+                ? exactImportLookup(val, lookups.ruanganByName)
+                : fuzzyLookup(val, lookups.ruanganByName);
               if (jenis === 'perkuliahan') record.ruangan_id = rid || null;
               else record.nama_ruangan = rid || null;
-              if (!rid)
+              if (!rid) {
+                unresolvedRoomLabel = val;
                 console.warn(`[Import] Ruangan tidak ditemukan: "${val}"`);
-              break;
-            }
-            case '_lookup_matkul': {
-              // Lookup by name, but only if not already set by kode
-              if (!record.id_mata_kuliah) {
-                const mid = fuzzyLookup(val, lookups.matkulByName);
-                record.id_mata_kuliah = mid || null;
-                if (!mid)
-                  console.warn(
-                    `[Import] Mata Kuliah tidak ditemukan: "${val}"`
-                  );
               }
               break;
             }
+            case '_matkul_nama_source': {
+              // Nama mata kuliah hanya membantu pengguna memeriksa preview.
+              // Relasi database selalu ditentukan oleh kode mata kuliah.
+              break;
+            }
             case '_lookup_matkul_kode': {
-              const mid = fuzzyLookup(val, lookups.matkulByKode);
+              const mid = strictReferenceValidation
+                ? exactImportLookup(val, lookups.matkulByKode)
+                : fuzzyLookup(val, lookups.matkulByKode);
               if (mid) record.id_mata_kuliah = mid;
-              else
+              else {
+                if (strictReferenceValidation)
+                  rowIssues.push(
+                    `kode mata kuliah "${val}" tidak ada di master data`
+                  );
                 console.warn(
                   `[Import] Kode Mata Kuliah tidak ditemukan: "${val}"`
                 );
+              }
               break;
             }
             case '_lookup_agenda': {
-              const aid = lookups.agendaByName[val.toLowerCase().trim()];
+              const normalizedAgenda = normalizeKaryaAkhirAgenda(val);
+              const aid =
+                lookups.agendaByName[normalizedAgenda.toLowerCase()] ||
+                lookups.agendaByName[val.toLowerCase().trim()];
               record.agenda_jadwal_karya_akhir = aid || null;
               break;
             }
             case '_lookup_dosen1': {
-              const did = findDosen(
-                val,
-                lookups.dosenByName,
-                lookups.dosenByIdDosen
-              );
-              record.dosen_id = did || null;
+              sourceDosenNames.push(...splitDosenLabels(val));
               break;
             }
             case '_lookup_dosen_extra': {
-              const did = findDosen(
-                val,
-                lookups.dosenByName,
-                lookups.dosenByIdDosen
-              );
-              if (did) dosenExtraIds.push(did);
+              sourceDosenNames.push(...splitDosenLabels(val));
+              break;
+            }
+            case '_dosen_email_source': {
+              sourceDosenEmail = val;
               break;
             }
             case '_lookup_dosen_ka': {
-              const did = findDosen(
-                val,
-                lookups.dosenByName,
-                lookups.dosenByIdDosen
-              );
-              if (did) dosenKaIds.push(did);
+              val
+                .split(/[;|]/)
+                .map((name) =>
+                  findDosen(name, lookups.dosenByName, lookups.dosenByIdDosen)
+                )
+                .filter(Boolean)
+                .forEach((did) => dosenKaIds.push(did));
               break;
             }
             case '_lookup_penguji': {
-              const did = findDosen(
-                val,
-                lookups.dosenByName,
-                lookups.dosenByIdDosen
-              );
-              if (did) pengujiIds.push(did);
+              val.split(/[;|]/).forEach((name) => {
+                const did = findDosen(
+                  name,
+                  lookups.dosenByName,
+                  lookups.dosenByIdDosen,
+                  strictReferenceValidation
+                );
+                if (did) pengujiIds.push(did);
+                else if (strictReferenceValidation)
+                  rowIssues.push(
+                    `penguji "${name.trim()}" tidak ada di master data`
+                  );
+              });
               break;
             }
             case '_parse_zoom_info': {
@@ -1346,15 +1531,55 @@ export default function ImportJadwal({
               break;
             }
             case 'zoom_id':
-              record.zoom_id = val;
+              if (val !== '-') record.zoom_id = val;
               break;
             case 'zoom_password':
-              record.zoom_password = val;
+              if (val !== '-') record.zoom_password = val;
               break;
             default:
               break;
           }
         });
+
+        if (
+          jenis === 'perkuliahan' &&
+          (sourceDosenNames.length > 0 || sourceDosenEmail)
+        ) {
+          const uniqueDosenNames = [...new Set(sourceDosenNames)];
+          const primaryDosenName = uniqueDosenNames[0] || sourceDosenEmail;
+          const primaryDosenId =
+            exactImportLookup(sourceDosenEmail, lookups.dosenByEmail) ||
+            findDosen(
+              primaryDosenName,
+              lookups.dosenByName,
+              lookups.dosenByIdDosen,
+              strictReferenceValidation
+            );
+
+          record.dosen_id = primaryDosenId || null;
+          if (strictReferenceValidation && !primaryDosenId) {
+            rowIssues.push(
+              `dosen "${primaryDosenName}" tidak ada di master data`
+            );
+          }
+
+          uniqueDosenNames.slice(1).forEach((name) => {
+            const did = findDosen(
+              name,
+              lookups.dosenByName,
+              lookups.dosenByIdDosen,
+              strictReferenceValidation
+            );
+            if (did && String(did) !== String(primaryDosenId)) {
+              dosenExtraIds.push(did);
+            } else if (!did && strictReferenceValidation) {
+              rowIssues.push(
+                `dosen tambahan "${name}" tidak ada di master data`
+              );
+            }
+          });
+          dosenExtraIds = [...new Set(dosenExtraIds)];
+        }
 
         // Parse jam with date — support combined "HH:MM - HH:MM" or separate Mulai/Selesai columns
         if (jamStr && rowDate) {
@@ -1386,9 +1611,12 @@ export default function ImportJadwal({
             record.penguji_ids = JSON.stringify(pengujiIds);
         }
         if (jenis === 'karya_akhir') {
-          if (dosenKaIds.length) record.dosen_ids = JSON.stringify(dosenKaIds);
-          if (pengujiIds.length)
-            record.penguji_ids = JSON.stringify(pengujiIds);
+          const uniqueDosenKaIds = [...new Set(dosenKaIds)].slice(0, 4);
+          const uniquePengujiIds = [...new Set(pengujiIds)].slice(0, 4);
+          if (uniqueDosenKaIds.length)
+            record.dosen_ids = JSON.stringify(uniqueDosenKaIds);
+          if (uniquePengujiIds.length)
+            record.penguji_ids = JSON.stringify(uniquePengujiIds);
         }
 
         // Set default jenis_pertemuan
@@ -1398,6 +1626,19 @@ export default function ImportJadwal({
         if (!usesPhysicalRoom(record.jenis_pertemuan)) {
           if (jenis === 'perkuliahan') record.ruangan_id = null;
           else record.nama_ruangan = null;
+          if (jenis === 'perkuliahan') {
+            record.lokasi_virtual = sourceLocationLabel || null;
+          }
+        } else if (strictReferenceValidation && unresolvedRoomLabel) {
+          rowIssues.push(
+            `ruangan "${unresolvedRoomLabel}" tidak ada di master data`
+          );
+        } else if (
+          strictReferenceValidation &&
+          meetingTypeWasProvided &&
+          !record.ruangan_id
+        ) {
+          rowIssues.push('ruangan wajib diisi untuk pertemuan luring/hybrid');
         }
 
         // Add user info — gunakan batchTag agar bisa di-rollback
@@ -1412,6 +1653,46 @@ export default function ImportJadwal({
         );
         if (usefulKeys.length < 1) {
           results.skipped++;
+          continue;
+        }
+
+        if (strictReferenceValidation) {
+          const validationIssues = validatePerkuliahanImportRecord(
+            record,
+            rowIssues
+          );
+          if (validationIssues.length > 0) {
+            results.errors.push(
+              `Baris ${rowIdx + 1}: ${validationIssues.join('; ')}`
+            );
+            continue;
+          }
+        }
+
+        if (strictGoogleSync) {
+          const syncRecord = normalizePerkuliahanSyncRecord(record, batchTag);
+          if (preparedImportKeys.has(syncRecord.import_key)) {
+            results.errors.push(
+              `Baris ${rowIdx + 1}: jadwal duplikat di spreadsheet (mata kuliah, waktu, angkatan, paralel, pertemuan, dan dosen sama)`
+            );
+            continue;
+          }
+
+          const roomConflict = await findImportedRoomConflict({
+            record: syncRecord,
+            tableName,
+            excludedIds: [...managedScheduleIds],
+            roomNameById,
+          });
+          if (roomConflict) {
+            results.errors.push(
+              `Baris ${rowIdx + 1}: konflik ruangan. ${roomConflict}`
+            );
+            continue;
+          }
+
+          preparedImportKeys.add(syncRecord.import_key);
+          preparedRows.push({ rowNumber: rowIdx + 1, record: syncRecord });
           continue;
         }
 
@@ -1532,6 +1813,68 @@ export default function ImportJadwal({
       }
     }
 
+    if (strictGoogleSync) {
+      for (let leftIndex = 0; leftIndex < preparedRows.length; leftIndex++) {
+        const left = preparedRows[leftIndex];
+        if (!usesPhysicalRoom(left.record.jenis_pertemuan)) continue;
+        if (
+          isRoomConflictExempt(roomNameById[String(left.record.ruangan_id)])
+        ) {
+          continue;
+        }
+
+        for (
+          let rightIndex = leftIndex + 1;
+          rightIndex < preparedRows.length;
+          rightIndex++
+        ) {
+          const right = preparedRows[rightIndex];
+          if (
+            !usesPhysicalRoom(right.record.jenis_pertemuan) ||
+            !importedSchedulesOverlapInSameRoom(left.record, right.record)
+          ) {
+            continue;
+          }
+
+          results.errors.push(
+            `Baris ${left.rowNumber} dan ${right.rowNumber}: ruangan yang sama dipakai pada waktu yang bertabrakan`
+          );
+        }
+      }
+
+      if (preparedRows.length === 0 && results.errors.length === 0) {
+        results.errors.push('Tidak ada jadwal valid untuk disinkronkan.');
+      }
+
+      if (results.errors.length === 0) {
+        const { data: syncData, error: syncError } = await supabase.rpc(
+          'sync_jadwal_perkuliahan_import',
+          {
+            p_rows: preparedRows.map(({ record }) => record),
+            p_scope_start: `${dateToLocalStr(importStartDay)}T00:00:00`,
+            p_batch_tag: batchTag,
+          }
+        );
+
+        if (syncError) {
+          const migrationHint = /function|schema cache|does not exist/i.test(
+            syncError.message || ''
+          )
+            ? ' Jalankan MIGRATION_STRICT_JADWAL_PERKULIAHAN_SYNC.sql di Supabase terlebih dahulu.'
+            : '';
+          results.errors.push(
+            `Sinkronisasi database dibatalkan: ${syncError.message}.${migrationHint}`
+          );
+        } else {
+          const summary = Array.isArray(syncData) ? syncData[0] : syncData;
+          results.inserted = Number(summary?.inserted || 0);
+          results.updated = Number(summary?.updated || 0);
+          results.deleted = Number(summary?.deleted || 0);
+          results.success = Number(summary?.total || preparedRows.length);
+        }
+      }
+    }
+
     setImportResult(results);
     setExpandedConflictIds([]);
     setImporting(false);
@@ -1577,6 +1920,14 @@ export default function ImportJadwal({
           tag: 'BARU',
           title: `Import ${jenisLabel}: ${results.inserted} Data Ditambahkan`,
           description: `${results.inserted} data baru berhasil diimport oleh ${userName || 'User'}.`,
+        });
+      }
+      if (results.deleted > 0) {
+        onNotify({
+          type: 'hapus',
+          tag: 'SYNC',
+          title: `Import ${jenisLabel}: ${results.deleted} Data Lama Dibersihkan`,
+          description: `${results.deleted} data hasil import lama tidak lagi ada di sumber dan telah dibersihkan saat sinkronisasi.`,
         });
       }
     }
@@ -2116,6 +2467,13 @@ export default function ImportJadwal({
     { number: 4, label: 'Hasil import' },
   ];
   const mappedColumnCount = Object.keys(columnMapping).length;
+  const karyaAkhirDateColumnIndex = previewHeaders.findIndex(
+    (header) => header.trim().toLowerCase() === 'tanggal pelaksanaan'
+  );
+  const isKaryaAkhirDateColumnLocked =
+    dataSource === 'google' &&
+    jenis === 'karya_akhir' &&
+    karyaAkhirDateColumnIndex >= 0;
   const unresolvedConflictCount = importResult?.conflicts?.length || 0;
   const failureCount =
     (importResult?.errors?.length || 0) + unresolvedConflictCount;
@@ -2124,11 +2482,52 @@ export default function ImportJadwal({
       ? `${Math.max(1, Math.round(file.size / 1024))} KB`
       : `${(file.size / (1024 * 1024)).toFixed(1)} MB`
     : '';
-  const googleSyncDateLabel = `Mulai ${new Date().toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  })} dan seluruh tanggal setelahnya`;
+  const importStartDay = getImportStartDay();
+  const googleSyncDateLabel = `Mulai ${importStartDay.toLocaleDateString(
+    'id-ID',
+    {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    }
+  )} dan seluruh tanggal setelahnya`;
+  const handleDownloadErrorReport = () => {
+    if (!importResult || failureCount === 0) return;
+
+    const conflictErrors = (importResult.conflicts || []).map(
+      (conflict) => `Baris ${conflict.rowNumber}: ${conflict.message}`
+    );
+    const report = buildImportErrorReport({
+      errors: [...(importResult.errors || []), ...conflictErrors],
+      headers: previewHeaders,
+      rows: filteredPreviewData,
+      metadata: {
+        batch_id: importBatchTag,
+        schedule_type: jenis,
+        schedule_label: jenisLabels[jenis] || jenis,
+        data_source: dataSource,
+        source_file: file?.name || null,
+        sheet_name:
+          dataSource === 'google' ? selectedGoogleSheet : selectedSheet,
+      },
+    });
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[:.]/g, '-')
+      .replace('T', '_')
+      .replace('Z', '');
+    const blob = new Blob([JSON.stringify(report, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement('a');
+    downloadLink.href = downloadUrl;
+    downloadLink.download = `kegagalan-import-${jenis}-${timestamp}.json`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    URL.revokeObjectURL(downloadUrl);
+  };
 
   return (
     <div
@@ -2287,7 +2686,7 @@ export default function ImportJadwal({
                             className="animate-spin"
                             aria-hidden="true"
                           />
-                          Memuat daftar sheet...
+                          Membaca jadwal terbaru...
                         </>
                       ) : (
                         <>
@@ -2500,7 +2899,8 @@ export default function ImportJadwal({
                   id="import-date-column"
                   value={dateColumn}
                   onChange={(e) => setDateColumn(e.target.value)}
-                  className="ui-field mt-3 w-full border-amber-300 bg-white text-sm"
+                  disabled={isKaryaAkhirDateColumnLocked}
+                  className="ui-field mt-3 w-full border-amber-300 bg-white text-sm disabled:cursor-not-allowed disabled:bg-amber-100/60"
                 >
                   <option value="">
                     -- Tidak ada (tanggal dari section header) --
@@ -2512,8 +2912,9 @@ export default function ImportJadwal({
                   ))}
                 </select>
                 <p className="mt-2 text-xs leading-5 text-amber-700">
-                  Jika spreadsheet menggunakan baris section header seperti
-                  "Selasa, 27 Januari 2026", biarkan kosong.
+                  {isKaryaAkhirDateColumnLocked
+                    ? 'Kolom Tanggal Pelaksanaan dipilih otomatis untuk sumber Karya Akhir ini.'
+                    : 'Jika spreadsheet menggunakan baris section header seperti "Selasa, 27 Januari 2026", biarkan kosong.'}
                 </p>
               </div>
 
@@ -2545,8 +2946,8 @@ export default function ImportJadwal({
                           )}
                         </td>
                         <td className="max-w-[220px] truncate px-4 py-3 text-xs text-slate-500">
-                          {filteredPreviewData.length > 0
-                            ? String(filteredPreviewData[0][idx] || '-')
+                          {previewData.length > 0
+                            ? String(previewData[0][idx] || '-')
                             : '-'}
                         </td>
                         <td className="px-4 py-2.5">
@@ -2608,9 +3009,10 @@ export default function ImportJadwal({
                     Cakupan import
                   </h3>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Hanya jadwal mulai hari ini dan seluruh tanggal setelahnya
-                    yang diambil. Jadwal sebelum hari ini tidak ikut diproses ke
-                    database.
+                    Hanya jadwal bertanggal valid mulai hari ini, dihitung saat
+                    proses dijalankan, dan seluruh tanggal setelahnya yang
+                    diambil. Jadwal sebelum hari ini atau baris tanpa tanggal
+                    tidak ikut diproses ke database.
                   </p>
                   <p className="mt-2 text-xs font-semibold text-slate-700">
                     {googleSyncDateLabel}
@@ -2619,8 +3021,9 @@ export default function ImportJadwal({
 
                 <p className="mt-3 text-xs font-medium text-emerald-700">
                   {filteredPreviewData.length} baris akan diproses. Data yang
-                  sama dilewati, sedangkan konflik dapat diedit atau dilewati
-                  pada hasil import.
+                  {jenis === 'perkuliahan' && dataSource === 'google'
+                    ? ' tidak lolos validasi akan membatalkan seluruh sinkronisasi. Data import lama yang tidak lagi ada di Google Sheet akan dibersihkan.'
+                    : ' sama dilewati, sedangkan konflik dapat diedit atau dilewati pada hasil import.'}
                 </p>
               </div>
 
@@ -2736,19 +3139,19 @@ export default function ImportJadwal({
                   <div className="space-y-4">
                     <div
                       className={`rounded-xl border p-5 text-center ${
-                        unresolvedConflictCount > 0
+                        failureCount > 0
                           ? 'border-amber-200 bg-amber-50/70'
                           : 'border-emerald-200 bg-emerald-50/70'
                       }`}
                     >
                       <span
                         className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full text-white shadow-sm ${
-                          unresolvedConflictCount > 0
+                          failureCount > 0
                             ? 'bg-amber-500 shadow-amber-500/25'
                             : 'bg-emerald-500 shadow-emerald-500/25'
                         }`}
                       >
-                        {unresolvedConflictCount > 0 ? (
+                        {failureCount > 0 ? (
                           <AlertCircle size={24} aria-hidden="true" />
                         ) : (
                           <Check
@@ -2760,24 +3163,24 @@ export default function ImportJadwal({
                       </span>
                       <h3
                         className={`mt-3 text-base font-semibold ${
-                          unresolvedConflictCount > 0
+                          failureCount > 0
                             ? 'text-amber-950'
                             : 'text-emerald-950'
                         }`}
                       >
-                        {unresolvedConflictCount > 0
+                        {failureCount > 0
                           ? 'Import perlu diperiksa'
                           : 'Proses import selesai'}
                       </h3>
                       <p
                         className={`mt-1 text-sm ${
-                          unresolvedConflictCount > 0
+                          failureCount > 0
                             ? 'text-amber-800'
                             : 'text-emerald-800'
                         }`}
                       >
-                        {unresolvedConflictCount > 0
-                          ? 'Selesaikan atau lewati konflik di bawah ini.'
+                        {failureCount > 0
+                          ? 'Perbaiki semua baris bermasalah, lalu jalankan import kembali.'
                           : 'Ringkasan hasil pemrosesan file Anda.'}
                       </p>
                     </div>
@@ -2791,7 +3194,7 @@ export default function ImportJadwal({
                     </div>
 
                     {/* Summary */}
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                       <div className="rounded-xl border border-emerald-200 bg-white p-4 text-center shadow-sm">
                         <div className="text-2xl font-bold text-emerald-600">
                           {importResult.inserted ?? importResult.success}
@@ -2806,6 +3209,14 @@ export default function ImportJadwal({
                         </div>
                         <div className="mt-1 text-xs font-medium text-slate-500">
                           Diperbarui
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-orange-200 bg-white p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-orange-600">
+                          {importResult.deleted ?? 0}
+                        </div>
+                        <div className="mt-1 text-xs font-medium text-slate-500">
+                          Data lama dibersihkan
                         </div>
                       </div>
                       <div className="rounded-xl border border-red-200 bg-white p-4 text-center shadow-sm">
@@ -2825,6 +3236,28 @@ export default function ImportJadwal({
                         </div>
                       </div>
                     </div>
+
+                    {failureCount > 0 && (
+                      <div className="flex flex-col gap-3 rounded-xl border border-sky-200 bg-sky-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-sky-900">
+                            Laporan diagnosis tersedia
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-sky-700">
+                            JSON berisi kode masalah, nomor baris, pesan, dan
+                            data sumber agar kegagalan mudah ditelusuri.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleDownloadErrorReport}
+                          className="ui-button shrink-0 justify-center border border-sky-300 bg-white text-sky-800 hover:bg-sky-100"
+                        >
+                          <Download size={15} aria-hidden="true" />
+                          Unduh JSON
+                        </button>
+                      </div>
+                    )}
 
                     {/* Editable room conflicts */}
                     {unresolvedConflictCount > 0 && (
@@ -3192,18 +3625,19 @@ export default function ImportJadwal({
                         <RotateCcw size={15} aria-hidden="true" />
                         Import Lagi
                       </button>
-                      {(importResult.inserted ?? importResult.success) > 0 && (
-                        <button
-                          type="button"
-                          onClick={handleUndo}
-                          disabled={undoing}
-                          className="ui-button justify-center border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-60"
-                        >
-                          {undoing
-                            ? 'Membatalkan...'
-                            : `↩ Batalkan Insert (${importResult.inserted ?? importResult.success} data baru)`}
-                        </button>
-                      )}
+                      {!importResult.strictSync &&
+                        (importResult.inserted ?? importResult.success) > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleUndo}
+                            disabled={undoing}
+                            className="ui-button justify-center border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-60"
+                          >
+                            {undoing
+                              ? 'Membatalkan...'
+                              : `↩ Batalkan Insert (${importResult.inserted ?? importResult.success} data baru)`}
+                          </button>
+                        )}
                       <button
                         type="button"
                         onClick={handleClose}

@@ -26,6 +26,15 @@ export function normalizeKelasForDatabase(kelas) {
   return value.slice(0, 10);
 }
 
+export function splitAngkatanLabels(value) {
+  if (value === null || value === undefined) return [];
+
+  return String(value)
+    .split(/\s*(?:,|;|\||&|\r?\n)\s*/)
+    .map((label) => label.trim())
+    .filter(Boolean);
+}
+
 export function formatAngkatanLabel(angkatan, paralel, kelas) {
   const parts = [hasValue(angkatan) ? String(angkatan).trim() : '-'];
 
