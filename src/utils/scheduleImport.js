@@ -1,3 +1,5 @@
+import { usesPhysicalRoom } from './meetingRoom.js';
+
 const EMPTY_VALUES = new Set(['', '-']);
 
 export const ROOM_CONFLICT_EXEMPT_NAMES = ['Gardenia (Gd.B)'];
@@ -25,6 +27,8 @@ export function normalizeImportLookup(value) {
       // Abaikan perbedaan tanda baca gelar, misalnya "Maarif, M.Eng." dan
       // "Ma’arif M.Eng.". Kolisi pada tingkat prioritas yang sama tetap ditolak
       // oleh buildPreferredImportLookup agar pencocokan tidak menjadi ambigu.
+      // Samakan singkatan gelar bertitik dan tanpa titik: S.E. = SE.
+      .replace(/\./g, '')
       .replace(/[\p{P}\p{S}]+/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim()
@@ -35,6 +39,42 @@ export function exactImportLookup(value, lookup) {
   const key = normalizeImportLookup(value);
   if (!key || EMPTY_VALUES.has(key)) return null;
   return lookup?.[key] ?? null;
+}
+
+export function resolvePrimaryDosenImport({
+  idDosen,
+  email,
+  name,
+  dosenByExternalId,
+  dosenByEmail,
+  dosenByName,
+}) {
+  const normalizedIdDosen = normalizeImportLookup(idDosen);
+  if (normalizedIdDosen && !EMPTY_VALUES.has(normalizedIdDosen)) {
+    return {
+      id: exactImportLookup(idDosen, dosenByExternalId),
+      matchedBy: 'id_external',
+      reference: String(idDosen).trim(),
+    };
+  }
+
+  const normalizedEmail = normalizeImportLookup(email);
+  if (normalizedEmail && !EMPTY_VALUES.has(normalizedEmail)) {
+    const id = exactImportLookup(email, dosenByEmail);
+    if (id != null) {
+      return {
+        id,
+        matchedBy: 'email',
+        reference: String(email).trim(),
+      };
+    }
+  }
+
+  return {
+    id: exactImportLookup(name, dosenByName),
+    matchedBy: 'name',
+    reference: String(name || '').trim(),
+  };
 }
 
 export function splitDosenLabels(value) {
@@ -97,6 +137,30 @@ export function isRoomConflictExempt(roomName) {
   return ROOM_CONFLICT_EXEMPT_NAMES.some(
     (name) => normalizeImportLookup(name) === key
   );
+}
+
+export function findPendingRoomConflict({
+  record,
+  syncRowId,
+  pendingRows = [],
+  roomNameById = {},
+}) {
+  if (!usesPhysicalRoom(record?.jenis_pertemuan) || !record?.ruangan_id) {
+    return null;
+  }
+
+  const roomName = roomNameById[String(record.ruangan_id)];
+  if (isRoomConflictExempt(roomName)) return null;
+
+  const conflict = pendingRows.find(
+    (row) =>
+      row.syncRowId !== syncRowId &&
+      usesPhysicalRoom(row.record?.jenis_pertemuan) &&
+      importedSchedulesOverlapInSameRoom(record, row.record)
+  );
+  if (!conflict) return null;
+
+  return `${roomName || `Ruangan ${record.ruangan_id}`} juga dipakai oleh baris ${conflict.rowNumber} pada waktu yang bertabrakan`;
 }
 
 export function buildPreferredImportLookup(items, keySelector) {

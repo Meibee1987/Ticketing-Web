@@ -450,9 +450,10 @@ function DataTable({ activeTab, data, onEdit, onDelete }) {
     switch (activeTab) {
       case 'dosen':
         return [
-          { key: 'id', label: 'ID' },
+          { key: 'id', label: 'ID Database' },
           { key: 'nama_dosen', label: 'Nama Dosen' },
           { key: 'id_dosen', label: 'ID Dosen' },
+          { key: 'id_external', label: 'ID' },
           { key: 'email', label: 'Email' },
           { key: 'telepon', label: 'Telepon' },
           { key: 'role_name', label: 'Role', type: 'role' },
@@ -576,6 +577,7 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
           setFormData({
             nama_dosen: '',
             id_dosen: '',
+            id_external: '',
             email: '',
             telepon: '',
             roles_id: '',
@@ -708,6 +710,13 @@ function DataModal({ activeTab, mode, item, onClose, onSuccess, roles = [] }) {
               label="ID Dosen"
               name="id_dosen"
               value={formData.id_dosen || ''}
+              onChange={handleChange}
+              disabled={isReadOnly}
+            />
+            <FormField
+              label="ID"
+              name="id_external"
+              value={formData.id_external || ''}
               onChange={handleChange}
               disabled={isReadOnly}
             />
@@ -984,11 +993,13 @@ function FormField({
             ? 'Masukan Nama Dosen'
             : name === 'id_dosen'
               ? 'Masukan ID_Dosen'
-              : name === 'email'
-                ? 'Masukan Email'
-                : name === 'telepon'
-                  ? 'Masukan Telepon'
-                  : `Masukkan ${label.toLowerCase()}`
+              : name === 'id_external'
+                ? 'Masukkan ID dari sumber eksternal'
+                : name === 'email'
+                  ? 'Masukan Email'
+                  : name === 'telepon'
+                    ? 'Masukan Telepon'
+                    : `Masukkan ${label.toLowerCase()}`
         }
       />
     </div>

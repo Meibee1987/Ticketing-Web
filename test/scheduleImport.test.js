@@ -6,10 +6,12 @@ import {
   buildPreferredImportLookup,
   buildPerkuliahanImportKey,
   exactImportLookup,
+  findPendingRoomConflict,
   importedSchedulesOverlapInSameRoom,
   isRoomConflictExempt,
   normalizeImportLookup,
   normalizePerkuliahanSyncRecord,
+  resolvePrimaryDosenImport,
   shouldSkipScheduleImportRow,
   splitDosenLabels,
   validatePerkuliahanImportRecord,
@@ -62,6 +64,55 @@ test('lookup dosen mengabaikan variasi apostrof dan tanda baca gelar', () => {
 
   assert.equal(normalizeImportLookup(sheetName), normalizedMasterName);
   assert.equal(exactImportLookup(sheetName, lookup), 50);
+});
+
+test('lookup dosen menyamakan singkatan gelar bertitik dan tanpa titik', () => {
+  const lookup = buildPreferredImportLookup(
+    [
+      {
+        id: 35,
+        nama_dosen: 'Dr. Zenal Asikin, S.E., M.Si.',
+        aktif_nonaktif: true,
+      },
+    ],
+    (item) => item.nama_dosen
+  );
+
+  assert.equal(exactImportLookup('Dr. Zenal Asikin, SE, M.Si.', lookup), 35);
+});
+
+test('ID dosen menjadi acuan utama meskipun nama dan email mengarah ke dosen lain', () => {
+  const result = resolvePrimaryDosenImport({
+    idDosen: '41a1bafa',
+    email: 'dosen-lain@apps.ipb.ac.id',
+    name: 'Dosen Lain',
+    dosenByExternalId: { '41a1bafa': 13 },
+    dosenByEmail: { 'dosen lain apps ipb ac id': 99 },
+    dosenByName: { 'dosen lain': 99 },
+  });
+
+  assert.deepEqual(result, {
+    id: 13,
+    matchedBy: 'id_external',
+    reference: '41a1bafa',
+  });
+});
+
+test('ID dosen yang tidak dikenal tidak jatuh kembali ke nama atau email', () => {
+  const result = resolvePrimaryDosenImport({
+    idDosen: 'tidak-ada',
+    email: 'achmad@apps.ipb.ac.id',
+    name: 'Achmad Fadillah',
+    dosenByExternalId: { '41a1bafa': 13 },
+    dosenByEmail: { 'achmad apps ipb ac id': 13 },
+    dosenByName: { 'achmad fadillah': 13 },
+  });
+
+  assert.deepEqual(result, {
+    id: null,
+    matchedBy: 'id_external',
+    reference: 'tidak-ada',
+  });
 });
 
 test('memisahkan banyak dosen tanpa memecah tanda baca gelar', () => {
@@ -133,6 +184,27 @@ test('ruangan kosong tidak dianggap sebagai konflik dengan ruangan kosong lain',
     ),
     true
   );
+});
+
+test('mendeteksi konflik terhadap baris sinkronisasi lain', () => {
+  const record = {
+    ruangan_id: 10,
+    jenis_pertemuan: 'luring',
+    mulai_jadwal: '2026-11-07T08:00:00',
+    akhir_jadwal: '2026-11-07T10:30:00',
+  };
+  const message = findPendingRoomConflict({
+    record,
+    syncRowId: 'row-1',
+    pendingRows: [
+      { syncRowId: 'row-1', rowNumber: 1, record },
+      { syncRowId: 'row-2', rowNumber: 2, record: { ...record } },
+    ],
+    roomNameById: { 10: 'Meranti (Gd.A)' },
+  });
+
+  assert.match(message, /Meranti/);
+  assert.match(message, /baris 2/);
 });
 
 test('lookup duplikat memilih satu master data yang aktif', () => {

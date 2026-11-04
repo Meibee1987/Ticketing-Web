@@ -39,11 +39,13 @@ import {
   buildCanonicalImportLookup,
   buildPreferredImportLookup,
   exactImportLookup,
+  findPendingRoomConflict,
   importedSchedulesOverlapInSameRoom,
   isRoomConflictExempt,
   isLegacyScheduleImport,
   normalizeImportLookup,
   normalizePerkuliahanSyncRecord,
+  resolvePrimaryDosenImport,
   ROOM_CONFLICT_EXEMPT_NAMES,
   shouldSkipScheduleImportRow,
   splitDosenLabels,
@@ -193,8 +195,9 @@ const PERKULIAHAN_MAP = {
   'dosen 1': '_lookup_dosen1',
   dosen1: '_lookup_dosen1',
   dosen: '_lookup_dosen1',
-  id_dosen: '_lookup_dosen1',
-  'id dosen': '_lookup_dosen1',
+  id_dosen: '_dosen_id_source',
+  'id dosen': '_dosen_id_source',
+  'dosen id': '_dosen_id_source',
   'email dosen': '_dosen_email_source',
   email_dosen: '_dosen_email_source',
   'dosen 2': '_lookup_dosen_extra',
@@ -551,6 +554,179 @@ async function findImportedRoomConflict({
   return `${roomLabel} sudah dipakai untuk ${typeLabel || conflict.jenis_jadwal} pada ${new Date(conflict.mulai_jadwal).toLocaleString('id-ID')} - ${new Date(conflict.akhir_jadwal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+const STRICT_SYNC_WRITE_BATCH_SIZE = 100;
+
+async function upsertStrictSyncRows(
+  rows,
+  batchTag,
+  cachedSchedules = null,
+  onProgress = null
+) {
+  const existingByKey = new Map(
+    (cachedSchedules || [])
+      .filter(
+        (schedule) =>
+          schedule.import_source === 'google_jadwal' && schedule.import_key
+      )
+      .map((schedule) => [schedule.import_key, schedule])
+  );
+  let inserted = 0;
+  let updated = 0;
+  let completed = 0;
+  const errors = [];
+
+  const preparedRows = rows.map((row) => {
+    const record = {
+      ...row.record,
+      import_source: 'google_jadwal',
+      import_batch: batchTag,
+      updated_by: batchTag,
+    };
+    return {
+      row,
+      record,
+      existingSchedule: existingByKey.get(record.import_key) || null,
+    };
+  });
+
+  const reportCompleted = (count = 1) => {
+    completed += count;
+    onProgress?.(completed, rows.length);
+  };
+
+  const persistIndividually = async (entries) => {
+    for (const entry of entries) {
+      const { row, record, existingSchedule } = entry;
+      try {
+        let existingId = existingSchedule?.id || null;
+
+        if (cachedSchedules == null && !existingId) {
+          const { data, error } = await supabase
+            .from('jadwal_perkuliahan')
+            .select('id')
+            .eq('import_source', 'google_jadwal')
+            .eq('import_key', record.import_key)
+            .limit(1);
+          if (error) {
+            errors.push(`Baris ${row.rowNumber}: ${error.message}`);
+            continue;
+          }
+          existingId = data?.[0]?.id || null;
+        }
+
+        if (existingId) {
+          const { error } = await supabase
+            .from('jadwal_perkuliahan')
+            .update(record)
+            .eq('id', existingId);
+          if (error) {
+            errors.push(`Baris ${row.rowNumber}: ${error.message}`);
+          } else {
+            updated++;
+          }
+          continue;
+        }
+
+        const { error } = await supabase
+          .from('jadwal_perkuliahan')
+          .insert([{ ...record, created_by: batchTag }]);
+        if (error) {
+          errors.push(`Baris ${row.rowNumber}: ${error.message}`);
+        } else {
+          inserted++;
+        }
+      } finally {
+        reportCompleted();
+      }
+    }
+  };
+
+  const persistBatch = async (entries, mode) => {
+    if (entries.length === 0) return;
+
+    const payload = entries.map(({ record, existingSchedule }) =>
+      mode === 'update'
+        ? {
+            ...record,
+            id: existingSchedule.id,
+            created_by: existingSchedule.created_by || batchTag,
+          }
+        : { ...record, created_by: batchTag }
+    );
+    const result =
+      mode === 'update'
+        ? await supabase
+            .from('jadwal_perkuliahan')
+            .upsert(payload, { onConflict: 'id' })
+        : await supabase.from('jadwal_perkuliahan').insert(payload);
+
+    if (result.error) {
+      console.warn(
+        `[Import] Batch ${mode} gagal, mencoba ulang per baris:`,
+        result.error
+      );
+      await persistIndividually(entries);
+      return;
+    }
+
+    if (mode === 'update') updated += entries.length;
+    else inserted += entries.length;
+    reportCompleted(entries.length);
+  };
+
+  // Saat cache tersedia, simpan maksimal 100 baris per permintaan. Jika satu
+  // batch gagal, persistBatch otomatis kembali ke penyimpanan per baris agar
+  // baris yang bermasalah tetap dapat dilaporkan secara spesifik.
+  if (cachedSchedules != null) {
+    for (
+      let offset = 0;
+      offset < preparedRows.length;
+      offset += STRICT_SYNC_WRITE_BATCH_SIZE
+    ) {
+      const batch = preparedRows.slice(
+        offset,
+        offset + STRICT_SYNC_WRITE_BATCH_SIZE
+      );
+      await persistBatch(
+        batch.filter(({ existingSchedule }) => existingSchedule),
+        'update'
+      );
+      await persistBatch(
+        batch.filter(({ existingSchedule }) => !existingSchedule),
+        'insert'
+      );
+    }
+  } else {
+    await persistIndividually(preparedRows);
+  }
+
+  return { inserted, updated, errors };
+}
+
+function addStrictSyncConflict(results, pendingRow, message) {
+  const existing = results.conflicts.find(
+    (conflict) => conflict.syncRowId === pendingRow.syncRowId
+  );
+  if (existing) {
+    if (!existing.message.includes(message)) {
+      existing.message = `${existing.message} | ${message}`;
+    }
+    return;
+  }
+
+  results.conflicts.push({
+    id: `strict-${pendingRow.syncRowId}`,
+    syncRowId: pendingRow.syncRowId,
+    rowNumber: pendingRow.rowNumber,
+    message,
+    record: { ...pendingRow.record },
+    existingRecord: null,
+    existingId: null,
+    verificationStatus: 'idle',
+    verificationMessage: '',
+  });
+}
+
 // ================================================================================
 // KOMPONEN UTAMA
 // ================================================================================
@@ -575,6 +751,10 @@ export default function ImportJadwal({
   const [step, setStep] = useState(1); // 1=upload, 2=mapping, 3=preview, 4=importing
   const [importResult, setImportResult] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importProgressLabel, setImportProgressLabel] = useState(
+    'Menyiapkan data import...'
+  );
   const [resolvingConflictId, setResolvingConflictId] = useState(null);
   const [checkingConflictId, setCheckingConflictId] = useState(null);
   const [expandedConflictIds, setExpandedConflictIds] = useState([]);
@@ -603,7 +783,7 @@ export default function ImportJadwal({
       supabase.from('ruangan').select('id, nama_ruangan, aktif_nonaktif'),
       supabase
         .from('dosen')
-        .select('id, nama_dosen, id_dosen, email, aktif_nonaktif'),
+        .select('id, nama_dosen, id_dosen, id_external, email, aktif_nonaktif'),
       supabase.from('angkatan').select('id, nama_angkatan, aktif_nonaktif'),
       supabase.from('mata_kuliah').select('*'),
     ]).then(
@@ -782,7 +962,8 @@ export default function ImportJadwal({
         { key: '_lookup_ruangan', label: 'Ruangan' },
         { key: 'petugas_zoom', label: 'Petugas Zoom' },
         { key: '_parse_zoom_info', label: 'Link / Zoom Info' },
-        { key: '_lookup_dosen1', label: 'Dosen Pengampu' },
+        { key: '_dosen_id_source', label: 'ID Dosen (acuan utama)' },
+        { key: '_lookup_dosen1', label: 'Dosen Pengampu (referensi)' },
         { key: '_dosen_email_source', label: 'Email Dosen (referensi)' },
         { key: '_lookup_dosen_extra', label: 'Dosen Tambahan (2,3,4)' },
         { key: 'moderator', label: 'Moderator' },
@@ -1134,6 +1315,10 @@ export default function ImportJadwal({
       dosenSource,
       (d) => d.id_dosen
     );
+    const dosenByExternalId = buildPreferredImportLookup(
+      dosenSource,
+      (d) => d.id_external
+    );
     const dosenByEmail = buildPreferredImportLookup(
       dosenSource,
       (d) => d.email
@@ -1173,6 +1358,7 @@ export default function ImportJadwal({
     return {
       dosenByName,
       dosenByIdDosen,
+      dosenByExternalId,
       dosenByEmail,
       ruanganByName,
       matkulByKode,
@@ -1207,8 +1393,12 @@ export default function ImportJadwal({
 
   // ──────────── STEP 3: Import to DB ────────────
   const handleImport = async () => {
+    setImportProgress(0);
+    setImportProgressLabel('Menyiapkan data import...');
     setImporting(true);
     setStep(4);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    setImportProgress(3);
 
     // Generate unique batch tag for this import session
     const batchTag = `${userName || 'Import'}-${new Date().toISOString().replace('T', ' ').substring(0, 19)}`;
@@ -1240,6 +1430,10 @@ export default function ImportJadwal({
       errors: [],
       conflicts: [],
       skipped: 0,
+      pendingSyncRows: [],
+      managedScheduleIds: [],
+      syncScopeStart: null,
+      syncPending: false,
     };
     const tableName =
       jenis === 'perkuliahan'
@@ -1260,7 +1454,9 @@ export default function ImportJadwal({
     let rowDate = null; // running date for grouped rows
     const importNow = new Date();
     const importStartDay = getImportStartDay(importNow);
+    const totalImportRows = filteredPreviewData.length;
     let existingSchedules = null;
+    setImportProgressLabel('Memuat referensi jadwal dari database...');
     try {
       existingSchedules = await fetchExistingSchedulesFrom(
         tableName,
@@ -1273,6 +1469,8 @@ export default function ImportJadwal({
         cacheError
       );
     }
+    setImportProgress(5);
+    setImportProgressLabel(`Memeriksa 0 dari ${totalImportRows} baris...`);
     const managedScheduleIds = new Set(
       (existingSchedules || [])
         .filter(
@@ -1371,6 +1569,7 @@ export default function ImportJadwal({
         const rowIssues = [];
         let unresolvedRoomLabel = '';
         let sourceLocationLabel = '';
+        let sourceDosenId = '';
         let sourceDosenEmail = '';
         const sourceDosenNames = [];
         let meetingTypeWasProvided = false;
@@ -1490,6 +1689,10 @@ export default function ImportJadwal({
               sourceDosenNames.push(...splitDosenLabels(val));
               break;
             }
+            case '_dosen_id_source': {
+              sourceDosenId = val;
+              break;
+            }
             case '_lookup_dosen_extra': {
               sourceDosenNames.push(...splitDosenLabels(val));
               break;
@@ -1543,23 +1746,26 @@ export default function ImportJadwal({
 
         if (
           jenis === 'perkuliahan' &&
-          (sourceDosenNames.length > 0 || sourceDosenEmail)
+          (sourceDosenId || sourceDosenNames.length > 0 || sourceDosenEmail)
         ) {
           const uniqueDosenNames = [...new Set(sourceDosenNames)];
           const primaryDosenName = uniqueDosenNames[0] || sourceDosenEmail;
-          const primaryDosenId =
-            exactImportLookup(sourceDosenEmail, lookups.dosenByEmail) ||
-            findDosen(
-              primaryDosenName,
-              lookups.dosenByName,
-              lookups.dosenByIdDosen,
-              strictReferenceValidation
-            );
+          const primaryDosen = resolvePrimaryDosenImport({
+            idDosen: sourceDosenId,
+            email: sourceDosenEmail,
+            name: primaryDosenName,
+            dosenByExternalId: lookups.dosenByExternalId,
+            dosenByEmail: lookups.dosenByEmail,
+            dosenByName: lookups.dosenByName,
+          });
+          const primaryDosenId = primaryDosen.id;
 
           record.dosen_id = primaryDosenId || null;
           if (strictReferenceValidation && !primaryDosenId) {
             rowIssues.push(
-              `dosen "${primaryDosenName}" tidak ada di master data`
+              primaryDosen.matchedBy === 'id_external'
+                ? `ID dosen "${primaryDosen.reference}" tidak ada di master data`
+                : `dosen "${primaryDosenName}" tidak ada di master data`
             );
           }
 
@@ -1678,6 +1884,14 @@ export default function ImportJadwal({
             continue;
           }
 
+          preparedImportKeys.add(syncRecord.import_key);
+          const pendingRow = {
+            syncRowId: `${rowIdx + 1}:${syncRecord.import_key}`,
+            rowNumber: rowIdx + 1,
+            record: syncRecord,
+          };
+          preparedRows.push(pendingRow);
+
           const roomConflict = await findImportedRoomConflict({
             record: syncRecord,
             tableName,
@@ -1685,14 +1899,8 @@ export default function ImportJadwal({
             roomNameById,
           });
           if (roomConflict) {
-            results.errors.push(
-              `Baris ${rowIdx + 1}: konflik ruangan. ${roomConflict}`
-            );
-            continue;
+            addStrictSyncConflict(results, pendingRow, roomConflict);
           }
-
-          preparedImportKeys.add(syncRecord.import_key);
-          preparedRows.push({ rowNumber: rowIdx + 1, record: syncRecord });
           continue;
         }
 
@@ -1810,10 +2018,22 @@ export default function ImportJadwal({
         }
       } catch (err) {
         results.errors.push(`Baris ${rowIdx + 1}: ${err.message}`);
+      } finally {
+        const completedRows = rowIdx + 1;
+        const rowProgress =
+          totalImportRows > 0
+            ? 5 + Math.round((completedRows / totalImportRows) * 75)
+            : 80;
+        setImportProgress(Math.min(80, rowProgress));
+        setImportProgressLabel(
+          `Memeriksa ${completedRows} dari ${totalImportRows} baris...`
+        );
       }
     }
 
     if (strictGoogleSync) {
+      setImportProgress(82);
+      setImportProgressLabel('Memeriksa konflik antarjadwal...');
       for (let leftIndex = 0; leftIndex < preparedRows.length; leftIndex++) {
         const left = preparedRows[leftIndex];
         if (!usesPhysicalRoom(left.record.jenis_pertemuan)) continue;
@@ -1836,22 +2056,32 @@ export default function ImportJadwal({
             continue;
           }
 
-          results.errors.push(
-            `Baris ${left.rowNumber} dan ${right.rowNumber}: ruangan yang sama dipakai pada waktu yang bertabrakan`
+          addStrictSyncConflict(
+            results,
+            right,
+            `Ruangan yang sama juga dipakai oleh baris ${left.rowNumber} pada waktu yang bertabrakan`
           );
         }
       }
+
+      results.pendingSyncRows = preparedRows;
+      results.managedScheduleIds = [...managedScheduleIds];
+      results.syncScopeStart = `${dateToLocalStr(importStartDay)}T00:00:00`;
+      results.syncPending = results.conflicts.length > 0;
+      setImportProgress(86);
 
       if (preparedRows.length === 0 && results.errors.length === 0) {
         results.errors.push('Tidak ada jadwal valid untuk disinkronkan.');
       }
 
-      if (results.errors.length === 0) {
+      if (results.errors.length === 0 && results.conflicts.length === 0) {
+        setImportProgress(92);
+        setImportProgressLabel('Menyinkronkan jadwal ke database...');
         const { data: syncData, error: syncError } = await supabase.rpc(
           'sync_jadwal_perkuliahan_import',
           {
             p_rows: preparedRows.map(({ record }) => record),
-            p_scope_start: `${dateToLocalStr(importStartDay)}T00:00:00`,
+            p_scope_start: results.syncScopeStart,
             p_batch_tag: batchTag,
           }
         );
@@ -1872,11 +2102,44 @@ export default function ImportJadwal({
           results.deleted = Number(summary?.deleted || 0);
           results.success = Number(summary?.total || preparedRows.length);
         }
+      } else {
+        const blockedSyncRowIds = new Set(
+          results.conflicts.map((conflict) => conflict.syncRowId)
+        );
+        const readyRows = preparedRows.filter(
+          (row) => !blockedSyncRowIds.has(row.syncRowId)
+        );
+
+        if (readyRows.length > 0) {
+          setImportProgressLabel(
+            `Menyimpan 0 dari ${readyRows.length} baris valid...`
+          );
+          const partialResult = await upsertStrictSyncRows(
+            readyRows,
+            batchTag,
+            existingSchedules,
+            (completedRows, totalRows) => {
+              setImportProgress(
+                Math.min(99, 86 + Math.round((completedRows / totalRows) * 13))
+              );
+              setImportProgressLabel(
+                `Menyimpan ${completedRows} dari ${totalRows} baris valid...`
+              );
+            }
+          );
+          results.inserted = partialResult.inserted;
+          results.updated = partialResult.updated;
+          results.success = partialResult.inserted + partialResult.updated;
+          results.errors.push(...partialResult.errors);
+        }
       }
     }
 
+    setImportProgress(100);
+    setImportProgressLabel('Proses import selesai.');
     setImportResult(results);
     setExpandedConflictIds([]);
+    await new Promise((resolve) => setTimeout(resolve, 300));
     setImporting(false);
 
     // Kirim notifikasi ke dashboard
@@ -1933,8 +2196,84 @@ export default function ImportJadwal({
     }
   };
 
+  const executePendingStrictSync = async ({
+    pendingRows,
+    scopeStart,
+    batchTag,
+  }) => {
+    setImportProgress(0);
+    setImportProgressLabel('Menyiapkan sinkronisasi akhir...');
+    setImporting(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    setImportProgress(92);
+    setImportProgressLabel('Menyinkronkan jadwal ke database...');
+    try {
+      const { data: syncData, error: syncError } = await supabase.rpc(
+        'sync_jadwal_perkuliahan_import',
+        {
+          p_rows: pendingRows.map(({ record }) => record),
+          p_scope_start: scopeStart,
+          p_batch_tag: batchTag,
+        }
+      );
+      if (syncError) throw syncError;
+
+      const summary = Array.isArray(syncData) ? syncData[0] : syncData;
+      const inserted = Number(summary?.inserted || 0);
+      const updated = Number(summary?.updated || 0);
+      const deleted = Number(summary?.deleted || 0);
+      const success = Number(summary?.total || pendingRows.length);
+      setImportResult((current) => ({
+        ...current,
+        success,
+        inserted,
+        updated,
+        deleted,
+        conflicts: [],
+        errors: [],
+        syncPending: false,
+        pendingSyncRows: pendingRows,
+      }));
+      if (onNotify) {
+        onNotify({
+          type: 'edit',
+          tag: 'SYNC',
+          title: 'Sinkronisasi jadwal berhasil',
+          description: `${success} jadwal diproses setelah seluruh konflik ruangan diselesaikan.`,
+        });
+      }
+      if (onSuccess) onSuccess();
+    } catch (error) {
+      const migrationHint = /function|schema cache|does not exist/i.test(
+        error.message || ''
+      )
+        ? ' Jalankan MIGRATION_STRICT_JADWAL_PERKULIAHAN_SYNC.sql di Supabase terlebih dahulu.'
+        : '';
+      setImportResult((current) => ({
+        ...current,
+        conflicts: [],
+        errors: [
+          `Sinkronisasi database dibatalkan: ${error.message}.${migrationHint}`,
+        ],
+        syncPending: false,
+        pendingSyncRows: pendingRows,
+      }));
+    } finally {
+      setImportProgress(100);
+      setImportProgressLabel('Proses sinkronisasi selesai.');
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      setImporting(false);
+    }
+  };
+
   const handleConflictChange = (conflictId, field, value) => {
-    if (field === 'mulai_jadwal' || field === 'akhir_jadwal') {
+    if (
+      field === 'mulai_jadwal' ||
+      field === 'akhir_jadwal' ||
+      field === 'ruangan_id' ||
+      field === 'nama_ruangan' ||
+      field === 'jenis_pertemuan'
+    ) {
       setRoomAvailabilityByConflict((current) => {
         const next = { ...current };
         delete next[conflictId];
@@ -1944,28 +2283,38 @@ export default function ImportJadwal({
     setImportResult((current) => {
       if (!current) return current;
 
+      const selectedConflict = current.conflicts.find(
+        (conflict) => conflict.id === conflictId
+      );
+      if (!selectedConflict) return current;
+
+      const nextRecord = {
+        ...selectedConflict.record,
+        [field]: value,
+      };
+      if (field === 'jenis_pertemuan' && !usesPhysicalRoom(value)) {
+        if (jenis === 'perkuliahan') nextRecord.ruangan_id = null;
+        else nextRecord.nama_ruangan = null;
+      }
+
       return {
         ...current,
-        conflicts: current.conflicts.map((conflict) => {
-          if (conflict.id !== conflictId) return conflict;
-
-          const nextRecord = {
-            ...conflict.record,
-            [field]: value,
-          };
-          if (field === 'jenis_pertemuan' && !usesPhysicalRoom(value)) {
-            if (jenis === 'perkuliahan') nextRecord.ruangan_id = null;
-            else nextRecord.nama_ruangan = null;
-          }
-
-          return {
-            ...conflict,
-            record: nextRecord,
-            saveError: '',
-            verificationStatus: 'idle',
-            verificationMessage: '',
-          };
-        }),
+        pendingSyncRows: (current.pendingSyncRows || []).map((row) =>
+          row.syncRowId === selectedConflict.syncRowId
+            ? { ...row, record: nextRecord }
+            : row
+        ),
+        conflicts: current.conflicts.map((conflict) =>
+          conflict.id === conflictId
+            ? {
+                ...conflict,
+                record: nextRecord,
+                saveError: '',
+                verificationStatus: 'idle',
+                verificationMessage: '',
+              }
+            : conflict
+        ),
       };
     });
   };
@@ -2007,6 +2356,11 @@ export default function ImportJadwal({
       (item) => item.id === conflictId
     );
     if (!conflict) return;
+    const roomNameById = Object.fromEntries(
+      (allRuangan.length > 0 ? allRuangan : options.ruangan || []).map(
+        (room) => [String(room.id), room.nama_ruangan]
+      )
+    );
 
     const { mulai_jadwal: mulai, akhir_jadwal: akhir } = conflict.record;
     const start = new Date(mulai);
@@ -2054,11 +2408,15 @@ export default function ImportJadwal({
         LAIN_LAIN: 'Lain-lain',
       };
       const occupied = {};
+      const managedIdSet = new Set(
+        (importResult?.managedScheduleIds || []).map(String)
+      );
       (data || []).forEach((schedule) => {
         if (
-          conflict.existingId != null &&
           schedule.jenis_jadwal === currentType &&
-          String(schedule.id_asli) === String(conflict.existingId)
+          ((conflict.existingId != null &&
+            String(schedule.id_asli) === String(conflict.existingId)) ||
+            managedIdSet.has(String(schedule.id_asli)))
         ) {
           return;
         }
@@ -2069,6 +2427,27 @@ export default function ImportJadwal({
           start: schedule.mulai_jadwal,
           end: schedule.akhir_jadwal,
         };
+      });
+
+      (importResult?.pendingSyncRows || []).forEach((row) => {
+        if (
+          row.syncRowId === conflict.syncRowId ||
+          !usesPhysicalRoom(row.record?.jenis_pertemuan) ||
+          !row.record?.ruangan_id ||
+          isRoomConflictExempt(roomNameById[String(row.record.ruangan_id)])
+        ) {
+          return;
+        }
+
+        const rowStart = new Date(row.record.mulai_jadwal).getTime();
+        const rowEnd = new Date(row.record.akhir_jadwal).getTime();
+        if (start.getTime() < rowEnd && end.getTime() > rowStart) {
+          occupied[String(row.record.ruangan_id)] = {
+            label: `Baris import ${row.rowNumber}`,
+            start: row.record.mulai_jadwal,
+            end: row.record.akhir_jadwal,
+          };
+        }
       });
 
       setRoomAvailabilityByConflict((current) => ({
@@ -2153,12 +2532,20 @@ export default function ImportJadwal({
       const effectiveRecord = conflict.existingRecord
         ? { ...conflict.existingRecord, ...conflict.record }
         : conflict.record;
-      const roomConflict = await findImportedRoomConflict({
+      const databaseConflict = await findImportedRoomConflict({
         record: effectiveRecord,
         tableName,
         existingId: conflict.existingId,
+        excludedIds: importResult?.managedScheduleIds || [],
         roomNameById,
       });
+      const pendingConflict = findPendingRoomConflict({
+        record: effectiveRecord,
+        syncRowId: conflict.syncRowId,
+        pendingRows: importResult?.pendingSyncRows || [],
+        roomNameById,
+      });
+      const roomConflict = databaseConflict || pendingConflict;
 
       setImportResult((current) => ({
         ...current,
@@ -2233,12 +2620,20 @@ export default function ImportJadwal({
       const effectiveRecord = conflict.existingRecord
         ? { ...conflict.existingRecord, ...conflict.record }
         : conflict.record;
-      const roomConflict = await findImportedRoomConflict({
+      const databaseConflict = await findImportedRoomConflict({
         record: effectiveRecord,
         tableName,
         existingId: conflict.existingId,
+        excludedIds: importResult?.managedScheduleIds || [],
         roomNameById,
       });
+      const pendingConflict = findPendingRoomConflict({
+        record: effectiveRecord,
+        syncRowId: conflict.syncRowId,
+        pendingRows: importResult?.pendingSyncRows || [],
+        roomNameById,
+      });
+      const roomConflict = databaseConflict || pendingConflict;
 
       if (roomConflict) {
         setImportResult((current) => ({
@@ -2254,6 +2649,83 @@ export default function ImportJadwal({
                 }
               : item
           ),
+        }));
+        return;
+      }
+
+      if (importResult?.strictSync) {
+        const pendingRows = (importResult.pendingSyncRows || []).map((row) =>
+          row.syncRowId === conflict.syncRowId
+            ? { ...row, record: conflict.record }
+            : row
+        );
+        const remainingConflicts = importResult.conflicts.filter(
+          (item) => item.id !== conflictId
+        );
+
+        if (
+          remainingConflicts.length === 0 &&
+          (importResult.errors || []).length === 0
+        ) {
+          setExpandedConflictIds((current) =>
+            current.filter((id) => id !== conflictId)
+          );
+          setRoomAvailabilityByConflict((current) => {
+            const next = { ...current };
+            delete next[conflictId];
+            return next;
+          });
+          setImportResult((current) => ({
+            ...current,
+            pendingSyncRows: pendingRows,
+            conflicts: [],
+          }));
+          await executePendingStrictSync({
+            pendingRows,
+            scopeStart: importResult.syncScopeStart,
+            batchTag: importBatchTag,
+          });
+          return;
+        }
+
+        const partialResult = await upsertStrictSyncRows(
+          [
+            {
+              syncRowId: conflict.syncRowId,
+              rowNumber: conflict.rowNumber,
+              record: conflict.record,
+            },
+          ],
+          importBatchTag
+        );
+        if (partialResult.errors.length > 0) {
+          setImportResult((current) => ({
+            ...current,
+            conflicts: current.conflicts.map((item) =>
+              item.id === conflictId
+                ? { ...item, saveError: partialResult.errors.join(' | ') }
+                : item
+            ),
+          }));
+          return;
+        }
+
+        setExpandedConflictIds((current) =>
+          current.filter((id) => id !== conflictId)
+        );
+        setRoomAvailabilityByConflict((current) => {
+          const next = { ...current };
+          delete next[conflictId];
+          return next;
+        });
+        setImportResult((current) => ({
+          ...current,
+          success: current.success + 1,
+          inserted: current.inserted + partialResult.inserted,
+          updated: current.updated + partialResult.updated,
+          pendingSyncRows: pendingRows,
+          conflicts: remainingConflicts,
+          syncPending: remainingConflicts.length > 0,
         }));
         return;
       }
@@ -2321,6 +2793,8 @@ export default function ImportJadwal({
     setStep(1);
     setImportResult(null);
     setImporting(false);
+    setImportProgress(0);
+    setImportProgressLabel('Menyiapkan data import...');
     setResolvingConflictId(null);
     setCheckingConflictId(null);
     setExpandedConflictIds([]);
@@ -2852,8 +3326,8 @@ export default function ImportJadwal({
                   </li>
                 </ul>
                 <div className="mt-5 rounded-lg bg-amber-50 p-3 leading-5 text-amber-800 ring-1 ring-inset ring-amber-200">
-                  Periksa kembali nama dosen dan referensi Master Data sebelum
-                  menyimpan.
+                  ID eksternal menjadi acuan utama. Nama dan email hanya
+                  digunakan untuk file lama yang belum memiliki ID tersebut.
                 </div>
               </aside>
             </div>
@@ -3127,8 +3601,32 @@ export default function ImportJadwal({
                   <h3 className="mt-5 text-base font-semibold text-slate-900">
                     Sedang memproses data
                   </h3>
-                  <p className="mt-1.5 text-sm text-slate-500">
-                    Jadwal sedang disimpan ke database.
+                  <div className="mt-5 w-full max-w-md">
+                    <div className="mb-2 flex items-center justify-between text-sm font-semibold">
+                      <span className="text-slate-600">Progress</span>
+                      <span
+                        className="tabular-nums text-primary-700"
+                        aria-live="polite"
+                      >
+                        {importProgress}%
+                      </span>
+                    </div>
+                    <div
+                      className="h-3 overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200"
+                      role="progressbar"
+                      aria-label="Progress import jadwal"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={importProgress}
+                    >
+                      <div
+                        className="h-full rounded-full bg-primary-600 transition-[width] duration-300 ease-out"
+                        style={{ width: `${importProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm text-slate-500" aria-live="polite">
+                    {importProgressLabel}
                   </p>
                   <p className="mt-4 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
                     Mohon tunggu, jangan tutup halaman ini
@@ -3179,9 +3677,13 @@ export default function ImportJadwal({
                             : 'text-emerald-800'
                         }`}
                       >
-                        {failureCount > 0
-                          ? 'Perbaiki semua baris bermasalah, lalu jalankan import kembali.'
-                          : 'Ringkasan hasil pemrosesan file Anda.'}
+                        {importResult.errors.length > 0
+                          ? unresolvedConflictCount > 0
+                            ? 'Konflik ruangan dapat diperbaiki langsung di bawah. Kegagalan lainnya perlu diperbaiki pada sumber data sebelum import ulang.'
+                            : 'Perbaiki kegagalan pada sumber data, lalu jalankan import kembali.'
+                          : unresolvedConflictCount > 0
+                            ? 'Baris tanpa masalah sudah diimport. Pilih ruangan pengganti untuk baris konflik langsung di bawah.'
+                            : 'Ringkasan hasil pemrosesan file Anda.'}
                       </p>
                     </div>
 
@@ -3267,9 +3769,9 @@ export default function ImportJadwal({
                           Konflik ruangan ({unresolvedConflictCount})
                         </p>
                         <p className="mt-1 text-xs leading-5 text-amber-800">
-                          Buka setiap konflik, ubah datanya, lalu pilih Periksa
-                          perubahan. Tombol Simpan aktif setelah tidak ada
-                          konflik. Pilih Lewati jika data tidak perlu diimpor.
+                          {importResult.strictSync
+                            ? 'Baris tanpa konflik sudah diimport. Buka konflik, pilih ruangan yang tersedia, lalu periksa dan gunakan pilihan. Konflik yang belum diperbaiki tidak ikut diinput.'
+                            : 'Buka setiap konflik, ubah datanya, lalu pilih Periksa perubahan. Tombol Simpan aktif setelah tidak ada konflik. Pilih Lewati jika data tidak perlu diimpor.'}
                         </p>
 
                         <div className="mt-3 max-h-[420px] space-y-3 overflow-y-auto pr-1">
@@ -3477,6 +3979,11 @@ export default function ImportJadwal({
                                               event.target.value || null
                                             )
                                           }
+                                          onFocus={() =>
+                                            handleLoadRoomAvailability(
+                                              conflict.id
+                                            )
+                                          }
                                           disabled={
                                             !usesPhysicalRoom(
                                               conflict.record.jenis_pertemuan
@@ -3553,16 +4060,18 @@ export default function ImportJadwal({
                                     )}
 
                                     <div className="mt-3 flex flex-wrap justify-end gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleSkipConflict(conflict.id)
-                                        }
-                                        disabled={isBusy}
-                                        className="ui-button ui-button-secondary justify-center text-xs"
-                                      >
-                                        Lewati
-                                      </button>
+                                      {!importResult.strictSync && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleSkipConflict(conflict.id)
+                                          }
+                                          disabled={isBusy}
+                                          className="ui-button ui-button-secondary justify-center text-xs"
+                                        >
+                                          Lewati
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -3588,8 +4097,12 @@ export default function ImportJadwal({
                                         className="ui-button justify-center bg-emerald-600 text-xs text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                                       >
                                         {isResolving
-                                          ? 'Menyimpan...'
-                                          : 'Simpan'}
+                                          ? importResult.strictSync
+                                            ? 'Menerapkan...'
+                                            : 'Menyimpan...'
+                                          : importResult.strictSync
+                                            ? 'Gunakan ruangan'
+                                            : 'Simpan'}
                                       </button>
                                     </div>
                                   </div>

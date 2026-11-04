@@ -806,7 +806,7 @@ export default function JadwalPageAdmin() {
         await Promise.all([
           supabase
             .from('dosen')
-            .select('id, nama_dosen, id_dosen, aktif_nonaktif')
+            .select('id, nama_dosen, id_dosen, id_external, aktif_nonaktif')
             .eq('aktif_nonaktif', true),
           supabase
             .from('ruangan')
