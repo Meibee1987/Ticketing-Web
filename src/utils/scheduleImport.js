@@ -48,6 +48,7 @@ export function resolvePrimaryDosenImport({
   dosenByExternalId,
   dosenByEmail,
   dosenByName,
+  requireExternalId = false,
 }) {
   const normalizedIdDosen = normalizeImportLookup(idDosen);
   if (normalizedIdDosen && !EMPTY_VALUES.has(normalizedIdDosen)) {
@@ -55,6 +56,14 @@ export function resolvePrimaryDosenImport({
       id: exactImportLookup(idDosen, dosenByExternalId),
       matchedBy: 'id_external',
       reference: String(idDosen).trim(),
+    };
+  }
+
+  if (requireExternalId) {
+    return {
+      id: null,
+      matchedBy: 'id_external',
+      reference: '',
     };
   }
 
@@ -189,6 +198,30 @@ export function buildPreferredImportLookup(items, keySelector) {
       candidate.ids.size === 1 ? [...candidate.ids.values()][0] : null,
     ])
   );
+}
+
+export function buildDosenExternalIdImportLookup(
+  items,
+  externalIdAliases = {}
+) {
+  const externalIdLookup = buildPreferredImportLookup(
+    items,
+    (item) => item.id_external
+  );
+  const idDosenLookup = buildPreferredImportLookup(
+    items,
+    (item) => item.id_dosen
+  );
+
+  for (const [externalIdAlias, targetIdDosen] of Object.entries(
+    externalIdAliases
+  )) {
+    const aliasKey = normalizeImportLookup(externalIdAlias);
+    const targetId = exactImportLookup(targetIdDosen, idDosenLookup);
+    if (aliasKey && targetId != null) externalIdLookup[aliasKey] = targetId;
+  }
+
+  return externalIdLookup;
 }
 
 export function buildCanonicalImportLookup(

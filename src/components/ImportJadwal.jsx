@@ -37,6 +37,7 @@ import {
 } from '../utils/scheduleLabels';
 import {
   buildCanonicalImportLookup,
+  buildDosenExternalIdImportLookup,
   buildPreferredImportLookup,
   exactImportLookup,
   findPendingRoomConflict,
@@ -62,6 +63,15 @@ const GOOGLE_KARYA_AKHIR_SHEET_ID =
 const GOOGLE_KARYA_AKHIR_GID =
   import.meta.env.VITE_GOOGLE_KARYA_AKHIR_GID || '1583765831';
 const GOOGLE_SCHEDULE_SHEET_NAME = 'Jadwal';
+
+// Google Sheet Dosen memiliki lebih dari satu ID eksternal untuk orang yang
+// sama. Master database mempertahankan satu record/id_dosen, sedangkan Sheet
+// Jadwal masih memakai ID alternatif berikut. Alias tetap diselesaikan lewat
+// ID, bukan fallback nama atau email.
+const DOSEN_EXTERNAL_ID_ALIASES = Object.freeze({
+  db466900: 'SBIDSN003',
+  '683f94af': 'SBIDSN005',
+});
 
 function getGoogleSheetSource(jenis) {
   if (jenis === 'karya_akhir') {
@@ -198,6 +208,9 @@ const PERKULIAHAN_MAP = {
   id_dosen: '_dosen_id_source',
   'id dosen': '_dosen_id_source',
   'dosen id': '_dosen_id_source',
+  id_external: '_dosen_id_source',
+  'id external dosen': '_dosen_id_source',
+  'id eksternal dosen': '_dosen_id_source',
   'email dosen': '_dosen_email_source',
   email_dosen: '_dosen_email_source',
   'dosen 2': '_lookup_dosen_extra',
@@ -962,7 +975,10 @@ export default function ImportJadwal({
         { key: '_lookup_ruangan', label: 'Ruangan' },
         { key: 'petugas_zoom', label: 'Petugas Zoom' },
         { key: '_parse_zoom_info', label: 'Link / Zoom Info' },
-        { key: '_dosen_id_source', label: 'ID Dosen (acuan utama)' },
+        {
+          key: '_dosen_id_source',
+          label: 'ID Dosen (cocok ke id_external)',
+        },
         { key: '_lookup_dosen1', label: 'Dosen Pengampu (referensi)' },
         { key: '_dosen_email_source', label: 'Email Dosen (referensi)' },
         { key: '_lookup_dosen_extra', label: 'Dosen Tambahan (2,3,4)' },
@@ -1315,9 +1331,9 @@ export default function ImportJadwal({
       dosenSource,
       (d) => d.id_dosen
     );
-    const dosenByExternalId = buildPreferredImportLookup(
+    const dosenByExternalId = buildDosenExternalIdImportLookup(
       dosenSource,
-      (d) => d.id_external
+      DOSEN_EXTERNAL_ID_ALIASES
     );
     const dosenByEmail = buildPreferredImportLookup(
       dosenSource,
@@ -1744,10 +1760,7 @@ export default function ImportJadwal({
           }
         });
 
-        if (
-          jenis === 'perkuliahan' &&
-          (sourceDosenId || sourceDosenNames.length > 0 || sourceDosenEmail)
-        ) {
+        if (jenis === 'perkuliahan') {
           const uniqueDosenNames = [...new Set(sourceDosenNames)];
           const primaryDosenName = uniqueDosenNames[0] || sourceDosenEmail;
           const primaryDosen = resolvePrimaryDosenImport({
@@ -1757,6 +1770,7 @@ export default function ImportJadwal({
             dosenByExternalId: lookups.dosenByExternalId,
             dosenByEmail: lookups.dosenByEmail,
             dosenByName: lookups.dosenByName,
+            requireExternalId: strictReferenceValidation,
           });
           const primaryDosenId = primaryDosen.id;
 
@@ -1764,7 +1778,9 @@ export default function ImportJadwal({
           if (strictReferenceValidation && !primaryDosenId) {
             rowIssues.push(
               primaryDosen.matchedBy === 'id_external'
-                ? `ID dosen "${primaryDosen.reference}" tidak ada di master data`
+                ? primaryDosen.reference
+                  ? `ID dosen "${primaryDosen.reference}" tidak ada di master data`
+                  : 'ID dosen kosong'
                 : `dosen "${primaryDosenName}" tidak ada di master data`
             );
           }

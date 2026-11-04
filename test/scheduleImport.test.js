@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   buildCanonicalImportLookup,
+  buildDosenExternalIdImportLookup,
   buildPreferredImportLookup,
   buildPerkuliahanImportKey,
   exactImportLookup,
@@ -112,6 +113,52 @@ test('ID dosen yang tidak dikenal tidak jatuh kembali ke nama atau email', () =>
     id: null,
     matchedBy: 'id_external',
     reference: 'tidak-ada',
+  });
+});
+
+test('lookup ID eksternal dosen menerima alias yang menunjuk id_dosen kanonis', () => {
+  const lookup = buildDosenExternalIdImportLookup(
+    [
+      {
+        id: 15,
+        id_dosen: 'SBIDSN003',
+        id_external: 'e9d5ac1b',
+        aktif_nonaktif: true,
+      },
+      {
+        id: 17,
+        id_dosen: 'SBIDSN005',
+        id_external: '2d4c1bf0',
+        aktif_nonaktif: true,
+      },
+    ],
+    {
+      db466900: 'SBIDSN003',
+      '683f94af': 'SBIDSN005',
+    }
+  );
+
+  assert.equal(exactImportLookup('e9d5ac1b', lookup), 15);
+  assert.equal(exactImportLookup('db466900', lookup), 15);
+  assert.equal(exactImportLookup('2d4c1bf0', lookup), 17);
+  assert.equal(exactImportLookup('683f94af', lookup), 17);
+});
+
+test('import perkuliahan yang mewajibkan ID eksternal menolak ID dosen kosong', () => {
+  const result = resolvePrimaryDosenImport({
+    idDosen: '',
+    email: 'achmad@apps.ipb.ac.id',
+    name: 'Achmad Fadillah',
+    dosenByExternalId: { '41a1bafa': 13 },
+    dosenByEmail: { 'achmad apps ipb ac id': 13 },
+    dosenByName: { 'achmad fadillah': 13 },
+    requireExternalId: true,
+  });
+
+  assert.deepEqual(result, {
+    id: null,
+    matchedBy: 'id_external',
+    reference: '',
   });
 });
 
