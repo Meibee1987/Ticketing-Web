@@ -105,7 +105,7 @@ test('ID dosen yang tidak dikenal tidak jatuh kembali ke nama atau email', () =>
     email: 'achmad@apps.ipb.ac.id',
     name: 'Achmad Fadillah',
     dosenByExternalId: { '41a1bafa': 13 },
-    dosenByEmail: { 'achmad apps ipb ac id': 13 },
+    dosenByEmail: { 'achmad appsipbacid': 13 },
     dosenByName: { 'achmad fadillah': 13 },
   });
 
@@ -144,21 +144,37 @@ test('lookup ID eksternal dosen menerima alias yang menunjuk id_dosen kanonis', 
   assert.equal(exactImportLookup('683f94af', lookup), 17);
 });
 
-test('import perkuliahan yang mewajibkan ID eksternal menolak ID dosen kosong', () => {
+test('import perkuliahan memakai email exact ketika ID dosen kosong', () => {
   const result = resolvePrimaryDosenImport({
     idDosen: '',
     email: 'achmad@apps.ipb.ac.id',
     name: 'Achmad Fadillah',
     dosenByExternalId: { '41a1bafa': 13 },
-    dosenByEmail: { 'achmad apps ipb ac id': 13 },
+    dosenByEmail: { 'achmad appsipbacid': 13 },
     dosenByName: { 'achmad fadillah': 13 },
-    requireExternalId: true,
   });
 
   assert.deepEqual(result, {
-    id: null,
-    matchedBy: 'id_external',
-    reference: '',
+    id: 13,
+    matchedBy: 'email',
+    reference: 'achmad@apps.ipb.ac.id',
+  });
+});
+
+test('import perkuliahan memakai nama exact ketika ID dan email dosen kosong', () => {
+  const result = resolvePrimaryDosenImport({
+    idDosen: '',
+    email: '',
+    name: 'Achmad Fadillah',
+    dosenByExternalId: { '41a1bafa': 13 },
+    dosenByEmail: { 'achmad apps ipb ac id': 13 },
+    dosenByName: { 'achmad fadillah': 13 },
+  });
+
+  assert.deepEqual(result, {
+    id: 13,
+    matchedBy: 'name',
+    reference: 'Achmad Fadillah',
   });
 });
 
@@ -190,6 +206,14 @@ test('melewati baris tidak tampil dan header yang berulang', () => {
       'Tidak',
     ]),
     true
+  );
+  assert.equal(
+    shouldSkipScheduleImportRow(
+      headers,
+      ['SBI1212', 'SB61', 'Dr. Tanti', 'Tidak'],
+      { ignoreDisplayStatus: true }
+    ),
+    false
   );
   assert.equal(
     shouldSkipScheduleImportRow(headers, [
@@ -362,6 +386,21 @@ test('validasi tidak menggandakan pesan referensi yang sudah spesifik', () => {
   );
 
   assert.deepEqual(issues, ['dosen "Nama Tidak Ada" tidak ada di master data']);
+});
+
+test('validasi menerima jadwal luring tanpa ruangan jika sumber memang kosong', () => {
+  const issues = validatePerkuliahanImportRecord({
+    mulai_jadwal: '2026-11-07T08:00:00',
+    akhir_jadwal: '2026-11-07T10:30:00',
+    id_mata_kuliah: 10,
+    id_angkatan: 26,
+    id_angkatans: [26, 27],
+    dosen_id: 5,
+    jenis_pertemuan: 'luring',
+    ruangan_id: null,
+  });
+
+  assert.deepEqual(issues, []);
 });
 
 test('record sinkronisasi mengosongkan nilai lama dan mempertahankan lokasi daring', () => {

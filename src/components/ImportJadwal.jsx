@@ -41,7 +41,6 @@ import {
   buildPreferredImportLookup,
   exactImportLookup,
   findPendingRoomConflict,
-  importedSchedulesOverlapInSameRoom,
   isRoomConflictExempt,
   isLegacyScheduleImport,
   normalizeImportLookup,
@@ -567,155 +566,6 @@ async function findImportedRoomConflict({
   return `${roomLabel} sudah dipakai untuk ${typeLabel || conflict.jenis_jadwal} pada ${new Date(conflict.mulai_jadwal).toLocaleString('id-ID')} - ${new Date(conflict.akhir_jadwal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-const STRICT_SYNC_WRITE_BATCH_SIZE = 100;
-
-async function upsertStrictSyncRows(
-  rows,
-  batchTag,
-  cachedSchedules = null,
-  onProgress = null
-) {
-  const existingByKey = new Map(
-    (cachedSchedules || [])
-      .filter(
-        (schedule) =>
-          schedule.import_source === 'google_jadwal' && schedule.import_key
-      )
-      .map((schedule) => [schedule.import_key, schedule])
-  );
-  let inserted = 0;
-  let updated = 0;
-  let completed = 0;
-  const errors = [];
-
-  const preparedRows = rows.map((row) => {
-    const record = {
-      ...row.record,
-      import_source: 'google_jadwal',
-      import_batch: batchTag,
-      updated_by: batchTag,
-    };
-    return {
-      row,
-      record,
-      existingSchedule: existingByKey.get(record.import_key) || null,
-    };
-  });
-
-  const reportCompleted = (count = 1) => {
-    completed += count;
-    onProgress?.(completed, rows.length);
-  };
-
-  const persistIndividually = async (entries) => {
-    for (const entry of entries) {
-      const { row, record, existingSchedule } = entry;
-      try {
-        let existingId = existingSchedule?.id || null;
-
-        if (cachedSchedules == null && !existingId) {
-          const { data, error } = await supabase
-            .from('jadwal_perkuliahan')
-            .select('id')
-            .eq('import_source', 'google_jadwal')
-            .eq('import_key', record.import_key)
-            .limit(1);
-          if (error) {
-            errors.push(`Baris ${row.rowNumber}: ${error.message}`);
-            continue;
-          }
-          existingId = data?.[0]?.id || null;
-        }
-
-        if (existingId) {
-          const { error } = await supabase
-            .from('jadwal_perkuliahan')
-            .update(record)
-            .eq('id', existingId);
-          if (error) {
-            errors.push(`Baris ${row.rowNumber}: ${error.message}`);
-          } else {
-            updated++;
-          }
-          continue;
-        }
-
-        const { error } = await supabase
-          .from('jadwal_perkuliahan')
-          .insert([{ ...record, created_by: batchTag }]);
-        if (error) {
-          errors.push(`Baris ${row.rowNumber}: ${error.message}`);
-        } else {
-          inserted++;
-        }
-      } finally {
-        reportCompleted();
-      }
-    }
-  };
-
-  const persistBatch = async (entries, mode) => {
-    if (entries.length === 0) return;
-
-    const payload = entries.map(({ record, existingSchedule }) =>
-      mode === 'update'
-        ? {
-            ...record,
-            id: existingSchedule.id,
-            created_by: existingSchedule.created_by || batchTag,
-          }
-        : { ...record, created_by: batchTag }
-    );
-    const result =
-      mode === 'update'
-        ? await supabase
-            .from('jadwal_perkuliahan')
-            .upsert(payload, { onConflict: 'id' })
-        : await supabase.from('jadwal_perkuliahan').insert(payload);
-
-    if (result.error) {
-      console.warn(
-        `[Import] Batch ${mode} gagal, mencoba ulang per baris:`,
-        result.error
-      );
-      await persistIndividually(entries);
-      return;
-    }
-
-    if (mode === 'update') updated += entries.length;
-    else inserted += entries.length;
-    reportCompleted(entries.length);
-  };
-
-  // Saat cache tersedia, simpan maksimal 100 baris per permintaan. Jika satu
-  // batch gagal, persistBatch otomatis kembali ke penyimpanan per baris agar
-  // baris yang bermasalah tetap dapat dilaporkan secara spesifik.
-  if (cachedSchedules != null) {
-    for (
-      let offset = 0;
-      offset < preparedRows.length;
-      offset += STRICT_SYNC_WRITE_BATCH_SIZE
-    ) {
-      const batch = preparedRows.slice(
-        offset,
-        offset + STRICT_SYNC_WRITE_BATCH_SIZE
-      );
-      await persistBatch(
-        batch.filter(({ existingSchedule }) => existingSchedule),
-        'update'
-      );
-      await persistBatch(
-        batch.filter(({ existingSchedule }) => !existingSchedule),
-        'insert'
-      );
-    }
-  } else {
-    await persistIndividually(preparedRows);
-  }
-
-  return { inserted, updated, errors };
-}
-
 function addStrictSyncConflict(results, pendingRow, message) {
   const existing = results.conflicts.find(
     (conflict) => conflict.syncRowId === pendingRow.syncRowId
@@ -844,7 +694,17 @@ export default function ImportJadwal({
     const scheduleRows = [];
 
     previewData.forEach((row) => {
-      if (shouldSkipScheduleImportRow(previewHeaders, row)) return;
+      if (
+        shouldSkipScheduleImportRow(previewHeaders, row, {
+          // Google Sheet Perkuliahan adalah sumber sinkronisasi penuh. Kolom
+          // Tampil hanya mengatur visibilitas pada sumber dan tidak boleh
+          // menghilangkan jadwal dari database.
+          ignoreDisplayStatus:
+            dataSource === 'google' && jenis === 'perkuliahan',
+        })
+      ) {
+        return;
+      }
 
       const firstCell = String(row[0] || '').trim();
       const dateFromColumn = Number.isInteger(selectedDateColumn)
@@ -1588,7 +1448,6 @@ export default function ImportJadwal({
         let sourceDosenId = '';
         let sourceDosenEmail = '';
         const sourceDosenNames = [];
-        let meetingTypeWasProvided = false;
 
         // Process each mapped column
         Object.entries(columnMapping).forEach(([colIdxStr, target]) => {
@@ -1627,7 +1486,6 @@ export default function ImportJadwal({
               break;
             case '_parse_jenis_pertemuan':
               record.jenis_pertemuan = parseJenisPertemuan(val);
-              meetingTypeWasProvided = true;
               break;
             case '_lookup_angkatan': {
               const angkatanLabels = splitAngkatanLabels(val);
@@ -1666,7 +1524,7 @@ export default function ImportJadwal({
                 : fuzzyLookup(val, lookups.ruanganByName);
               if (jenis === 'perkuliahan') record.ruangan_id = rid || null;
               else record.nama_ruangan = rid || null;
-              if (!rid) {
+              if (!rid && normalizeImportLookup(val)) {
                 unresolvedRoomLabel = val;
                 console.warn(`[Import] Ruangan tidak ditemukan: "${val}"`);
               }
@@ -1770,7 +1628,6 @@ export default function ImportJadwal({
             dosenByExternalId: lookups.dosenByExternalId,
             dosenByEmail: lookups.dosenByEmail,
             dosenByName: lookups.dosenByName,
-            requireExternalId: strictReferenceValidation,
           });
           const primaryDosenId = primaryDosen.id;
 
@@ -1851,16 +1708,12 @@ export default function ImportJadwal({
           if (jenis === 'perkuliahan') {
             record.lokasi_virtual = sourceLocationLabel || null;
           }
+          // Sumber Google memang dapat membiarkan ruangan luring kosong. Namun,
+          // jika nama ruangan diisi, referensinya harus tetap ada di master data.
         } else if (strictReferenceValidation && unresolvedRoomLabel) {
           rowIssues.push(
             `ruangan "${unresolvedRoomLabel}" tidak ada di master data`
           );
-        } else if (
-          strictReferenceValidation &&
-          meetingTypeWasProvided &&
-          !record.ruangan_id
-        ) {
-          rowIssues.push('ruangan wajib diisi untuk pertemuan luring/hybrid');
         }
 
         // Add user info — gunakan batchTag agar bisa di-rollback
@@ -2049,36 +1902,11 @@ export default function ImportJadwal({
 
     if (strictGoogleSync) {
       setImportProgress(82);
-      setImportProgressLabel('Memeriksa konflik antarjadwal...');
-      for (let leftIndex = 0; leftIndex < preparedRows.length; leftIndex++) {
-        const left = preparedRows[leftIndex];
-        if (!usesPhysicalRoom(left.record.jenis_pertemuan)) continue;
-        if (
-          isRoomConflictExempt(roomNameById[String(left.record.ruangan_id)])
-        ) {
-          continue;
-        }
-
-        for (
-          let rightIndex = leftIndex + 1;
-          rightIndex < preparedRows.length;
-          rightIndex++
-        ) {
-          const right = preparedRows[rightIndex];
-          if (
-            !usesPhysicalRoom(right.record.jenis_pertemuan) ||
-            !importedSchedulesOverlapInSameRoom(left.record, right.record)
-          ) {
-            continue;
-          }
-
-          addStrictSyncConflict(
-            results,
-            right,
-            `Ruangan yang sama juga dipakai oleh baris ${left.rowNumber} pada waktu yang bertabrakan`
-          );
-        }
-      }
+      // Google Sheet adalah sumber authoritative. Benturan ruangan yang sudah
+      // ada antarbaris sumber (misalnya kelas paralel/gabungan) tidak boleh
+      // menggagalkan penyalinan 1:1 ke database. Konflik terhadap jadwal manual
+      // tetap diperiksa saat setiap baris disiapkan di atas.
+      setImportProgressLabel('Menyiapkan sinkronisasi jadwal Google...');
 
       results.pendingSyncRows = preparedRows;
       results.managedScheduleIds = [...managedScheduleIds];
@@ -2119,35 +1947,13 @@ export default function ImportJadwal({
           results.success = Number(summary?.total || preparedRows.length);
         }
       } else {
-        const blockedSyncRowIds = new Set(
-          results.conflicts.map((conflict) => conflict.syncRowId)
+        // Sinkronisasi Google harus atomik. Menyimpan sebagian baris di sini
+        // membuat record import lama tetap tertinggal karena rekonsiliasi akhir
+        // belum dijalankan, lalu jadwal terlihat ganda. Seluruh perubahan baru
+        // ditulis oleh RPC setelah semua error dan konflik selesai.
+        setImportProgressLabel(
+          'Sinkronisasi ditahan sampai semua konflik dan error diselesaikan.'
         );
-        const readyRows = preparedRows.filter(
-          (row) => !blockedSyncRowIds.has(row.syncRowId)
-        );
-
-        if (readyRows.length > 0) {
-          setImportProgressLabel(
-            `Menyimpan 0 dari ${readyRows.length} baris valid...`
-          );
-          const partialResult = await upsertStrictSyncRows(
-            readyRows,
-            batchTag,
-            existingSchedules,
-            (completedRows, totalRows) => {
-              setImportProgress(
-                Math.min(99, 86 + Math.round((completedRows / totalRows) * 13))
-              );
-              setImportProgressLabel(
-                `Menyimpan ${completedRows} dari ${totalRows} baris valid...`
-              );
-            }
-          );
-          results.inserted = partialResult.inserted;
-          results.updated = partialResult.updated;
-          results.success = partialResult.inserted + partialResult.updated;
-          results.errors.push(...partialResult.errors);
-        }
       }
     }
 
@@ -2490,7 +2296,6 @@ export default function ImportJadwal({
 
     const start = new Date(conflict.record.mulai_jadwal);
     const end = new Date(conflict.record.akhir_jadwal);
-    const roomField = jenis === 'perkuliahan' ? 'ruangan_id' : 'nama_ruangan';
     if (
       Number.isNaN(start.getTime()) ||
       Number.isNaN(end.getTime()) ||
@@ -2511,26 +2316,6 @@ export default function ImportJadwal({
       }));
       return;
     }
-    if (
-      usesPhysicalRoom(conflict.record.jenis_pertemuan) &&
-      !conflict.record[roomField]
-    ) {
-      setImportResult((current) => ({
-        ...current,
-        conflicts: current.conflicts.map((item) =>
-          item.id === conflictId
-            ? {
-                ...item,
-                verificationStatus: 'invalid',
-                verificationMessage:
-                  'Pilih ruangan untuk pertemuan luring atau hybrid.',
-              }
-            : item
-        ),
-      }));
-      return;
-    }
-
     setCheckingConflictId(conflictId);
     const tableName =
       jenis === 'perkuliahan'
@@ -2704,28 +2489,6 @@ export default function ImportJadwal({
           return;
         }
 
-        const partialResult = await upsertStrictSyncRows(
-          [
-            {
-              syncRowId: conflict.syncRowId,
-              rowNumber: conflict.rowNumber,
-              record: conflict.record,
-            },
-          ],
-          importBatchTag
-        );
-        if (partialResult.errors.length > 0) {
-          setImportResult((current) => ({
-            ...current,
-            conflicts: current.conflicts.map((item) =>
-              item.id === conflictId
-                ? { ...item, saveError: partialResult.errors.join(' | ') }
-                : item
-            ),
-          }));
-          return;
-        }
-
         setExpandedConflictIds((current) =>
           current.filter((id) => id !== conflictId)
         );
@@ -2736,9 +2499,6 @@ export default function ImportJadwal({
         });
         setImportResult((current) => ({
           ...current,
-          success: current.success + 1,
-          inserted: current.inserted + partialResult.inserted,
-          updated: current.updated + partialResult.updated,
           pendingSyncRows: pendingRows,
           conflicts: remainingConflicts,
           syncPending: remainingConflicts.length > 0,
@@ -3512,7 +3272,7 @@ export default function ImportJadwal({
                 <p className="mt-3 text-xs font-medium text-emerald-700">
                   {filteredPreviewData.length} baris akan diproses. Data yang
                   {jenis === 'perkuliahan' && dataSource === 'google'
-                    ? ' tidak lolos validasi akan membatalkan seluruh sinkronisasi. Data import lama yang tidak lagi ada di Google Sheet akan dibersihkan.'
+                    ? ' tidak lolos validasi atau berkonflik dengan jadwal manual akan menahan seluruh sinkronisasi. Benturan yang memang sudah ada antarbaris Google tetap disalin. Setelah semuanya valid, data import lama yang tidak lagi ada di Google Sheet akan dibersihkan.'
                     : ' sama dilewati, sedangkan konflik dapat diedit atau dilewati pada hasil import.'}
                 </p>
               </div>
@@ -3698,7 +3458,9 @@ export default function ImportJadwal({
                             ? 'Konflik ruangan dapat diperbaiki langsung di bawah. Kegagalan lainnya perlu diperbaiki pada sumber data sebelum import ulang.'
                             : 'Perbaiki kegagalan pada sumber data, lalu jalankan import kembali.'
                           : unresolvedConflictCount > 0
-                            ? 'Baris tanpa masalah sudah diimport. Pilih ruangan pengganti untuk baris konflik langsung di bawah.'
+                            ? importResult.strictSync
+                              ? 'Belum ada perubahan pada database. Selesaikan semua konflik agar seluruh jadwal disinkronkan sekaligus.'
+                              : 'Baris tanpa masalah sudah diimport. Pilih ruangan pengganti untuk baris konflik langsung di bawah.'
                             : 'Ringkasan hasil pemrosesan file Anda.'}
                       </p>
                     </div>
@@ -3786,7 +3548,7 @@ export default function ImportJadwal({
                         </p>
                         <p className="mt-1 text-xs leading-5 text-amber-800">
                           {importResult.strictSync
-                            ? 'Baris tanpa konflik sudah diimport. Buka konflik, pilih ruangan yang tersedia, lalu periksa dan gunakan pilihan. Konflik yang belum diperbaiki tidak ikut diinput.'
+                            ? 'Sinkronisasi belum mengubah database. Buka konflik, pilih ruangan yang tersedia, lalu periksa dan gunakan pilihan. Setelah konflik terakhir selesai, seluruh jadwal disinkronkan sekaligus.'
                             : 'Buka setiap konflik, ubah datanya, lalu pilih Periksa perubahan. Tombol Simpan aktif setelah tidak ada konflik. Pilih Lewati jika data tidak perlu diimpor.'}
                         </p>
 

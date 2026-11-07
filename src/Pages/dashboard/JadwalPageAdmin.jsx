@@ -292,6 +292,7 @@ function ExpandableSelectList({
 
 const ITEMS_PER_PAGE = 10;
 const SUPABASE_PAGE_SIZE = 1000;
+const REALTIME_REFRESH_DELAY_MS = 500;
 
 const fetchAllTableRows = async (table, columns = '*') => {
   const rows = [];
@@ -775,6 +776,9 @@ export default function JadwalPageAdmin() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [conflictAlert, setConflictAlert] = useState('');
+  const fetchRequestIdRef = React.useRef(0);
+  const initialFetchStartedRef = React.useRef(false);
+  const realtimeRefreshTimerRef = React.useRef(null);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -796,32 +800,49 @@ export default function JadwalPageAdmin() {
   const [downloadMonth, setDownloadMonth] = useState('');
 
   // Fetch all data
-  const fetchAllData = useCallback(async () => {
+  const fetchAllData = useCallback(async ({ showLoading = false } = {}) => {
+    const requestId = ++fetchRequestIdRef.current;
+    if (showLoading) setLoading(true);
+
     try {
-      setLoading(true);
       setError(null);
 
-      // Fetch options - hanya yang aktif (aktif_nonaktif = true)
-      const [dosenRes, ruanganRes, angkatanRes, mataKuliahRes, agendaRes] =
-        await Promise.all([
-          supabase
-            .from('dosen')
-            .select('id, nama_dosen, id_dosen, id_external, aktif_nonaktif')
-            .eq('aktif_nonaktif', true),
-          supabase
-            .from('ruangan')
-            .select('id, nama_ruangan, aktif_nonaktif')
-            .eq('aktif_nonaktif', true),
-          supabase
-            .from('angkatan')
-            .select('id, nama_angkatan, aktif_nonaktif')
-            .eq('aktif_nonaktif', true),
-          supabase
-            .from('mata_kuliah')
-            .select('*, aktif_nonaktif')
-            .eq('aktif_nonaktif', true),
-          supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
-        ]);
+      // Semua referensi dan kategori jadwal dimuat paralel. Relasi jadwal
+      // hanya mengambil kolom yang dipakai tampilan agar payload lebih kecil.
+      const [
+        dosenRes,
+        ruanganRes,
+        angkatanRes,
+        mataKuliahRes,
+        agendaRes,
+        perkuliahanRes,
+        karyaAkhirRes,
+        lainLainRes,
+      ] = await Promise.all([
+        supabase
+          .from('dosen')
+          .select('id, nama_dosen, id_dosen, id_external, aktif_nonaktif')
+          .eq('aktif_nonaktif', true),
+        supabase
+          .from('ruangan')
+          .select('id, nama_ruangan, aktif_nonaktif')
+          .eq('aktif_nonaktif', true),
+        supabase
+          .from('angkatan')
+          .select('id, nama_angkatan, aktif_nonaktif')
+          .eq('aktif_nonaktif', true),
+        supabase
+          .from('mata_kuliah')
+          .select('*, aktif_nonaktif')
+          .eq('aktif_nonaktif', true),
+        supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
+        fetchAllTableRows(
+          'jadwal_perkuliahan',
+          '*, dosen(id, nama_dosen), ruangan(id, nama_ruangan), angkatan(id, nama_angkatan), mata_kuliah(id, mata_kuliah)'
+        ),
+        fetchAllTableRows('jadwal_karya_akhir'),
+        fetchAllTableRows('jadwal_lain_lain'),
+      ]);
 
       assertSupabaseResults([
         ['Referensi dosen', dosenRes],
@@ -829,7 +850,13 @@ export default function JadwalPageAdmin() {
         ['Referensi angkatan', angkatanRes],
         ['Referensi mata kuliah', mataKuliahRes],
         ['Referensi agenda', agendaRes],
+        ['Jadwal perkuliahan', perkuliahanRes],
+        ['Jadwal karya akhir', karyaAkhirRes],
+        ['Jadwal lain-lain', lainLainRes],
       ]);
+
+      // Respons request lama tidak boleh menimpa refresh yang lebih baru.
+      if (requestId !== fetchRequestIdRef.current) return;
 
       setOptions({
         dosen: dosenRes.data || [],
@@ -844,12 +871,6 @@ export default function JadwalPageAdmin() {
       const dosenMap = createMap(dosenRes.data, 'nama_dosen');
       const angkatanMap = createMap(angkatanRes.data, 'nama_angkatan');
 
-      // Fetch jadwal perkuliahan
-      const perkuliahanRes = await fetchAllTableRows(
-        'jadwal_perkuliahan',
-        '*, dosen(*), ruangan(*), angkatan(*), mata_kuliah(*)'
-      );
-      assertSupabaseResults([['Jadwal perkuliahan', perkuliahanRes]]);
       const perkuliahanData = perkuliahanRes.data;
 
       const mergedPerkuliahan = (perkuliahanData || []).map((r) => ({
@@ -932,9 +953,6 @@ export default function JadwalPageAdmin() {
       }));
       setJadwalPerkuliahan(mergedPerkuliahan);
 
-      // Fetch jadwal karya akhir
-      const karyaAkhirRes = await fetchAllTableRows('jadwal_karya_akhir');
-      assertSupabaseResults([['Jadwal karya akhir', karyaAkhirRes]]);
       const karyaAkhirData = karyaAkhirRes.data;
 
       const mergedKaryaAkhir = (karyaAkhirData || []).map((j) => {
@@ -1009,9 +1027,6 @@ export default function JadwalPageAdmin() {
       });
       setJadwalKaryaAkhir(mergedKaryaAkhir);
 
-      // Fetch jadwal lain-lain
-      const lainLainRes = await fetchAllTableRows('jadwal_lain_lain');
-      assertSupabaseResults([['Jadwal lain-lain', lainLainRes]]);
       const lainLainData = lainLainRes.data;
 
       const mergedLainLain = (lainLainData || []).map((j) => ({
@@ -1030,17 +1045,31 @@ export default function JadwalPageAdmin() {
         petugas_zoom: j.petugas_zoom || '-',
       }));
       setJadwalLainLain(mergedLainLain);
-
-      setLoading(false);
     } catch (err) {
+      if (requestId !== fetchRequestIdRef.current) return;
       console.error('Error fetching data:', err);
       setError(err.message || 'Gagal mengambil data');
-      setLoading(false);
+    } finally {
+      if (requestId === fetchRequestIdRef.current) setLoading(false);
     }
   }, []);
 
+  const scheduleDataRefresh = useCallback(() => {
+    if (realtimeRefreshTimerRef.current) {
+      window.clearTimeout(realtimeRefreshTimerRef.current);
+    }
+
+    realtimeRefreshTimerRef.current = window.setTimeout(() => {
+      realtimeRefreshTimerRef.current = null;
+      fetchAllData({ showLoading: false });
+    }, REALTIME_REFRESH_DELAY_MS);
+  }, [fetchAllData]);
+
   useEffect(() => {
-    fetchAllData();
+    if (!initialFetchStartedRef.current) {
+      initialFetchStartedRef.current = true;
+      fetchAllData({ showLoading: true });
+    }
 
     // Realtime subscriptions
     const channels = [
@@ -1049,30 +1078,34 @@ export default function JadwalPageAdmin() {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'jadwal_perkuliahan' },
-          fetchAllData
+          scheduleDataRefresh
         ),
       supabase
         .channel('jadwal_karya_akhir_admin')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'jadwal_karya_akhir' },
-          fetchAllData
+          scheduleDataRefresh
         ),
       supabase
         .channel('jadwal_lain_lain_admin')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'jadwal_lain_lain' },
-          fetchAllData
+          scheduleDataRefresh
         ),
     ];
 
     channels.forEach((ch) => ch.subscribe());
 
     return () => {
+      if (realtimeRefreshTimerRef.current) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
       channels.forEach((ch) => supabase.removeChannel(ch));
     };
-  }, [fetchAllData]);
+  }, [fetchAllData, scheduleDataRefresh]);
 
   // Modal handlers
   const resetForm = (type) => {
@@ -1482,7 +1515,7 @@ export default function JadwalPageAdmin() {
         message: `${tableLabels[modalType]} telah ${verb} dan tersinkron dengan dashboard.`,
       });
       closeModal();
-      fetchAllData();
+      scheduleDataRefresh();
     } catch (err) {
       console.error('Error saving:', err);
       setToast({
@@ -1523,7 +1556,7 @@ export default function JadwalPageAdmin() {
         description: `${tableLabels[jenis]}: Data jadwal telah dihapus.`,
       });
 
-      fetchAllData();
+      scheduleDataRefresh();
       return true;
     } catch (err) {
       console.error('Error deleting:', err);
@@ -1566,7 +1599,7 @@ export default function JadwalPageAdmin() {
         description: `${tableLabels[jenis]}: ${ids.length} data jadwal telah dihapus.`,
       });
 
-      fetchAllData();
+      scheduleDataRefresh();
       return true;
     } catch (err) {
       console.error('Error bulk deleting:', err);
@@ -2348,7 +2381,7 @@ export default function JadwalPageAdmin() {
         jenis={importJenisTab}
         options={options}
         userName={userRole?.name || 'Unknown'}
-        onSuccess={fetchAllData}
+        onSuccess={scheduleDataRefresh}
         onNotify={addNotification}
       />
 

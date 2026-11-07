@@ -48,7 +48,6 @@ export function resolvePrimaryDosenImport({
   dosenByExternalId,
   dosenByEmail,
   dosenByName,
-  requireExternalId = false,
 }) {
   const normalizedIdDosen = normalizeImportLookup(idDosen);
   if (normalizedIdDosen && !EMPTY_VALUES.has(normalizedIdDosen)) {
@@ -56,14 +55,6 @@ export function resolvePrimaryDosenImport({
       id: exactImportLookup(idDosen, dosenByExternalId),
       matchedBy: 'id_external',
       reference: String(idDosen).trim(),
-    };
-  }
-
-  if (requireExternalId) {
-    return {
-      id: null,
-      matchedBy: 'id_external',
-      reference: '',
     };
   }
 
@@ -95,7 +86,11 @@ export function splitDosenLabels(value) {
     .filter(Boolean);
 }
 
-export function shouldSkipScheduleImportRow(headers, row) {
+export function shouldSkipScheduleImportRow(
+  headers,
+  row,
+  { ignoreDisplayStatus = false } = {}
+) {
   const normalizedHeaders = (headers || []).map((header) =>
     normalizeImportLookup(header)
   );
@@ -106,6 +101,7 @@ export function shouldSkipScheduleImportRow(headers, row) {
     displayColumn >= 0 ? normalizeImportLookup(row?.[displayColumn]) : '';
 
   if (
+    !ignoreDisplayStatus &&
     ['tidak', 'tidak tampil', 'view', 'hide', 'hidden'].includes(displayValue)
   ) {
     return true;
