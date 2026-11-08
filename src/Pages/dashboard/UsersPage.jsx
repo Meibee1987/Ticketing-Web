@@ -79,24 +79,15 @@ export default function UsersPage() {
         .select('*')
         .order('nama_dosen', { ascending: true });
 
-      console.log('=== DEBUG FETCH MASTER DOSEN ===');
-      console.log('Raw data from dosen table:', data);
-      console.log('Error:', error);
-
       if (error) {
         console.error('Error fetching master dosen:', error);
         return;
       }
 
       if (!data || data.length === 0) {
-        console.log('No dosen found in database!');
         setMasterDosenList([]);
         return;
       }
-
-      // Cek struktur kolom yang ada
-      console.log('Columns in dosen table:', Object.keys(data[0]));
-      console.log('Sample dosen data:', data[0]);
 
       // Filter yang belum punya role (roles_id null/undefined) dan aktif
       const availableDosen = data.filter((d) => {
@@ -109,14 +100,9 @@ export default function UsersPage() {
           d.aktif_nonaktif === 'aktif' ||
           d.aktif_nonaktif === 1;
 
-        console.log(
-          `Dosen: ${d.nama_dosen}, roles_id: ${d.roles_id}, aktif: ${d.aktif_nonaktif}, hasNoRole: ${hasNoRole}, isActive: ${isActive}`
-        );
-
         return hasNoRole && isActive;
       });
 
-      console.log('Available dosen (filtered):', availableDosen);
       setMasterDosenList(availableDosen);
     } catch (err) {
       console.error('Exception in fetchMasterDosen:', err);

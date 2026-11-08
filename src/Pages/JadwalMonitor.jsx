@@ -9,6 +9,7 @@ import {
   MonitorScheduleSkeleton,
 } from '../components/monitor/MonitorScheduleUI';
 import { supabase } from '../supabaseClient';
+import { parseIdList } from '../utils/parseIdList';
 import {
   fetchMonitorSlides,
   MONITOR_SLIDES_TABLE,
@@ -51,17 +52,6 @@ const hasSameSlides = (currentSlides, nextSlides) =>
       slide.sortOrder === nextSlide.sortOrder
     );
   });
-
-const parseIdList = (value) => {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== 'string' || !value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
 
 export default function JadwalMonitor() {
   const [jadwalData, setJadwalData] = useState([]);

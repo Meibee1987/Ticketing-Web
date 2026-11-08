@@ -4,7 +4,9 @@
  * Jenis pertemuan: luring / daring(online) / hybrid from all 3 tables
  * Realtime subscription with notification builder
  */
+
 import { supabase } from '../supabaseClient';
+import { parseIdList } from '../utils/parseIdList';
 import { usesPhysicalRoom } from '../utils/meetingRoom';
 import { formatAngkatanLabel } from '../utils/scheduleLabels';
 import { assertSupabaseResults } from '../utils/supabaseResults';
@@ -35,18 +37,6 @@ function getMonday(date) {
 }
 
 const isSameDate = (d1, d2) => d1.toDateString() === d2.toDateString();
-
-const parseIdList = (value) => {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== 'string' || !value) return [];
-
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
 
 // ────────────────────────────────────────
 // UNIFIED BOOKING FETCH

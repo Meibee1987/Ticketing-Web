@@ -3,7 +3,7 @@
  * Filter tanggal, realtime data dari 3 tabel jadwal
  */
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Building2,
@@ -15,14 +15,10 @@ import {
   Clock3,
   UsersRound,
 } from 'lucide-react';
-import { supabase } from '../../supabaseClient';
-import {
-  assertSupabaseResults,
-  getErrorMessage,
-} from '../../utils/supabaseResults';
 import DateNavigator from '../../components/ui/DateNavigator';
 import PageHeader from '../../components/ui/PageHeader';
 import StatePanel from '../../components/ui/StatePanel';
+import { useRuanganData } from '../../hooks/useRuanganData';
 
 // ============= HELPERS =============
 const formatDate = (d) =>
@@ -50,8 +46,6 @@ const formatTime = (ts) =>
     : '-';
 const formatDateInput = (d) => d.toISOString().split('T')[0];
 const isSameDate = (d1, d2) => d1.toDateString() === d2.toDateString();
-const toMap = (arr, key, val) =>
-  Object.fromEntries(arr.map((x) => [x[key], x[val]]));
 
 // ============= CONSTANTS =============
 const SOURCE_COLORS = {
@@ -117,177 +111,6 @@ export default function RuanganPage() {
       />
     </div>
   );
-}
-
-// ============= DATA HOOK =============
-function useRuanganData(selectedDate) {
-  const [state, setState] = useState({
-    ruangan: [],
-    allBookings: [],
-    loading: true,
-    error: null,
-  });
-
-  const fetchData = useCallback(async () => {
-    try {
-      setState((s) => ({ ...s, loading: true, error: null }));
-
-      const [
-        ruanganRes,
-        perkuliahanRes,
-        karyaAkhirRes,
-        lainLainRes,
-        dosenRes,
-        angkatanRes,
-        matkulRes,
-        agendaKARes,
-      ] = await Promise.all([
-        supabase
-          .from('ruangan')
-          .select('id, nama_ruangan, kapasitas_ruangan, gedung, aktif_nonaktif')
-          .order('nama_ruangan'),
-        supabase.from('jadwal_perkuliahan').select('*'),
-        supabase.from('jadwal_karya_akhir').select('*'),
-        supabase.from('jadwal_lain_lain').select('*'),
-        supabase.from('dosen').select('id, nama_dosen'),
-        supabase.from('angkatan').select('id, nama_angkatan'),
-        supabase.from('mata_kuliah').select('*'),
-        supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
-      ]);
-
-      assertSupabaseResults([
-        ['Data ruangan', ruanganRes],
-        ['Jadwal perkuliahan', perkuliahanRes],
-        ['Jadwal karya akhir', karyaAkhirRes],
-        ['Jadwal lain-lain', lainLainRes],
-        ['Referensi dosen', dosenRes],
-        ['Referensi angkatan', angkatanRes],
-        ['Referensi mata kuliah', matkulRes],
-        ['Referensi agenda', agendaKARes],
-      ]);
-
-      const ruangan = ruanganRes.data || [];
-      const maps = {
-        dosen: toMap(dosenRes.data || [], 'id', 'nama_dosen'),
-        angkatan: toMap(angkatanRes.data || [], 'id', 'nama_angkatan'),
-        matkul: toMap(matkulRes.data || [], 'id', 'mata_kuliah'),
-        agendaKA: toMap(agendaKARes.data || [], 'id', 'agenda_karya_akhir'),
-        ruangan: toMap(ruangan, 'id', 'nama_ruangan'),
-      };
-
-      const createBooking = (
-        j,
-        type,
-        ruanganKey,
-        desc,
-        detail,
-        extra = {}
-      ) => ({
-        id: `${type}-${j.id}`,
-        ruangan_id: j[ruanganKey],
-        ruangan_nama: maps.ruangan[j[ruanganKey]] || `Ruangan ${j[ruanganKey]}`,
-        mulai: new Date(j.mulai_jadwal),
-        akhir: new Date(j.akhir_jadwal),
-        source: {
-          perkuliahan: 'Perkuliahan',
-          karya_akhir: 'Karya Akhir',
-          lain_lain: 'Lain-lain',
-        }[type],
-        sourceColor: {
-          perkuliahan: 'blue',
-          karya_akhir: 'purple',
-          lain_lain: 'orange',
-        }[type],
-        description: desc,
-        detail,
-        ...extra,
-      });
-
-      const allBookings = [
-        ...(perkuliahanRes.data || [])
-          .filter((j) => j.mulai_jadwal && j.akhir_jadwal)
-          .map((j) =>
-            createBooking(
-              j,
-              'perkuliahan',
-              'ruangan_id',
-              maps.matkul[j.id_mata_kuliah] || 'Mata Kuliah',
-              maps.dosen[j.dosen_id] || '',
-              {
-                angkatan: maps.angkatan[j.id_angkatan] || '',
-                jenis_pertemuan: j.jenis_pertemuan || 'luring',
-              }
-            )
-          ),
-        ...(karyaAkhirRes.data || [])
-          .filter((j) => j.mulai_jadwal && j.akhir_jadwal)
-          .map((j) =>
-            createBooking(
-              j,
-              'karya_akhir',
-              'nama_ruangan',
-              maps.agendaKA[j.agenda_jadwal_karya_akhir] || 'Sidang/Seminar',
-              maps.angkatan[j.nama_angkatan] || ''
-            )
-          ),
-        ...(lainLainRes.data || [])
-          .filter((j) => j.mulai_jadwal && j.akhir_jadwal)
-          .map((j) =>
-            createBooking(
-              j,
-              'lain_lain',
-              'nama_ruangan',
-              j.agenda || 'Kegiatan',
-              j.nama_user || ''
-            )
-          ),
-      ].sort((a, b) => a.mulai - b.mulai);
-
-      setState({ ruangan, allBookings, loading: false, error: null });
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      setState({
-        ruangan: [],
-        allBookings: [],
-        loading: false,
-        error: getErrorMessage(err),
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    // Initial synchronization with the external room data source.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchData();
-  }, [fetchData]);
-
-  // Realtime subscriptions
-  useEffect(() => {
-    const tables = [
-      'ruangan',
-      'jadwal_perkuliahan',
-      'jadwal_karya_akhir',
-      'jadwal_lain_lain',
-    ];
-    const channels = tables.map((t) =>
-      supabase
-        .channel(`ruangan-rt-${t}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: t },
-          fetchData
-        )
-        .subscribe()
-    );
-    return () => channels.forEach((c) => supabase.removeChannel(c));
-  }, [fetchData]);
-
-  const filteredBookings = useMemo(
-    () => state.allBookings.filter((b) => isSameDate(b.mulai, selectedDate)),
-    [state.allBookings, selectedDate]
-  );
-
-  return { ...state, filteredBookings };
 }
 
 // ============= STATS COMPONENT =============

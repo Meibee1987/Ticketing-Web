@@ -5,6 +5,8 @@
  * ================================================================================
  */
 
+// 🎯 Import komponen reusable dari folder components/
+
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   BookOpen,
@@ -19,17 +21,18 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { supabase } from '../../supabaseClient';
-import { useAuth } from '../../hooks/useAuth';
-import { useNotifications } from '../../hooks/useNotifications';
-// 🎯 Import komponen reusable dari folder components/
 import SearchBar from '../../components/SearchBar';
 import ActionButtons from '../../components/ActionButtons';
 import Pagination from '../../components/Pagination';
-import { assertSupabaseResults } from '../../utils/supabaseResults';
 import SearchableSelect from '../../components/SearchableSelect';
 import ImportJadwal from '../../components/ImportJadwal';
 import StatePanel from '../../components/ui/StatePanel';
+import { useAuth } from '../../hooks/useAuth';
+import { useNotifications } from '../../hooks/useNotifications';
+import { fetchAllTableRows } from '../../services/scheduleReads';
+import { supabase } from '../../supabaseClient';
+import { parseIdList } from '../../utils/parseIdList';
+import { assertSupabaseResults } from '../../utils/supabaseResults';
 import { usesPhysicalRoom } from '../../utils/meetingRoom';
 import { formatAngkatanLabel } from '../../utils/scheduleLabels';
 
@@ -291,43 +294,8 @@ function ExpandableSelectList({
 // ================================================================================
 
 const ITEMS_PER_PAGE = 10;
-const SUPABASE_PAGE_SIZE = 1000;
+
 const REALTIME_REFRESH_DELAY_MS = 500;
-
-const fetchAllTableRows = async (table, columns = '*') => {
-  const rows = [];
-  let from = 0;
-
-  while (true) {
-    const result = await supabase
-      .from(table)
-      .select(columns)
-      .order('id', { ascending: true })
-      .range(from, from + SUPABASE_PAGE_SIZE - 1);
-
-    if (result.error) return result;
-
-    const pageRows = result.data || [];
-    rows.push(...pageRows);
-
-    if (pageRows.length < SUPABASE_PAGE_SIZE) {
-      return { ...result, data: rows };
-    }
-
-    from += SUPABASE_PAGE_SIZE;
-  }
-};
-
-const parseIdList = (value) => {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== 'string' || !value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
 
 // Helper untuk format timestamp ke tampilan lengkap "Hari, DD Bulan YYYY, HH:MM"
 const formatTimestamp = (ts) => {
@@ -837,11 +805,12 @@ export default function JadwalPageAdmin() {
           .eq('aktif_nonaktif', true),
         supabase.from('agenda_karya_akhir').select('id, agenda_karya_akhir'),
         fetchAllTableRows(
+          supabase,
           'jadwal_perkuliahan',
           '*, dosen(id, nama_dosen), ruangan(id, nama_ruangan), angkatan(id, nama_angkatan), mata_kuliah(id, mata_kuliah)'
         ),
-        fetchAllTableRows('jadwal_karya_akhir'),
-        fetchAllTableRows('jadwal_lain_lain'),
+        fetchAllTableRows(supabase, 'jadwal_karya_akhir'),
+        fetchAllTableRows(supabase, 'jadwal_lain_lain'),
       ]);
 
       assertSupabaseResults([
@@ -1180,7 +1149,6 @@ export default function JadwalPageAdmin() {
   useEffect(() => {
     window.handleDownloadJadwal = handleDownload;
     window.openDownloadModal = (jenis) => {
-      console.log('[openDownloadModal] Jenis:', jenis, 'Type:', typeof jenis);
       setDownloadJenisTab(jenis);
       setDownloadType('all'); // default ke semua saat modal dibuka
       setDownloadStartDate('');
@@ -1661,10 +1629,6 @@ export default function JadwalPageAdmin() {
           allTabData = jadwalLainLain;
         }
 
-        console.log(
-          `[Download] Tab: ${targetJenis}, Total data: ${allTabData.length}, Filter: ${downloadType}`
-        );
-
         // Jika ada filter tanggal atau bulan
         if (downloadType === 'all') {
           data = allTabData;
@@ -1741,8 +1705,6 @@ export default function JadwalPageAdmin() {
           });
         }
       }
-
-      console.log(`[Download] Hasil filter: ${data.length} data`);
 
       if (data.length === 0) {
         alert('Tidak ada data untuk didownload');

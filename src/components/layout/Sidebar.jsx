@@ -1,57 +1,7 @@
 import { NavLink } from 'react-router-dom';
+import { LogOut, MonitorPlay, X } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import {
-  HONOR_DOSEN_ALLOWED_EMAILS,
-  isEmailAllowed,
-} from '../../constants/accessControl';
-import {
-  Building2,
-  CalendarDays,
-  Database,
-  LayoutDashboard,
-  LogOut,
-  Banknote,
-  MonitorPlay,
-  ShieldCheck,
-  Users,
-  X,
-} from 'lucide-react';
-
-const MENU_ITEMS = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/dashboard/jadwal', icon: CalendarDays, label: 'Jadwal' },
-  {
-    to: '/dashboard/jadwal-admin',
-    icon: ShieldCheck,
-    label: 'Jadwal Admin',
-    roles: ['admin', 'super admin'],
-  },
-  {
-    to: '/dashboard/honor-dosen',
-    icon: Banknote,
-    label: 'Honor Dosen',
-    emails: HONOR_DOSEN_ALLOWED_EMAILS,
-  },
-  {
-    to: '/dashboard/monitor-settings',
-    icon: MonitorPlay,
-    label: 'Monitor Setting',
-    roles: ['admin', 'super admin'],
-  },
-  { to: '/dashboard/ruangan', icon: Building2, label: 'Ruangan' },
-  {
-    to: '/dashboard/database',
-    icon: Database,
-    label: 'Master Data',
-    roles: ['admin', 'super admin'],
-  },
-  {
-    to: '/dashboard/users',
-    icon: Users,
-    label: 'Users',
-    roles: ['super admin'],
-  },
-];
+import { getVisibleMenuItems } from '../../constants/navigation';
 
 export default function Sidebar({ open, onClose }) {
   const { user, userRole, signOut } = useAuth();
@@ -67,11 +17,7 @@ export default function Sidebar({ open, onClose }) {
     window.location.href = '/login';
   };
 
-  const visibleItems = MENU_ITEMS.filter(
-    (item) =>
-      (!item.roles || item.roles.includes(userRole?.roleName)) &&
-      (!item.emails || isEmailAllowed(user?.email, item.emails))
-  );
+  const visibleItems = getVisibleMenuItems(userRole?.roleName, user?.email);
 
   const navigationClass = ({ isActive }) =>
     `flex min-h-11 items-center gap-3 rounded-lg px-3.5 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-white ${

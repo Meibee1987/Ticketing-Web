@@ -8,6 +8,7 @@
  *            - Lain-lain
  * ================================================================================
  */
+
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import {
@@ -26,7 +27,15 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
+import { fetchExistingSchedulesFrom } from '../services/scheduleReads';
 import { supabase } from '../supabaseClient';
+import {
+  getScheduleTypeFromLabel,
+  parseJam,
+  parseJenisPertemuan,
+  parseZoomInfo,
+  dateToLocalStr,
+} from '../utils/scheduleImportParsing';
 import { getImportStartDay } from '../utils/importScheduleDate';
 import { buildImportErrorReport } from '../utils/importErrorReport';
 import { normalizeKaryaAkhirAgenda } from '../utils/karyaAkhir';
@@ -327,89 +336,6 @@ const LAIN_LAIN_MAP = {
   note: 'note',
 };
 
-function getScheduleTypeFromLabel(value) {
-  const label = String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ');
-
-  if (!label) return null;
-  if (/^kuliah(?:\s|$)|^perkuliahan(?:\s|$)/.test(label)) return 'perkuliahan';
-  if (
-    /karya akhir|sidang|ujian|tesis|disertasi|prelim|seminar|kolokium/.test(
-      label
-    )
-  )
-    return 'karya_akhir';
-  if (/^lain lain(?:\s|$)/.test(label)) return 'lain_lain';
-
-  return null;
-}
-
-// ================================================================================
-// HELPER: Parse jam dari string spreadsheet (e.g. "10.00 - 14.00" atau "08:00-09:40")
-// ================================================================================
-function parseJam(jamStr, tanggal) {
-  if (!jamStr || !tanggal) return { mulai: null, akhir: null };
-  const str = String(jamStr).trim();
-  // Format: "HH.MM - HH.MM" atau "HH:MM - HH:MM" atau "HH.MM-HH.MM"
-  const match = str.match(/(\d{1,2})[.:](\d{2})\s*[-–]\s*(\d{1,2})[.:](\d{2})/);
-  if (!match) return { mulai: null, akhir: null };
-
-  const [, h1, m1, h2, m2] = match;
-  const dateStr =
-    tanggal instanceof Date
-      ? dateToLocalStr(tanggal)
-      : String(tanggal).split('T')[0];
-
-  return {
-    mulai: `${dateStr}T${h1.padStart(2, '0')}:${m1}:00`,
-    akhir: `${dateStr}T${h2.padStart(2, '0')}:${m2}:00`,
-  };
-}
-
-// Parse jenis pertemuan dari string spreadsheet
-function parseJenisPertemuan(str) {
-  if (!str) return 'luring';
-  const lower = String(str).toLowerCase().trim();
-  if (lower.includes('hybrid') || lower.includes('blended')) return 'hybrid';
-  if (
-    lower.includes('daring') ||
-    lower.includes('online') ||
-    lower.includes('async') ||
-    lower.includes('asynchronous') ||
-    lower.includes('asinkron') ||
-    lower.includes('synchronous') ||
-    lower.includes('sinkron')
-  )
-    return 'daring';
-  return 'luring';
-}
-
-// Parse Zoom info dari "ID: xxx (Pass: yyy)" format
-function parseZoomInfo(str) {
-  if (!str) return { zoom_id: null, zoom_password: null };
-  const s = String(str);
-  const idMatch = s.match(/(?:ID|id|Id)[:\s]*([0-9\s]+)/);
-  const passMatch = s.match(
-    /(?:Pass|pass|Password|password|Passcode|passcode|Kode Sandi|sandi)[:\s]*([^\s),]+)/i
-  );
-  return {
-    zoom_id: idMatch ? idMatch[1].trim() : null,
-    zoom_password: passMatch ? passMatch[1].trim() : null,
-  };
-}
-
-// Format Date to 'YYYY-MM-DD' string using local timezone
-function dateToLocalStr(d) {
-  if (!d) return null;
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 const IMPORT_AUDIT_FIELDS = new Set([
   'id',
   'created_at',
@@ -485,27 +411,6 @@ function matchesImportedRecord(existingRecord, importedRecord, jenis) {
     !importedRecord.nama_user ||
     existingRecord.nama_user === importedRecord.nama_user
   );
-}
-
-async function fetchExistingSchedulesFrom(tableName, startTimestamp) {
-  const pageSize = 1000;
-  const rows = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await supabase
-      .from(tableName)
-      .select('*')
-      .gte('mulai_jadwal', startTimestamp)
-      .order('id', { ascending: true })
-      .range(from, from + pageSize - 1);
-
-    if (error) throw error;
-    const pageRows = data || [];
-    rows.push(...pageRows);
-    if (pageRows.length < pageSize) return rows;
-    from += pageSize;
-  }
 }
 
 async function findImportedRoomConflict({
@@ -1286,15 +1191,7 @@ export default function ImportJadwal({
         (room) => [String(room.id), room.nama_ruangan]
       )
     );
-    console.log('[Import] Column mapping:', columnMapping);
-    console.log(
-      '[Import] Kode matkul lookup keys:',
-      Object.keys(lookups.matkulByKode)
-    );
-    console.log(
-      '[Import] Ruangan lookup keys:',
-      Object.keys(lookups.ruanganByName)
-    );
+
     const strictGoogleSync = jenis === 'perkuliahan' && dataSource === 'google';
     const strictReferenceValidation = jenis === 'perkuliahan';
     const results = {
@@ -1335,6 +1232,7 @@ export default function ImportJadwal({
     setImportProgressLabel('Memuat referensi jadwal dari database...');
     try {
       existingSchedules = await fetchExistingSchedulesFrom(
+        supabase,
         tableName,
         `${dateToLocalStr(importStartDay)}T00:00:00`
       );
