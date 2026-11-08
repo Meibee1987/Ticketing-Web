@@ -132,6 +132,7 @@ export default function LoginPageOTP() {
     try {
       const result = await verifyEmailOTP(email, otp);
       if (result.success && result.session) {
+        setOtp('');
         // Clear cooldown saat login berhasil
         localStorage.removeItem(`otp_cooldown_${email}`);
         setSuccess('Login berhasil! Mengalihkan...');
@@ -239,8 +240,11 @@ export default function LoginPageOTP() {
 
             <form onSubmit={handleSendOTP} className="space-y-5">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Email Address
+                <label
+                  htmlFor="login-email"
+                  className="block text-sm font-semibold text-gray-700 mb-2"
+                >
+                  Email
                 </label>
                 <div className="flex items-center bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
                   <svg
@@ -252,7 +256,9 @@ export default function LoginPageOTP() {
                     <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" />
                   </svg>
                   <input
+                    id="login-email"
                     type="email"
+                    autoComplete="email"
                     className="w-full bg-transparent outline-none text-sm text-gray-700 placeholder-gray-400"
                     placeholder="nama@email.com"
                     value={email}
@@ -318,9 +324,9 @@ export default function LoginPageOTP() {
                     Mengirim...
                   </span>
                 ) : countdown > 0 ? (
-                  `Kirim OTP (${countdown}s)`
+                  `Kirim Kode OTP (${countdown}s)`
                 ) : (
-                  'Kirim OTP'
+                  'Kirim Kode OTP'
                 )}
               </button>
             </form>
@@ -343,8 +349,10 @@ export default function LoginPageOTP() {
             <form onSubmit={handleVerifyOTP} className="space-y-5">
               <div>
                 <input
+                  aria-label="Kode OTP"
                   type="text"
                   inputMode="numeric"
+                  autoComplete="one-time-code"
                   className="w-full text-center text-3xl tracking-[0.5em] font-mono bg-gray-50 border-2 border-gray-300 rounded-lg px-4 py-4 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all"
                   placeholder="000000"
                   value={otp}
@@ -402,7 +410,7 @@ export default function LoginPageOTP() {
                     Memverifikasi...
                   </span>
                 ) : (
-                  'Verify & Login'
+                  'Verifikasi & Masuk'
                 )}
               </button>
 
@@ -411,6 +419,7 @@ export default function LoginPageOTP() {
                 <button
                   type="button"
                   onClick={handleBack}
+                  disabled={isLoading}
                   className="text-gray-600 hover:text-gray-800 text-sm font-medium"
                 >
                   ← Ganti Email

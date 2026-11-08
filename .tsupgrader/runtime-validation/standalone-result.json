@@ -1,0 +1,181 @@
+{
+  "planHash": "3386dc4fce043a78c5ecf9ec1c193ed3d3c2f59f5ded47aafc24a9520471cf2b",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-11-08T18:00:11.4534322Z",
+  "retryCount": 1,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "npm warn Unknown env config \u0022scripts-prepend-node-path\u0022. This will stop working in the next major version of npm. See \u0060npm help npmrc\u0060 for supported config options.\r\n\r\n\u003E k-sis@0.0.0 test\r\n\u003E node --test\r\n\r\n\u2714 akses Honor Dosen hanya diberikan kepada dua email yang ditentukan (2.8913ms)\r\n\u2714 mengenali strata pascasarjana (2.1458ms)\r\n\u2714 nilai honor S2 dan S3 mengikuti jumlah sesi (2.1191ms)\r\n\u2714 nilai honor S1 menggunakan batas durasi 2 jam (0.482ms)\r\n\u2714 membatasi periode dan membuat satu baris untuk setiap dosen (25.9453ms)\r\n\u2714 memisahkan laporan S1 serta menggabungkan laporan S2 dan S3 (1.0399ms)\r\n\u2714 import dimulai dari hari ketika proses dijalankan (4.775ms)\r\n\u2714 jam klik tidak mengeluarkan jadwal pada hari yang sama (0.7657ms)\r\n\u2714 menghapus nomor urut 1 sampai 4 dari agenda karya akhir (2.3899ms)\r\n\u2714 tidak mengubah kegiatan tanpa nomor urut yang didukung (0.4359ms)\r\n\u2714 membaca tahun empat digit pada tanggal Indonesia secara utuh (4.0742ms)\r\n\u2714 mendukung tahun dua digit pada tanggal Indonesia (0.6539ms)\r\n\u2714 admin reads preserve ID ordering, inclusive 1000-row ranges and final response metadata (6.588ms)\r\n\u2714 admin reads return an error response intact even after a successful page (0.7787ms)\r\n\u2714 exact page-size results require a final empty request; null data remains empty (0.9699ms)\r\n\u2714 import reads preserve the start filter on every page and return rows only (1.1352ms)\r\n\u2714 import reads throw the original database error and propagate transport rejection (2.1649ms)\r\n\u2714 room reads retain all eight query projections and the existing booking shape (5.1986ms)\r\n\u2714 room reads retain null-data fallbacks and labeled errors (4.2697ms)\r\n\u2714 membuat laporan JSON terstruktur dari kegagalan import (7.5534ms)\r\n\u2714 mendukung konflik yang melibatkan dua baris (0.8691ms)\r\n\u2714 hanya pertemuan daring yang tidak menggunakan ruangan fisik (2.0157ms)\r\n\u2714 menggabungkan sesi monitor yang sama dan berkesinambungan (6.5911ms)\r\n\u2714 tidak menggabungkan sesi dengan paralel atau waktu berbeda (0.5139ms)\r\n\u2714 memindahkan jadwal selesai ke belakang tanpa mengubah urutan lainnya (0.9297ms)\r\n\u2714 sidebar preserves ordinary, missing and unrecognized role navigation (1.9505ms)\r\n\u2714 sidebar preserves the admin and super admin route order (0.2306ms)\r\n\u2714 Honor Dosen visibility remains email-based independently of role (0.2601ms)\r\n\u2714 navigation retains exact dashboard matching and does not mutate its definitions (0.2706ms)\r\n\u2714 mergeNotification keeps newest items and removes realtime duplicates (1.8968ms)\r\n\u2714 formatNotificationTime creates useful relative labels (0.484ms)\r\n\u2714 loadNotificationState rejects malformed persisted values (1.7066ms)\r\n\u2714 buildScheduleNotification maps database events (0.8254ms)\r\n\u2714 assertSupabaseResults exposes database errors instead of hiding them (1.1986ms)\r\n\u2714 ID arrays retain identity, element types, order and duplicates (2.7315ms)\r\n\u2714 invalid, scalar and CSV ID values retain the empty-array fallback (0.4388ms)\r\n\u2714 lookup import hanya menerima nilai exact setelah normalisasi aman (2.6624ms)\r\n\u2714 lookup mata kuliah menggunakan kode meskipun namanya sama (0.6274ms)\r\n\u2714 lookup dosen mengabaikan variasi apostrof dan tanda baca gelar (1.0608ms)\r\n\u2714 lookup dosen menyamakan singkatan gelar bertitik dan tanpa titik (0.5173ms)\r\n\u2714 ID dosen menjadi acuan utama meskipun nama dan email mengarah ke dosen lain (1.3149ms)\r\n\u2714 ID dosen yang tidak dikenal tidak jatuh kembali ke nama atau email (0.2942ms)\r\n\u2714 lookup ID eksternal dosen menerima alias yang menunjuk id_dosen kanonis (0.5177ms)\r\n\u2714 import perkuliahan memakai email exact ketika ID dosen kosong (0.3108ms)\r\n\u2714 import perkuliahan memakai nama exact ketika ID dan email dosen kosong (0.3821ms)\r\n\u2714 memisahkan banyak dosen tanpa memecah tanda baca gelar (0.9741ms)\r\n\u2714 melewati baris tidak tampil dan header yang berulang (0.6093ms)\r\n\u2714 ruangan kosong tidak dianggap sebagai konflik dengan ruangan kosong lain (2.462ms)\r\n\u2714 mendeteksi konflik terhadap baris sinkronisasi lain (0.5095ms)\r\n\u2714 lookup duplikat memilih satu master data yang aktif (0.287ms)\r\n\u2714 lookup tetap menolak nama yang dimiliki lebih dari satu data aktif (0.2312ms)\r\n\u2714 lookup tetap menerima satu\n\u2026[truncated]",
+        "durationMs": 1324,
+        "testResults": {
+          "testFramework": "unknown",
+          "runnerDetectedFrom": "none",
+          "testsTotal": 0,
+          "testsPassed": 0,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": true
+        }
+      },
+      {
+        "name": "login-password-http",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\r\n\u003Chtml lang=\u0022en\u0022\u003E\r\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\r\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\r\n    \u003Clink rel=\u0022icon\u0022 type=\u0022image/png\u0022 sizes=\u002248x48\u0022 href=\u0022/IPB.png\u0022 /\u003E\r\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0\u0022 /\u003E\r\n    \u003Ctitle\u003EK-Integrated System (KIS)\u003C/title\u003E\r\n  \u003C/head\u003E\r\n  \u003Cbody\u003E\r\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\r\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.jsx\u0022\u003E\u003C/script\u003E\r\n  \u003C/body\u003E\r\n\u003C/html\u003E\r\n\n--- server output ---\n\r\n  \u001B[32m\u001B[1mVITE\u001B[22m v7.2.4\u001B[39m  \u001B[2mready in \u001B[0m\u001B[1m724\u001B[22m\u001B[2m\u001B[0m ms\u001B[22m\r\n\r\n  \u001B[32m\u279C\u001B[39m  \u001B[1mLocal\u001B[22m:   \u001B[36mhttp://127.0.0.1:\u001B[1m5197\u001B[22m/\u001B[39m\r\n",
+        "durationMs": 1096
+      },
+      {
+        "name": "login-otp-http",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\r\n\u003Chtml lang=\u0022en\u0022\u003E\r\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\r\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\r\n    \u003Clink rel=\u0022icon\u0022 type=\u0022image/png\u0022 sizes=\u002248x48\u0022 href=\u0022/IPB.png\u0022 /\u003E\r\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0\u0022 /\u003E\r\n    \u003Ctitle\u003EK-Integrated System (KIS)\u003C/title\u003E\r\n  \u003C/head\u003E\r\n  \u003Cbody\u003E\r\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\r\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.jsx\u0022\u003E\u003C/script\u003E\r\n  \u003C/body\u003E\r\n\u003C/html\u003E\r\n\n--- server output ---\n\r\n  \u001B[32m\u001B[1mVITE\u001B[22m v7.2.4\u001B[39m  \u001B[2mready in \u001B[0m\u001B[1m704\u001B[22m\u001B[2m\u001B[0m ms\u001B[22m\r\n\r\n  \u001B[32m\u279C\u001B[39m  \u001B[1mLocal\u001B[22m:   \u001B[36mhttp://127.0.0.1:\u001B[1m5198\u001B[22m/\u001B[39m\r\n",
+        "durationMs": 1076
+      },
+      {
+        "name": "monitor-http",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\r\n\u003Chtml lang=\u0022en\u0022\u003E\r\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\r\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\r\n    \u003Clink rel=\u0022icon\u0022 type=\u0022image/png\u0022 sizes=\u002248x48\u0022 href=\u0022/IPB.png\u0022 /\u003E\r\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0\u0022 /\u003E\r\n    \u003Ctitle\u003EK-Integrated System (KIS)\u003C/title\u003E\r\n  \u003C/head\u003E\r\n  \u003Cbody\u003E\r\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\r\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.jsx\u0022\u003E\u003C/script\u003E\r\n  \u003C/body\u003E\r\n\u003C/html\u003E\r\n\n--- server output ---\n\r\n  \u001B[32m\u001B[1mVITE\u001B[22m v7.2.4\u001B[39m  \u001B[2mready in \u001B[0m\u001B[1m713\u001B[22m\u001B[2m\u001B[0m ms\u001B[22m\r\n\r\n  \u001B[32m\u279C\u001B[39m  \u001B[1mLocal\u001B[22m:   \u001B[36mhttp://127.0.0.1:\u001B[1m5199\u001B[22m/\u001B[39m\r\n",
+        "durationMs": 1097
+      }
+    ],
+    "executions": [
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.cmd",
+        "args": [
+          "test"
+        ],
+        "cwd": "D:\\Ticketing\\ticketing-web",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32",
+        "nodeExecutable": "C:\\Program Files\\nodejs\\node.EXE",
+        "nodeVersion": "v24.18.1",
+        "packageManager": "npm",
+        "packageManagerExecutable": "C:\\Program Files\\nodejs\\npm.cmd",
+        "packageManagerVersion": "11.16.0",
+        "cleanup": {
+          "RootProcessId": 3608,
+          "Completed": true,
+          "ProcessesObserved": 22,
+          "ProcessesTerminated": 1,
+          "Failure": null
+        }
+      },
+      {
+        "source": "login-password-http",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\node.EXE",
+        "args": [
+          "node_modules/vite/bin/vite.js",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "5197",
+          "--strictPort"
+        ],
+        "cwd": "D:\\Ticketing\\ticketing-web",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32",
+        "nodeExecutable": null,
+        "nodeVersion": null,
+        "packageManager": null,
+        "packageManagerExecutable": null,
+        "packageManagerVersion": null,
+        "cleanup": {
+          "RootProcessId": 33048,
+          "Completed": true,
+          "ProcessesObserved": 5,
+          "ProcessesTerminated": 3,
+          "Failure": null
+        }
+      },
+      {
+        "source": "login-otp-http",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\node.EXE",
+        "args": [
+          "node_modules/vite/bin/vite.js",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "5198",
+          "--strictPort"
+        ],
+        "cwd": "D:\\Ticketing\\ticketing-web",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32",
+        "nodeExecutable": null,
+        "nodeVersion": null,
+        "packageManager": null,
+        "packageManagerExecutable": null,
+        "packageManagerVersion": null,
+        "cleanup": {
+          "RootProcessId": 21412,
+          "Completed": true,
+          "ProcessesObserved": 5,
+          "ProcessesTerminated": 3,
+          "Failure": null
+        }
+      },
+      {
+        "source": "monitor-http",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\node.EXE",
+        "args": [
+          "node_modules/vite/bin/vite.js",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "5199",
+          "--strictPort"
+        ],
+        "cwd": "D:\\Ticketing\\ticketing-web",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32",
+        "nodeExecutable": null,
+        "nodeVersion": null,
+        "packageManager": null,
+        "packageManagerExecutable": null,
+        "packageManagerVersion": null,
+        "cleanup": {
+          "RootProcessId": 4796,
+          "Completed": true,
+          "ProcessesObserved": 5,
+          "ProcessesTerminated": 3,
+          "Failure": null
+        }
+      }
+    ]
+  }
+}

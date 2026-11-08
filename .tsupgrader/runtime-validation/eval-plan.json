@@ -1,0 +1,45 @@
+{
+  "projectType": "webapp",
+  "setup": [],
+  "assertions": [
+    {
+      "name": "tests-pass",
+      "kind": "process",
+      "command": "npm",
+      "args": ["test"],
+      "verificationMethod": "test-results",
+      "expected": "0",
+      "timeoutSeconds": 60
+    },
+    {
+      "name": "login-password-http",
+      "kind": "http-probe",
+      "startCommand": "node",
+      "startArgs": ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "5197", "--strictPort"],
+      "url": "http://127.0.0.1:5197/login-password",
+      "verificationMethod": "http-status",
+      "expected": "200",
+      "timeoutSeconds": 30
+    },
+    {
+      "name": "login-otp-http",
+      "kind": "http-probe",
+      "startCommand": "node",
+      "startArgs": ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "5198", "--strictPort"],
+      "url": "http://127.0.0.1:5198/login",
+      "verificationMethod": "http-status",
+      "expected": "200",
+      "timeoutSeconds": 30
+    },
+    {
+      "name": "monitor-http",
+      "kind": "http-probe",
+      "startCommand": "node",
+      "startArgs": ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "5199", "--strictPort"],
+      "url": "http://127.0.0.1:5199/jadwal-monitor",
+      "verificationMethod": "http-status",
+      "expected": "200",
+      "timeoutSeconds": 30
+    }
+  ]
+}
