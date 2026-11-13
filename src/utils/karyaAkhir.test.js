@@ -12,3 +12,15 @@ test('tidak mengubah kegiatan tanpa nomor urut yang didukung', () => {
   assert.equal(normalizeKaryaAkhirAgenda('Kolokium'), 'Kolokium');
   assert.equal(normalizeKaryaAkhirAgenda('Seminar Hasil'), 'Seminar Hasil');
 });
+
+test('alias Sidang Promosi Terbuka memakai agenda Promosi Terbuka', () => {
+  assert.equal(
+    normalizeKaryaAkhirAgenda('Sidang Promosi Terbuka'),
+    'Promosi Terbuka'
+  );
+  assert.equal(
+    normalizeKaryaAkhirAgenda(' sidang   promosi terbuka '),
+    'Promosi Terbuka'
+  );
+  assert.equal(normalizeKaryaAkhirAgenda('Ujian Tertutup'), 'Ujian Tertutup');
+});

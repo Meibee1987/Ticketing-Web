@@ -1,6 +1,7 @@
 // src/pages/LoginPageOTP.jsx
 import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import {
   sendEmailOTP,
   verifyEmailOTP,
@@ -9,6 +10,8 @@ import {
 } from '../utils/emailOTP';
 
 export default function LoginPageOTP() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState('email'); // 'email' atau 'otp'
@@ -17,38 +20,12 @@ export default function LoginPageOTP() {
   const [isLoading, setIsLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
-  // Cek session saat load dan restore cooldown dari localStorage
+  // Gunakan sesi yang sama dengan ProtectedRoute agar keputusan redirect sinkron.
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
+    if (!authLoading && user) navigate('/dashboard', { replace: true });
+  }, [authLoading, user, navigate]);
 
-        if (error) {
-          // Session tidak valid (misalnya refresh token expired/not found)
-          // Bersihkan session yang rusak supaya tidak terus error
-          console.warn('Session invalid, signing out:', error.message);
-          await supabase.auth.signOut();
-          localStorage.removeItem('supabase_session');
-          return;
-        }
-
-        if (session) {
-          window.location.href = '/dashboard';
-        }
-      } catch (err) {
-        // Jika error apapun saat cek session, bersihkan saja
-        console.warn('Error checking session, clearing:', err.message);
-        await supabase.auth.signOut().catch(() => {});
-        localStorage.removeItem('supabase_session');
-      }
-    };
-
-    // Cek session
-    checkSession();
-
+  useEffect(() => {
     // Restore cooldown dari localStorage (berlaku di semua step)
     if (email) {
       const { isOnCooldown, remainingSeconds } = checkOtpCooldown(email);
@@ -136,9 +113,6 @@ export default function LoginPageOTP() {
         // Clear cooldown saat login berhasil
         localStorage.removeItem(`otp_cooldown_${email}`);
         setSuccess('Login berhasil! Mengalihkan...');
-        setTimeout(() => {
-          window.location.href = '/dashboard';
-        }, 1000);
       }
     } catch (err) {
       setError(err.message || 'OTP tidak valid atau sudah expired');

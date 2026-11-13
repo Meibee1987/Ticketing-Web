@@ -26,6 +26,8 @@ import ActionButtons from '../../components/ActionButtons';
 import Pagination from '../../components/Pagination';
 import SearchableSelect from '../../components/SearchableSelect';
 import ImportJadwal from '../../components/ImportJadwal';
+import KaryaAkhirImportReview from '../../components/KaryaAkhirImportReview';
+import ScheduleImportReview from '../../components/ScheduleImportReview';
 import StatePanel from '../../components/ui/StatePanel';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -1194,6 +1196,7 @@ export default function JadwalPageAdmin() {
             ? [row.id_angkatan]
             : [],
         id_mata_kuliah: row.id_mata_kuliah || '',
+        combined_class_key: row.combined_class_key || '',
         mulai_jadwal: toDatetimeLocal(row.mulai_jadwal),
         akhir_jadwal: toDatetimeLocal(row.akhir_jadwal),
         jenis_pertemuan: row.jenis_pertemuan || 'luring',
@@ -1265,30 +1268,35 @@ export default function JadwalPageAdmin() {
     const ruanganMap = createMap(options.ruangan, 'nama_ruangan');
 
     if (modalType === 'perkuliahan') {
-      // Cek konflik dosen untuk perkuliahan
-      const dosenConflict = await checkDosenConflict({
-        mulai: form.mulai_jadwal,
-        akhir: form.akhir_jadwal,
-        dosenId: form.dosen_id,
-        dosenIds: form.dosen_ids,
-        excludeId: form.id,
-        excludeTable: modalMode === 'edit' ? 'jadwal_perkuliahan' : null,
-        dosenMap,
-      });
-      if (dosenConflict) conflicts.push(dosenConflict);
-
-      // Cek konflik ruangan hanya untuk luring
-      if (usesPhysicalRoom(form.jenis_pertemuan)) {
-        const ruanganConflict = await checkRuanganConflict({
-          mulai: form.mulai_jadwal,
-          akhir: form.akhir_jadwal,
-          ruanganId: form.ruangan_id,
-          excludeId: form.id,
-          excludeTable: modalMode === 'edit' ? 'jadwal_perkuliahan' : null,
-          ruanganMap,
-        });
-        if (ruanganConflict) conflicts.push(ruanganConflict);
+      const cohortIds = parseIdList(form.id_angkatans);
+      const payload = {
+        ...form,
+        id_angkatans: cohortIds,
+        id_angkatan: cohortIds[0] || form.id_angkatan || null,
+        ruangan_id: form.ruangan_id || null,
+        combined_class_key: form.combined_class_key || null,
+      };
+      for (const key of [
+        'paralel',
+        'real_perkuliahan',
+        'quota',
+        'id_mata_kuliah',
+        'dosen_id',
+      ]) {
+        if (payload[key] === '') payload[key] = null;
       }
+      payload.dosen_ids = parseIdList(form.dosen_ids);
+      payload.penguji_ids = parseIdList(form.penguji_ids);
+      const { data, error: checkError } = await supabase.rpc(
+        'check_perkuliahan_admin_record',
+        {
+          p_payload: payload,
+          p_existing_id: modalMode === 'edit' ? form.id : null,
+        }
+      );
+      if (checkError)
+        return `Pemeriksaan jadwal gagal: ${checkError.message}. Pastikan migrasi Perkuliahan terbaru sudah dijalankan.`;
+      return (data || []).join('\n') || null;
     } else if (modalType === 'karya_akhir') {
       // Cek konflik dosen untuk karya akhir (multiple dosen)
       const dosenConflict = await checkDosenConflict({
@@ -1377,6 +1385,8 @@ export default function JadwalPageAdmin() {
 
       // Pertemuan daring tidak menyimpan penggunaan ruangan.
       if (modalType === 'perkuliahan') {
+        formData.combined_class_key =
+          String(formData.combined_class_key || '').trim() || null;
         if (
           !usesPhysicalRoom(formData.jenis_pertemuan) ||
           formData.ruangan_id === '' ||
@@ -1838,6 +1848,12 @@ export default function JadwalPageAdmin() {
             }
             required
           />
+          <InputField
+            label="Kode Kelas Gabungan"
+            value={form.combined_class_key || ''}
+            onChange={(value) => handleChange('combined_class_key', value)}
+            placeholder="Contoh: GAB-MK101-07"
+          />
           {/* <InputField
             label="Paralel"
             value={form.paralel || ''}
@@ -2237,26 +2253,41 @@ export default function JadwalPageAdmin() {
         {/* Tab Content */}
         <div className="p-4 sm:p-5" role="tabpanel">
           {activeTab === 'perkuliahan' && (
-            <JadwalTab
-              data={jadwalPerkuliahan}
-              loading={loading}
-              error={error}
-              jenis="perkuliahan"
-              onEdit={openEditModal}
-              onDelete={handleDelete}
-              onBulkDelete={handleBulkDelete}
-            />
+            <>
+              <ScheduleImportReview
+                jenis="perkuliahan"
+                options={options}
+                refreshKey={importModalOpen}
+                onActivated={scheduleDataRefresh}
+              />
+              <JadwalTab
+                data={jadwalPerkuliahan}
+                loading={loading}
+                error={error}
+                jenis="perkuliahan"
+                onEdit={openEditModal}
+                onDelete={handleDelete}
+                onBulkDelete={handleBulkDelete}
+              />
+            </>
           )}
           {activeTab === 'karya_akhir' && (
-            <JadwalTab
-              data={jadwalKaryaAkhir}
-              loading={loading}
-              error={error}
-              jenis="karya_akhir"
-              onEdit={openEditModal}
-              onDelete={handleDelete}
-              onBulkDelete={handleBulkDelete}
-            />
+            <>
+              <KaryaAkhirImportReview
+                options={options}
+                refreshKey={importModalOpen}
+                onActivated={scheduleDataRefresh}
+              />
+              <JadwalTab
+                data={jadwalKaryaAkhir}
+                loading={loading}
+                error={error}
+                jenis="karya_akhir"
+                onEdit={openEditModal}
+                onDelete={handleDelete}
+                onBulkDelete={handleBulkDelete}
+              />
+            </>
           )}
           {activeTab === 'lain_lain' && (
             <JadwalTab
@@ -2867,6 +2898,11 @@ function JadwalTab({
                           <div className="font-semibold text-slate-900">
                             {row.nama_matkul || row.agenda_display}
                           </div>
+                          {row.combined_class_key && (
+                            <div className="mt-1 text-xs font-medium text-sky-700">
+                              Kelas gabungan: {row.combined_class_key}
+                            </div>
+                          )}
                           {row.paralel && row.paralel !== '-' && (
                             <div className="text-xs text-slate-500">
                               Paralel: {row.paralel}

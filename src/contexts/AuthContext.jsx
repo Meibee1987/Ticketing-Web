@@ -26,11 +26,6 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.removeItem(USER_ROLE_KEY);
     localStorage.removeItem(USER_ROLE_KEY);
     localStorage.removeItem(ROLE_EXPIRY_KEY);
-    sessionStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(STORAGE_KEY);
-    sessionStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
-    localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
-    localStorage.removeItem('sb-session-expiry');
     setLoading(false);
   }, []);
 
@@ -121,10 +116,8 @@ export const AuthProvider = ({ children }) => {
       setUserRole(DEFAULT_ROLE);
     } catch (err) {
       console.warn('Role fetch failed, using cached/default:', err.message);
-      // Keep existing userRole or use default
-      const savedRole = sessionStorage.getItem(USER_ROLE_KEY);
-      const roleData = savedRole ? JSON.parse(savedRole) : DEFAULT_ROLE;
-      setUserRole((currentRole) => currentRole || roleData);
+      // Pertahankan role terbaru tanpa closure lama atau membaca cache rusak lagi.
+      setUserRole((currentRole) => currentRole || DEFAULT_ROLE);
     } finally {
       fetchRoleRef.current = null;
     }
@@ -163,8 +156,10 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     checkUser();
 
+    let roleTimer;
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        clearTimeout(roleTimer);
         // Jangan fetch role jika belum ada user
         if (!session?.user) {
           if (['SIGNED_OUT', 'USER_DELETED'].includes(event)) {
@@ -180,46 +175,24 @@ export const AuthProvider = ({ children }) => {
         // Hanya fetch role jika ada session valid
         if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
           setUser(session.user);
-
-          // Jalankan query role setelah callback auth selesai. Callback async yang
-          // memanggil Supabase kembali dapat menahan auth lock dan membuat
-          // signOut menunggu selamanya.
-          window.setTimeout(() => {
+          // Panggilan Supabase harus di luar callback auth agar tidak menunggu
+          // lock sesi yang masih dipegang oleh onAuthStateChange.
+          roleTimer = setTimeout(() => {
             fetchUserRole(session.user.id).finally(() => setLoading(false));
           }, 0);
         }
       }
     );
 
-    return () => authListener?.subscription?.unsubscribe();
+    return () => {
+      clearTimeout(roleTimer);
+      authListener?.subscription?.unsubscribe();
+    };
   }, [checkUser, clearSession, fetchUserRole]);
 
   const signOut = useCallback(async () => {
-    let timeoutId;
-
-    try {
-      const result = await Promise.race([
-        supabase.auth.signOut(),
-        new Promise((resolve) => {
-          timeoutId = window.setTimeout(
-            () => resolve({ error: new Error('Logout timeout') }),
-            2000
-          );
-        }),
-      ]);
-
-      if (result?.error) {
-        console.warn(
-          'Supabase logout failed, clearing local session:',
-          result.error
-        );
-      }
-    } catch (error) {
-      console.warn('Unexpected logout error, clearing local session:', error);
-    } finally {
-      if (timeoutId) window.clearTimeout(timeoutId);
-      clearSession();
-    }
+    await supabase.auth.signOut();
+    clearSession();
   }, [clearSession]);
 
   const value = useMemo(

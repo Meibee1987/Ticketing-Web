@@ -28,6 +28,8 @@ import {
   X,
 } from 'lucide-react';
 import { fetchExistingSchedulesFrom } from '../services/scheduleReads';
+import { syncKaryaAkhirReviewImport } from '../services/karyaAkhirImport';
+import { syncScheduleReviewImport } from '../services/scheduleImportReview';
 import { supabase } from '../supabaseClient';
 import {
   getScheduleTypeFromLabel,
@@ -46,19 +48,24 @@ import {
 } from '../utils/scheduleLabels';
 import {
   buildCanonicalImportLookup,
+  buildKaryaAkhirAgendaImportLookup,
+  buildKaryaAkhirReviewRow,
+  buildPerkuliahanReviewRow,
   buildDosenExternalIdImportLookup,
   buildPreferredImportLookup,
   exactImportLookup,
+  findKaryaAkhirDatabaseConflict,
   findPendingRoomConflict,
   isRoomConflictExempt,
   isLegacyScheduleImport,
   normalizeImportLookup,
-  normalizePerkuliahanSyncRecord,
+  normalizeKaryaAkhirSyncRecord,
   resolvePrimaryDosenImport,
   ROOM_CONFLICT_EXEMPT_NAMES,
   shouldSkipScheduleImportRow,
   splitDosenLabels,
   validatePerkuliahanImportRecord,
+  validateKaryaAkhirImportRecord,
 } from '../utils/scheduleImport';
 import { parseSpreadsheetDate as excelDateToJS } from '../utils/spreadsheetDate';
 
@@ -147,6 +154,9 @@ function getSelectableGoogleSheets(remoteWorkbook) {
 
 // Mapping kolom spreadsheet (case-insensitive) ke kolom DB
 const PERKULIAHAN_MAP = {
+  'kelas gabungan': 'combined_class_key',
+  'kode kelas gabungan': 'combined_class_key',
+  combined_class_key: 'combined_class_key',
   // Header spreadsheet → kolom database
   // Angkatan
   angkatan: '_lookup_angkatan',
@@ -249,6 +259,13 @@ const PERKULIAHAN_MAP = {
 };
 
 const KARYA_AKHIR_MAP = {
+  id_dosen: '_dosen_id_source',
+  'id dosen': '_dosen_id_source',
+  'dosen id': '_dosen_id_source',
+  id_external: '_dosen_id_source',
+  'id dosen penguji': '_penguji_id_source',
+  'id dosen pembimbing': '_dosen_id_source',
+  'id penguji': '_penguji_id_source',
   angkatan: '_lookup_angkatan',
   akt: '_lookup_angkatan',
   cohort: '_lookup_angkatan',
@@ -420,6 +437,15 @@ async function findImportedRoomConflict({
   excludedIds = [],
   roomNameById,
 }) {
+  if (tableName === 'jadwal_karya_akhir') {
+    const conflict = await findKaryaAkhirDatabaseConflict({
+      client: supabase,
+      record,
+      existingId,
+      excludedIds,
+    });
+    if (conflict) return conflict;
+  }
   if (
     !usesPhysicalRoom(record.jenis_pertemuan) ||
     !record.mulai_jadwal ||
@@ -469,30 +495,6 @@ async function findImportedRoomConflict({
   }[conflict.jenis_jadwal];
   const roomLabel = roomNameById[String(roomId)] || `Ruangan ${roomId}`;
   return `${roomLabel} sudah dipakai untuk ${typeLabel || conflict.jenis_jadwal} pada ${new Date(conflict.mulai_jadwal).toLocaleString('id-ID')} - ${new Date(conflict.akhir_jadwal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
-}
-
-function addStrictSyncConflict(results, pendingRow, message) {
-  const existing = results.conflicts.find(
-    (conflict) => conflict.syncRowId === pendingRow.syncRowId
-  );
-  if (existing) {
-    if (!existing.message.includes(message)) {
-      existing.message = `${existing.message} | ${message}`;
-    }
-    return;
-  }
-
-  results.conflicts.push({
-    id: `strict-${pendingRow.syncRowId}`,
-    syncRowId: pendingRow.syncRowId,
-    rowNumber: pendingRow.rowNumber,
-    message,
-    record: { ...pendingRow.record },
-    existingRecord: null,
-    existingId: null,
-    verificationStatus: 'idle',
-    verificationMessage: '',
-  });
 }
 
 // ================================================================================
@@ -605,7 +607,8 @@ export default function ImportJadwal({
           // Tampil hanya mengatur visibilitas pada sumber dan tidak boleh
           // menghilangkan jadwal dari database.
           ignoreDisplayStatus:
-            dataSource === 'google' && jenis === 'perkuliahan',
+            dataSource === 'google' &&
+            ['perkuliahan', 'karya_akhir'].includes(jenis),
         })
       ) {
         return;
@@ -731,6 +734,7 @@ export default function ImportJadwal({
         },
         { key: 'paralel', label: 'Paralel' },
         { key: 'kelas', label: 'Kelas' },
+        { key: 'combined_class_key', label: 'Kode Kelas Gabungan' },
         { key: 'quota', label: 'Kuota' },
         { key: 'real_perkuliahan', label: 'Pertemuan / Real' },
         { key: '_parse_jam', label: 'Waktu (Mulai - Selesai)' },
@@ -764,6 +768,8 @@ export default function ImportJadwal({
         { key: 'petugas_zoom', label: 'Petugas Zoom' },
         { key: '_parse_zoom_info', label: 'ID & Password Zoom' },
         { key: '_lookup_dosen_ka', label: 'Dosen Pembimbing' },
+        { key: '_dosen_id_source', label: 'ID Dosen Pembimbing (id_external)' },
+        { key: '_penguji_id_source', label: 'ID Dosen Penguji (id_external)' },
         { key: 'moderator', label: 'Moderator' },
         { key: '_lookup_penguji', label: 'Penguji' },
         { key: 'pintang_sps', label: 'Pintang/SPs' },
@@ -1132,9 +1138,8 @@ export default function ImportJadwal({
       angkatanSource,
       (a) => a.nama_angkatan
     );
-    const agendaByName = buildPreferredImportLookup(
-      options.agenda || [],
-      (a) => a.agenda_karya_akhir
+    const agendaByName = buildKaryaAkhirAgendaImportLookup(
+      options.agenda || []
     );
     return {
       dosenByName,
@@ -1173,6 +1178,23 @@ export default function ImportJadwal({
   };
 
   // ──────────── STEP 3: Import to DB ────────────
+  const syncGoogleImport = (parameters) =>
+    jenis === 'karya_akhir'
+      ? syncKaryaAkhirReviewImport(supabase, parameters)
+      : syncScheduleReviewImport(
+          supabase,
+          parameters,
+          'perkuliahan',
+          ({ processed, total }) => {
+            setImportProgress(
+              86 + Math.round((total ? processed / total : 1) * 12)
+            );
+            setImportProgressLabel(
+              `Memeriksa dan menyimpan ${processed} dari ${total} jadwal...`
+            );
+          }
+        );
+
   const handleImport = async () => {
     setImportProgress(0);
     setImportProgressLabel('Menyiapkan data import...');
@@ -1192,8 +1214,11 @@ export default function ImportJadwal({
       )
     );
 
-    const strictGoogleSync = jenis === 'perkuliahan' && dataSource === 'google';
-    const strictReferenceValidation = jenis === 'perkuliahan';
+    const strictGoogleSync =
+      ['perkuliahan', 'karya_akhir'].includes(jenis) && dataSource === 'google';
+    const strictReferenceValidation = ['perkuliahan', 'karya_akhir'].includes(
+      jenis
+    );
     const results = {
       strictSync: strictGoogleSync,
       success: 0,
@@ -1207,6 +1232,8 @@ export default function ImportJadwal({
       managedScheduleIds: [],
       syncScopeStart: null,
       syncPending: false,
+      persistedReview: false,
+      reviewCount: 0,
     };
     const tableName =
       jenis === 'perkuliahan'
@@ -1215,7 +1242,6 @@ export default function ImportJadwal({
           ? 'jadwal_karya_akhir'
           : 'jadwal_lain_lain';
     const preparedRows = [];
-    const preparedImportKeys = new Set();
 
     // Group column mapping by target
     const mappingByTarget = {};
@@ -1346,6 +1372,8 @@ export default function ImportJadwal({
         let sourceDosenId = '';
         let sourceDosenEmail = '';
         const sourceDosenNames = [];
+        const sourcePengujiNames = [];
+        const sourcePengujiIds = [];
 
         // Process each mapped column
         Object.entries(columnMapping).forEach(([colIdxStr, target]) => {
@@ -1359,6 +1387,7 @@ export default function ImportJadwal({
             case 'petugas_zoom':
             case 'pintang_sps':
             case 'note':
+            case 'combined_class_key':
             case 'nama_mahasiswa':
             case 'nama_user':
             case 'keterangan':
@@ -1452,9 +1481,11 @@ export default function ImportJadwal({
             case '_lookup_agenda': {
               const normalizedAgenda = normalizeKaryaAkhirAgenda(val);
               const aid =
-                lookups.agendaByName[normalizedAgenda.toLowerCase()] ||
-                lookups.agendaByName[val.toLowerCase().trim()];
+                exactImportLookup(normalizedAgenda, lookups.agendaByName) ||
+                exactImportLookup(val, lookups.agendaByName);
               record.agenda_jadwal_karya_akhir = aid || null;
+              if (!aid)
+                rowIssues.push(`agenda "${val}" tidak ada di master data`);
               break;
             }
             case '_lookup_dosen1': {
@@ -1462,7 +1493,10 @@ export default function ImportJadwal({
               break;
             }
             case '_dosen_id_source': {
-              sourceDosenId = val;
+              sourceDosenId =
+                jenis === 'karya_akhir' && sourceDosenId
+                  ? `${sourceDosenId};${val}`
+                  : val;
               break;
             }
             case '_lookup_dosen_extra': {
@@ -1474,17 +1508,19 @@ export default function ImportJadwal({
               break;
             }
             case '_lookup_dosen_ka': {
-              val
-                .split(/[;|]/)
-                .map((name) =>
-                  findDosen(name, lookups.dosenByName, lookups.dosenByIdDosen)
-                )
-                .filter(Boolean)
-                .forEach((did) => dosenKaIds.push(did));
+              sourceDosenNames.push(...splitDosenLabels(val));
+              break;
+            }
+            case '_penguji_id_source': {
+              sourcePengujiIds.push(...splitDosenLabels(val));
               break;
             }
             case '_lookup_penguji': {
-              val.split(/[;|]/).forEach((name) => {
+              if (jenis === 'karya_akhir') {
+                sourcePengujiNames.push(...splitDosenLabels(val));
+                break;
+              }
+              splitDosenLabels(val).forEach((name) => {
                 const did = findDosen(
                   name,
                   lookups.dosenByName,
@@ -1588,6 +1624,45 @@ export default function ImportJadwal({
             record.penguji_ids = JSON.stringify(pengujiIds);
         }
         if (jenis === 'karya_akhir') {
+          const pengujiLabels = sourcePengujiIds.length
+            ? sourcePengujiIds
+            : sourcePengujiNames;
+          pengujiLabels.forEach((label) => {
+            const did = sourcePengujiIds.length
+              ? exactImportLookup(label, lookups.dosenByExternalId)
+              : findDosen(
+                  label,
+                  lookups.dosenByName,
+                  lookups.dosenByIdDosen,
+                  true
+                );
+            if (did) pengujiIds.push(did);
+            else
+              rowIssues.push(
+                `Dosen penguji "${label}" tidak ada atau ambigu di master data`
+              );
+          });
+          // ID eksternal eksplisit selalu lebih diutamakan daripada nama.
+          const labels = sourceDosenId
+            ? splitDosenLabels(sourceDosenId)
+            : [...new Set(sourceDosenNames)];
+          labels.forEach((label) => {
+            const did = sourceDosenId
+              ? exactImportLookup(label, lookups.dosenByExternalId)
+              : findDosen(
+                  label,
+                  lookups.dosenByName,
+                  lookups.dosenByIdDosen,
+                  true
+                );
+            if (did) dosenKaIds.push(did);
+            else
+              rowIssues.push(
+                `Dosen pembimbing "${label}" tidak ada atau ambigu di master data`
+              );
+          });
+          if (new Set(dosenKaIds).size > 4 || new Set(pengujiIds).size > 4)
+            rowIssues.push('Maksimal 4 pembimbing dan 4 penguji');
           const uniqueDosenKaIds = [...new Set(dosenKaIds)].slice(0, 4);
           const uniquePengujiIds = [...new Set(pengujiIds)].slice(0, 4);
           if (uniqueDosenKaIds.length)
@@ -1629,46 +1704,40 @@ export default function ImportJadwal({
           continue;
         }
 
+        if (strictGoogleSync) {
+          const buildReviewRow =
+            jenis === 'karya_akhir'
+              ? buildKaryaAkhirReviewRow
+              : buildPerkuliahanReviewRow;
+          const validateRecord =
+            jenis === 'karya_akhir'
+              ? validateKaryaAkhirImportRecord
+              : validatePerkuliahanImportRecord;
+          preparedRows.push({
+            record: buildReviewRow({
+              record,
+              batchTag,
+              headers: previewHeaders,
+              row,
+              rowNumber: rowIdx + 1,
+              issues: validateRecord(record, rowIssues),
+            }),
+          });
+          continue;
+        }
+
         if (strictReferenceValidation) {
-          const validationIssues = validatePerkuliahanImportRecord(
-            record,
-            rowIssues
-          );
-          if (validationIssues.length > 0) {
+          const validateRecord =
+            jenis === 'karya_akhir'
+              ? validateKaryaAkhirImportRecord
+              : validatePerkuliahanImportRecord;
+          const validationIssues = validateRecord(record, rowIssues);
+          if (validationIssues.length) {
             results.errors.push(
               `Baris ${rowIdx + 1}: ${validationIssues.join('; ')}`
             );
             continue;
           }
-        }
-
-        if (strictGoogleSync) {
-          const syncRecord = normalizePerkuliahanSyncRecord(record, batchTag);
-          if (preparedImportKeys.has(syncRecord.import_key)) {
-            results.errors.push(
-              `Baris ${rowIdx + 1}: jadwal duplikat di spreadsheet (mata kuliah, waktu, angkatan, paralel, pertemuan, dan dosen sama)`
-            );
-            continue;
-          }
-
-          preparedImportKeys.add(syncRecord.import_key);
-          const pendingRow = {
-            syncRowId: `${rowIdx + 1}:${syncRecord.import_key}`,
-            rowNumber: rowIdx + 1,
-            record: syncRecord,
-          };
-          preparedRows.push(pendingRow);
-
-          const roomConflict = await findImportedRoomConflict({
-            record: syncRecord,
-            tableName,
-            excludedIds: [...managedScheduleIds],
-            roomNameById,
-          });
-          if (roomConflict) {
-            addStrictSyncConflict(results, pendingRow, roomConflict);
-          }
-          continue;
         }
 
         // Upsert logic: cek apakah data sudah ada → update, belum ada → insert
@@ -1800,10 +1869,8 @@ export default function ImportJadwal({
 
     if (strictGoogleSync) {
       setImportProgress(82);
-      // Google Sheet adalah sumber authoritative. Benturan ruangan yang sudah
-      // ada antarbaris sumber (misalnya kelas paralel/gabungan) tidak boleh
-      // menggagalkan penyalinan 1:1 ke database. Konflik terhadap jadwal manual
-      // tetap diperiksa saat setiap baris disiapkan di atas.
+      // Database memeriksa seluruh kandidat, mengaktifkan yang valid, dan
+      // menyimpan sisanya dalam antrean pemeriksaan yang persisten.
       setImportProgressLabel('Menyiapkan sinkronisasi jadwal Google...');
 
       results.pendingSyncRows = preparedRows;
@@ -1819,23 +1886,32 @@ export default function ImportJadwal({
       if (results.errors.length === 0 && results.conflicts.length === 0) {
         setImportProgress(92);
         setImportProgressLabel('Menyinkronkan jadwal ke database...');
-        const { data: syncData, error: syncError } = await supabase.rpc(
-          'sync_jadwal_perkuliahan_import',
-          {
-            p_rows: preparedRows.map(({ record }) => record),
-            p_scope_start: results.syncScopeStart,
-            p_batch_tag: batchTag,
-          }
-        );
+        const { data: syncData, error: syncError } = await syncGoogleImport({
+          p_rows: preparedRows.map(({ record }) => record),
+          p_scope_start: results.syncScopeStart,
+          p_batch_tag: batchTag,
+        });
 
         if (syncError) {
+          if (syncError.persistedReview && syncData) {
+            results.persistedReview = true;
+            results.strictSync = false;
+            results.inserted = Number(syncData.inserted || 0);
+            results.updated = Number(syncData.updated || 0);
+            results.success = Number(syncData.total || 0);
+            results.reviewCount = Number(syncData.pending || 0);
+            results.skipped += Number(syncData.skipped || 0);
+            if (onSuccess) onSuccess();
+          }
           const migrationHint = /function|schema cache|does not exist/i.test(
             syncError.message || ''
           )
-            ? ' Jalankan MIGRATION_STRICT_JADWAL_PERKULIAHAN_SYNC.sql di Supabase terlebih dahulu.'
+            ? jenis === 'karya_akhir'
+              ? ' Jalankan MIGRATION_STRICT_JADWAL_KARYA_AKHIR_SYNC.sql di Supabase terlebih dahulu.'
+              : ' Jalankan MIGRATION_STRICT_JADWAL_PERKULIAHAN_SYNC.sql di Supabase terlebih dahulu.'
             : '';
           results.errors.push(
-            `Sinkronisasi database dibatalkan: ${syncError.message}.${migrationHint}`
+            `${syncError.persistedReview ? 'Sinkronisasi belum selesai' : 'Sinkronisasi database dibatalkan'}: ${syncError.message}${migrationHint}`
           );
         } else {
           const summary = Array.isArray(syncData) ? syncData[0] : syncData;
@@ -1843,6 +1919,14 @@ export default function ImportJadwal({
           results.updated = Number(summary?.updated || 0);
           results.deleted = Number(summary?.deleted || 0);
           results.success = Number(summary?.total || preparedRows.length);
+          if (strictGoogleSync) {
+            results.success = Number(summary?.total || 0);
+            results.persistedReview = true;
+            results.strictSync = false;
+            results.reviewCount = Number(summary?.pending || 0);
+            results.skipped += Number(summary?.skipped || 0);
+            if (onSuccess) onSuccess();
+          }
         }
       } else {
         // Sinkronisasi Google harus atomik. Menyimpan sebagian baris di sini
@@ -1928,15 +2012,37 @@ export default function ImportJadwal({
     setImportProgress(92);
     setImportProgressLabel('Menyinkronkan jadwal ke database...');
     try {
-      const { data: syncData, error: syncError } = await supabase.rpc(
-        'sync_jadwal_perkuliahan_import',
-        {
-          p_rows: pendingRows.map(({ record }) => record),
-          p_scope_start: scopeStart,
-          p_batch_tag: batchTag,
+      if (jenis === 'karya_akhir') {
+        pendingRows = pendingRows.map((row) => ({
+          ...row,
+          record: normalizeKaryaAkhirSyncRecord(row.record, batchTag),
+        }));
+      }
+      const { data: syncData, error: syncError } = await syncGoogleImport({
+        p_rows: pendingRows.map(({ record }) => record),
+        p_scope_start: scopeStart,
+        p_batch_tag: batchTag,
+      });
+      if (syncError) {
+        if (syncError.persistedReview && syncData) {
+          setImportResult((current) => ({
+            ...current,
+            persistedReview: true,
+            strictSync: false,
+            inserted: Number(syncData.inserted || 0),
+            updated: Number(syncData.updated || 0),
+            success: Number(syncData.total || 0),
+            reviewCount: Number(syncData.pending || 0),
+            skipped: Number(syncData.skipped || 0),
+            conflicts: [],
+            errors: [syncError.message],
+            syncPending: false,
+          }));
+          if (onSuccess) onSuccess();
+          return;
         }
-      );
-      if (syncError) throw syncError;
+        throw syncError;
+      }
 
       const summary = Array.isArray(syncData) ? syncData[0] : syncData;
       const inserted = Number(summary?.inserted || 0);
@@ -1967,7 +2073,9 @@ export default function ImportJadwal({
       const migrationHint = /function|schema cache|does not exist/i.test(
         error.message || ''
       )
-        ? ' Jalankan MIGRATION_STRICT_JADWAL_PERKULIAHAN_SYNC.sql di Supabase terlebih dahulu.'
+        ? jenis === 'karya_akhir'
+          ? ' Jalankan MIGRATION_STRICT_JADWAL_KARYA_AKHIR_SYNC.sql di Supabase terlebih dahulu.'
+          : ' Jalankan MIGRATION_STRICT_JADWAL_PERKULIAHAN_SYNC.sql di Supabase terlebih dahulu.'
         : '';
       setImportResult((current) => ({
         ...current,
@@ -2153,8 +2261,12 @@ export default function ImportJadwal({
         if (
           row.syncRowId === conflict.syncRowId ||
           !usesPhysicalRoom(row.record?.jenis_pertemuan) ||
-          !row.record?.ruangan_id ||
-          isRoomConflictExempt(roomNameById[String(row.record.ruangan_id)])
+          !(row.record?.ruangan_id ?? row.record?.nama_ruangan) ||
+          isRoomConflictExempt(
+            roomNameById[
+              String(row.record.ruangan_id ?? row.record.nama_ruangan)
+            ]
+          )
         ) {
           return;
         }
@@ -2162,7 +2274,7 @@ export default function ImportJadwal({
         const rowStart = new Date(row.record.mulai_jadwal).getTime();
         const rowEnd = new Date(row.record.akhir_jadwal).getTime();
         if (start.getTime() < rowEnd && end.getTime() > rowStart) {
-          occupied[String(row.record.ruangan_id)] = {
+          occupied[String(row.record.ruangan_id ?? row.record.nama_ruangan)] = {
             label: `Baris import ${row.rowNumber}`,
             start: row.record.mulai_jadwal,
             end: row.record.akhir_jadwal,
@@ -2624,7 +2736,9 @@ export default function ImportJadwal({
     karyaAkhirDateColumnIndex >= 0;
   const unresolvedConflictCount = importResult?.conflicts?.length || 0;
   const failureCount =
-    (importResult?.errors?.length || 0) + unresolvedConflictCount;
+    (importResult?.errors?.length || 0) +
+    unresolvedConflictCount +
+    (importResult?.reviewCount || 0);
   const fileSize = file
     ? file.size < 1024 * 1024
       ? `${Math.max(1, Math.round(file.size / 1024))} KB`
@@ -3169,8 +3283,9 @@ export default function ImportJadwal({
 
                 <p className="mt-3 text-xs font-medium text-emerald-700">
                   {filteredPreviewData.length} baris akan diproses. Data yang
-                  {jenis === 'perkuliahan' && dataSource === 'google'
-                    ? ' tidak lolos validasi atau berkonflik dengan jadwal manual akan menahan seluruh sinkronisasi. Benturan yang memang sudah ada antarbaris Google tetap disalin. Setelah semuanya valid, data import lama yang tidak lagi ada di Google Sheet akan dibersihkan.'
+                  {['karya_akhir', 'perkuliahan'].includes(jenis) &&
+                  dataSource === 'google'
+                    ? ' valid langsung menjadi jadwal aktif. Konflik dan referensi bermasalah disimpan dalam daftar Perlu diperiksa; duplikat dilewati. Data lama dipertahankan sampai semua masalah selesai.'
                     : ' sama dilewati, sedangkan konflik dapat diedit atau dilewati pada hasil import.'}
                 </p>
               </div>
@@ -3351,15 +3466,17 @@ export default function ImportJadwal({
                             : 'text-emerald-800'
                         }`}
                       >
-                        {importResult.errors.length > 0
-                          ? unresolvedConflictCount > 0
-                            ? 'Konflik ruangan dapat diperbaiki langsung di bawah. Kegagalan lainnya perlu diperbaiki pada sumber data sebelum import ulang.'
-                            : 'Perbaiki kegagalan pada sumber data, lalu jalankan import kembali.'
-                          : unresolvedConflictCount > 0
-                            ? importResult.strictSync
-                              ? 'Belum ada perubahan pada database. Selesaikan semua konflik agar seluruh jadwal disinkronkan sekaligus.'
-                              : 'Baris tanpa masalah sudah diimport. Pilih ruangan pengganti untuk baris konflik langsung di bawah.'
-                            : 'Ringkasan hasil pemrosesan file Anda.'}
+                        {importResult.persistedReview
+                          ? 'Jadwal valid sudah diproses. Buka daftar Perlu diperiksa pada tab jadwal terkait untuk menyelesaikan sisanya tanpa import ulang.'
+                          : importResult.errors.length > 0
+                            ? unresolvedConflictCount > 0
+                              ? 'Konflik ruangan dapat diperbaiki langsung di bawah. Kegagalan lainnya perlu diperbaiki pada sumber data sebelum import ulang.'
+                              : 'Perbaiki kegagalan pada sumber data, lalu jalankan import kembali.'
+                            : unresolvedConflictCount > 0
+                              ? importResult.strictSync
+                                ? 'Belum ada perubahan pada database. Selesaikan semua konflik agar seluruh jadwal disinkronkan sekaligus.'
+                                : 'Baris tanpa masalah sudah diimport. Pilih ruangan pengganti untuk baris konflik langsung di bawah.'
+                              : 'Ringkasan hasil pemrosesan file Anda.'}
                       </p>
                     </div>
 
@@ -3415,7 +3532,7 @@ export default function ImportJadwal({
                       </div>
                     </div>
 
-                    {failureCount > 0 && (
+                    {failureCount > 0 && !importResult.persistedReview && (
                       <div className="flex flex-col gap-3 rounded-xl border border-sky-200 bg-sky-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-sm font-semibold text-sky-900">
@@ -3437,12 +3554,22 @@ export default function ImportJadwal({
                       </div>
                     )}
 
-                    {/* Editable room conflicts */}
+                    {importResult.persistedReview && (
+                      <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+                        {importResult.success} jadwal diaktifkan.{' '}
+                        {importResult.reviewCount} data tersimpan dalam daftar
+                        Perlu diperiksa pada tab {jenisLabels[jenis]}. Data
+                        pemeriksaan dapat diperbaiki kapan saja tanpa import
+                        ulang. Data lama dipertahankan selama masih ada masalah.
+                      </div>
+                    )}
+
+                    {/* Editable schedule conflicts */}
                     {unresolvedConflictCount > 0 && (
                       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                         <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
                           <AlertCircle size={17} aria-hidden="true" />
-                          Konflik ruangan ({unresolvedConflictCount})
+                          Konflik jadwal ({unresolvedConflictCount})
                         </p>
                         <p className="mt-1 text-xs leading-5 text-amber-800">
                           {importResult.strictSync
@@ -3815,6 +3942,7 @@ export default function ImportJadwal({
                         Import Lagi
                       </button>
                       {!importResult.strictSync &&
+                        !importResult.persistedReview &&
                         (importResult.inserted ?? importResult.success) > 0 && (
                           <button
                             type="button"

@@ -2,30 +2,298 @@
 
 **PARTIAL** — automated validation PASS; critical end-to-end flows belum terverifikasi.
 
+## Role & Authorization Regression — current round
+
+Klarifikasi scope pengguna: **Ticketing sementara tidak digunakan**.
+Route `/dashboard/ticketing`, `/dashboard/tickets`, dan `/dashboard/my-tickets`
+berstatus **OUT OF SCOPE untuk acceptance fitur aktif**. Hasil pengujian yang
+sudah dilakukan tetap disimpan sebagai histori, bukan syarat kelulusan fitur
+KIS yang sedang digunakan. Tidak ada penghapusan/penonaktifan route, perubahan
+permission, atau perubahan source. Out of scope bukan bukti backend aman dan
+bukan berarti endpoint secara teknis telah dinonaktifkan.
+
+Super Admin Authentication: **PASS** (live OTP/session/refresh/local logout,
+dengan batas server revocation pada bagian autentikasi di bawah).
+
+Admin Role: **PASS** untuk session, sidebar dan route guard client yang diuji;
+login OTP diselesaikan manual pengguna. Ini bukan bukti enforcement backend/RLS.
+User Role: **PASS** untuk session, sidebar dan route guard client yang diuji;
+request OTP HTTP 200, login diselesaikan manual pengguna.
+Pengguna menyatakan akun yang sama telah diubah rolenya dari Admin menjadi User
+oleh pengguna sendiri di luar pengujian agent. Agent tidak mengubah role atau
+data. Login baru menampilkan role User dan tidak membawa akses Admin sebelumnya.
+Ini bukan pengujian dua akun independen.
+Dosen Role: **OUT OF SCOPE untuk acceptance web**, sesuai klarifikasi pengguna:
+Dosen di web dipakai sebagai master data; autentikasi Dosen direncanakan untuk
+mobile apps. Tidak perlu menautkan auth_id atau memperbaiki login Dosen demi
+meluluskan regresi web. Master data Dosen sendiri belum diuji CRUD.
+Sidebar Permission: **PASS untuk Admin/User yang diuji di web**, sesuai source.
+Protected Routes: **PASS untuk Admin/User dalam cakupan route yang diuji**.
+Backend/RLS tetap NOT VERIFIED. Ini bukan kelulusan seluruh authorization KIS.
+
+Observasi historis akun profil Dosen tetap disimpan: auth_id kosong, login
+menghasilkan fallback User dan Ticketing terbuka. Hasil tersebut bukan lagi
+kriteria kegagalan role Dosen untuk web setelah klarifikasi scope. Fallback
+profil yang tidak ditemukan tetap merupakan catatan pengamanan autentikasi
+tersendiri; bukan alasan menambahkan provisioning Dosen di web atau menyatakan
+authorization backend sudah aman. Tidak ada source/data yang diubah.
+
+Matrix di bawah mencatat expected source dan menandai hasil live yang tersedia.
+Kolom Dosen merekam kontrak source dan observasi historis saja; bukan target
+acceptance login web atau spesifikasi authorization aplikasi mobile.
+Baris Ticketing juga bersifat historis/source saja karena fitur sementara tidak
+digunakan; label FAIL historis pada akses Ticketing akun profil Dosen tidak
+menjadi blocker acceptance fitur web aktif berdasarkan scope terbaru.
+Acuan: [routes](../src/App.jsx), [role guard](../src/components/RoleProtectedRoute.jsx),
+[sidebar menu](../src/constants/navigation.js), dan
+[email allowlist](../src/constants/accessControl.js).
+
+| Feature / Route | Super Admin | Admin | User | Dosen |
+| --- | --- | --- | --- | --- |
+| `/dashboard` | Allow; live PASS | Allow; live PASS | Allow; live PASS | Terbuka live sebagai fallback User; resolusi Dosen FAIL |
+| `/dashboard/jadwal`, `/dashboard/ruangan` | Allow | Allow; live PASS | Allow; live PASS | Allow |
+| `/dashboard/jadwal-admin` | Allow | Allow; live PASS | Deny; live PASS | Deny |
+| `/dashboard/database` | Allow | Allow; live PASS | Deny; live PASS | Deny |
+| `/dashboard/monitor-settings` | Allow | Allow; live PASS | Deny; live PASS | Deny |
+| `/dashboard/users` | Allow | Deny; live PASS | Deny; live PASS | Ditolak live sebagai fallback User; role Dosen efektif belum diuji |
+| `/dashboard/settings` | Allow | Route allow, component deny; live sesuai existing | Deny; live PASS | Deny |
+| `/dashboard/ticketing` | Allow (source) | Allow; live PASS | Allow; live PASS | Deny expected; live terbuka sebagai fallback User: FAIL |
+| `/dashboard/tickets`, `/dashboard/my-tickets` | Allow | Allow; live PASS | Allow; live PASS | Deny expected; live NOT VERIFIED pada akun profil Dosen |
+| `/dashboard/honor-dosen` | Email allowlist only | Email allowlist only; live Deny sesuai akun uji | Email allowlist only; live Deny sesuai akun uji | Email allowlist only |
+| `/jadwal-monitor` | Public | Public | Public | Public |
+| Sidebar Dashboard / Jadwal / Ruangan / Monitor Jadwal | Visible | Visible; live PASS | Visible; live PASS | Visible live, tetapi role efektif User |
+| Sidebar Jadwal Admin / Monitor Setting / Master Data | Visible | Visible; live PASS | Hidden; live PASS | Hidden live, tetapi role efektif User |
+| Sidebar Users | Visible | Hidden; live PASS | Hidden; live PASS | Hidden live, tetapi role efektif User |
+| Sidebar Honor Dosen | Email allowlist only | Hidden; live sesuai akun uji | Hidden; live sesuai akun uji | Email allowlist only |
+| Sidebar Settings / Ticketing | Tidak didefinisikan | Tidak didefinisikan; live sesuai | Tidak didefinisikan; live sesuai | Tidak didefinisikan |
+
+Semua sel tanpa label live merupakan expected source saja. Route deny pada
+role terautentikasi menampilkan Akses Ditolak; tanpa session mengarah `/login`.
+Dashboard/Jadwal/Ruangan memerlukan session tanpa pembatas role tambahan.
+Honor Dosen bergantung email allowlist, bukan otomatis diperbolehkan role dosen.
+
+Klasifikasi awal **EXISTING BEHAVIOR**: Settings mengizinkan Admin pada route
+tetapi komponen hanya menerima Super Admin, sesuai known issue. Hidden sidebar
+tidak sama dengan route denial, dan guard client bukan bukti enforcement RLS.
+Pada persiapan belum ada temuan baru. Hasil live Dosen di bawah menambahkan
+SECURITY FINDING pada penentuan role client. Ketiadaan akun/OTP sendiri tidak
+disamakan dengan FAIL aplikasi.
+
+### Dosen — role resolution FAIL dan temuan authorization client
+
+Request OTP untuk email yang diisi pengguna menghasilkan HTTP 200; pengguna
+memasukkan kode dan menekan masuk sendiri. Agent melanjutkan pada dashboard,
+tanpa membaca kode. Session SDK tersedia tanpa error, tetapi role UI `user`;
+`dosen`, Admin dan Super Admin tidak tampil. Sidebar hanya Dashboard, Jadwal,
+Ruangan dan Monitor Jadwal.
+
+Pemeriksaan **read-only** memakai session existing, mengembalikan hanya status
+dan nama role tanpa email, ID, token atau payload sesi:
+
+- Lookup Teknisi dan dosen berdasarkan `auth_id` akun aktif tidak memberikan
+  profil pada `.single()`; keduanya mengembalikan `PGRST116`.
+- Lookup dosen berdasarkan email session menemukan profil dengan role `dosen`,
+  tetapi `auth_id` **kosong**. Teknisi berdasarkan email tidak memberikan profil.
+- Cache `userRole` tidak ada saat diperiksa. [AuthContext](../src/contexts/AuthContext.jsx)
+  melakukan lookup berdasarkan auth_id dan menggunakan DEFAULT_ROLE `user`
+  ketika kedua lookup tidak menghasilkan profil. Ini cocok dengan hasil live;
+  bukan bukti role Admin lama masih tersimpan.
+
+Reload mempertahankan session tetapi tetap role User, bukan Dosen. URL langsung
+`/dashboard/ticketing` menampilkan halaman Ticketing, bukan Akses Ditolak;
+source hanya mengizinkan Super Admin/Admin/User pada route itu, sehingga profil
+Dosen yang gagal di-resolve mendapat akses route User. `/dashboard/users`
+tetap ditolak. Route Dosen lain tidak diberi PASS karena role efektif Dosen
+tidak pernah terbentuk; akses data/RLS tidak dinyatakan lolos atau gagal.
+
+Klasifikasi:
+
+- **EXISTING BEHAVIOR:** fallback DEFAULT_ROLE User pada lookup profil gagal
+  sudah ada di AuthContext; tidak diubah pada pengujian.
+- **SECURITY FINDING (client authorization):** lookup role gagal memberi role
+  User dengan akses Ticketing yang tidak diizinkan untuk role Dosen pada source.
+  Bukti mencakup pembukaan halaman, bukan bypass RLS atau kebocoran data backend
+  yang terkonfirmasi. Membutuhkan keputusan terpisah tentang penanganan profil
+  tanpa relasi auth_id; jangan otomatis memberi status aman karena menu sesuai.
+- **REGRESSION belum terkonfirmasi terhadap baseline live:** versi OTP sebelum
+  perubahan (`705467f`) mencoba menautkan auth_id setelah verify; helper sekarang
+  tidak menulis auth_id sesuai scope perubahan sebelumnya. Perbedaan ini relevan
+  terhadap profil tanpa tautan dan perlu ditinjau sebagai kemungkinan regresi
+  provisioning/linking. Tidak ada replay baseline dengan akun ini atau bukti
+  keberhasilan update/RLS sebelumnya; tidak menyebut masalah ini semata tooling
+  atau menutupnya sebagai bug lama tanpa bukti.
+
+Logout lokal PASS: kembali `/login`, session tidak ada tanpa error, dan membuka
+`/dashboard` lagi redirect ke login. Tidak ada CRUD, penautan auth_id, perubahan
+role/permission, schema, AuthContext atau source. Browser ditinggal logout.
+Temuan didokumentasikan saja sesuai batas tugas. **SAFE TO MERGE tetap NO.**
+
+### User — hasil live
+
+Pengguna menyelesaikan login OTP secara manual pada akun existing yang rolenya
+diubah oleh pengguna sendiri. Session SDK tersedia tanpa error. UI menampilkan
+`user`, tidak menampilkan Admin/Super Admin/Dosen. Sidebar tepat berisi
+Dashboard, Jadwal, Ruangan dan Monitor Jadwal. Menu admin dan Honor Dosen
+tidak muncul; email akun ini bukan akun allowlist yang diuji untuk Honor Dosen.
+
+Navigasi URL langsung ke Jadwal Admin, Master Data, Monitor Setting, Users,
+Settings dan Honor Dosen menampilkan Akses Ditolak. Dashboard, Jadwal, Ruangan,
+Ticketing, All Tickets dan My Tickets dapat dibuka sesuai role guard existing.
+Klasifikasi **EXISTING BEHAVIOR**: route ticketing dapat diakses User walaupun
+tidak tercantum pada sidebar; ini sesuai source, bukan regresi atau bukti bypass.
+Pembacaan data/policy per pemilik pada My Tickets tidak diaudit di putaran ini.
+
+Reload penuh dashboard mempertahankan session dan role `user`; role Admin tidak
+muncul lagi. Logout mengarah ke login, session lokal hilang tanpa error, dan
+navigasi langsung `/dashboard` sesudahnya redirect `/login`. Role sebelumnya
+tidak terbawa pada siklus logout/login/refresh yang diuji ini; bukan pembuktian
+seluruh kemungkinan race/cache. Tidak ada REGRESSION/SECURITY FINDING baru yang
+terkonfirmasi. Authorization backend/RLS tetap NOT VERIFIED.
+
+Browser ditinggal pada login untuk pengujian Dosen. Tidak ada CRUD, perubahan
+role oleh agent, refactor, atau perubahan source. OTP/token/payload session
+tidak dicatat; hasil SDK hanya berupa boolean.
+
+### Admin — hasil live
+
+Pengguna menyelesaikan login OTP sendiri dan menyerahkan browser di dashboard.
+Agent tidak membaca kode dan tidak mengklaim mengamati HTTP verify pada login
+Admin. Sesudah handoff: session tersedia tanpa error; UI role `admin`, bukan
+`super admin`, `user`, atau `dosen`. Sidebar berisi tepat Dashboard, Jadwal,
+Jadwal Admin, Monitor Setting, Ruangan, Master Data, dan Monitor Jadwal; tidak
+ada Users atau Honor Dosen, sesuai source dan email akun uji.
+
+Navigasi URL langsung: Dashboard, Jadwal, Jadwal Admin, Ruangan, Master Data,
+Monitor Setting, Ticketing, All Tickets dan My Tickets merender heading halaman.
+Users dan Honor Dosen menampilkan Akses Ditolak. Settings menampilkan penolakan
+khusus Super Admin dari komponen. Penolakan Settings diklasifikasikan
+**EXISTING BEHAVIOR**, sesuai known issue; tidak diubah untuk membuat test PASS.
+Tidak menekan kontrol tambah/edit/delete/import/upload atau pengaturan.
+
+Sebelum membuka Monitor Setting, dipastikan legacy slides lokal tidak memicu
+migrasi otomatis; tidak menghapus storage atau menjalankan migrasi. Halaman
+dibuka hanya untuk membuktikan akses. Ini bukan pengujian CRUD/storage.
+
+Reload penuh dashboard mempertahankan session dan role Admin. Tombol Logout
+mengarah ke `/login`; pemeriksaan SDK berikutnya memastikan session lokal tidak
+ada. Navigasi langsung `/dashboard` setelah logout kembali ke `/login` dan form
+Kirim Kode OTP tampil. Browser ditinggal di login untuk akun User berikutnya.
+Tidak ada REGRESSION atau SECURITY FINDING baru yang terkonfirmasi dari hasil
+guard UI ini. **RLS/backend authorization tetap NOT VERIFIED**; menu tersembunyi
+dan route guard client tidak membuktikan pembatasan query langsung.
+
+### Admin — histori percobaan request OTP
+
+Catatan berikut mendahului hasil live PASS di atas; status NOT VERIFIED di
+catatan historis tidak menggantikan hasil terbaru.
+
+Pada handoff input kode berikutnya, tombol Verifikasi & Masuk tidak ditemukan
+dan pemeriksaan menunjukkan browser telah kembali ke langkah email, tanpa
+session. Tidak ada bukti request verify atau kegagalan kode OTP. Penyebab
+perubahan state belum diketahui; **TOOLING LIMITATION / handoff state belum
+terisolasi**, bukan REGRESSION yang terkonfirmasi. Satu pengiriman ulang
+menghasilkan HTTP 200 dan langkah Verifikasi OTP kembali tampil. Menunggu
+kode terbaru dimasukkan manual; Admin Role tetap NOT VERIFIED.
+
+Pembaruan pengulangan: setelah server lokal dijalankan kembali dan pengguna
+mengisi email existing, satu klik Kirim Kode OTP menghasilkan POST
+`/auth/v1/otp` HTTP 200. Pesan sukses dan langkah Verifikasi OTP tampil; pesan
+penolakan registrasi tidak tampil. Berhenti untuk input kode manual pengguna.
+Ini **PASS untuk request OTP**, belum PASS Admin Role: role belum diobservasi
+sesudah login. OTP tidak dibaca atau dicatat. Catatan kegagalan pertama di bawah
+dipertahankan sebagai histori; penyebab spesifiknya belum terisolasi.
+
+Pengguna memasukkan email akun Admin langsung di browser. Agent menekan Kirim
+Kode OTP sekali. Input terisi dan valid menurut form, tidak ada cooldown, tetapi
+UI menampilkan “Email belum terdaftar atau belum di-assign role. Hubungi admin
+untuk mendaftarkan email Anda.” Tidak teramati POST `/auth/v1/otp` dalam jendela
+observasi 20 detik; langkah Verifikasi OTP dan pesan sukses tidak tampil.
+
+Klasifikasi: **EXISTING BEHAVIOR** pada gerbang registrasi existing, belum cukup
+bukti untuk menyebut REGRESSION atau SECURITY FINDING. Helper melakukan lookup
+Teknisi kemudian dosen (dosen harus memiliki roles_id); hasil lookup/error yang
+tidak memenuhi syarat dapat berujung pesan yang sama. Penyebab spesifik seperti
+email tidak cocok, profil tidak tersedia, duplicate row, atau pembatasan query
+belum dibuktikan. Tidak mengubah profil, role, policy, atau source untuk melewati
+gerbang ini. Memerlukan email Admin existing yang memenuhi lookup existing atau
+konfirmasi pengguna terhadap akun yang dimaksud. OTP tidak dikirim ulang.
+
+Hasil ini tidak mengubah PASS Super Admin Authentication. Admin/User/Dosen,
+sidebar lintas role, dan protected route lintas role tetap NOT VERIFIED.
+
+Sebelum membuka Monitor Setting sebagai role yang diizinkan, periksa bahwa tidak
+ada legacy slides lokal yang memicu migrasi otomatis (existing behavior).
+Jika berpotensi menulis data, lewati halaman tersebut tanpa menghapus storage
+atau mengubah source. Tidak ada CRUD/import atau perubahan permission yang
+diizinkan pada putaran ini. Status CRUD/import/staging tetap seperti sebelumnya.
+**SAFE TO MERGE seluruh KIS tetap NO.**
+
 ## Live OTP regression verification
 
-Target Supabase aktif masih sama dengan konfigurasi sebelumnya yang belum
-teridentifikasi sebagai staging. Satu akun TEST dan inbox uji juga belum dapat
-diidentifikasi. Sesuai batas pengujian staging yang telah ditetapkan, belum ada
-request ke backend, pengiriman OTP, login, atau perubahan data pada putaran ini.
-Ketiadaan identitas staging/akun merupakan **ENVIRONMENT LIMITATION**, bukan
-bukti kegagalan aplikasi.
+Pembaruan 2026-11-09: pengguna secara eksplisit mengizinkan environment aktif
+hanya untuk autentikasi, role lookup existing, dan pembukaan dashboard.
+Pengguna mengonfirmasi login sebelumnya memakai OTP email, bukan password.
+Pengulangan kemudian dimulai dari `/login`: pengguna mengisi email existing,
+agent menekan Kirim Kode OTP, lalu pengguna memasukkan kode dari inbox secara
+manual tanpa mengirimkannya ke chat. Agent menekan Verifikasi & Masuk tanpa
+membaca input kode dan mengamati hasil live hingga logout.
+Identitas staging belum dibuktikan; izin ini tidak memperluas pengujian ke CRUD.
+Tidak ada source aplikasi yang diubah pada putaran live ini.
 
-| Pemeriksaan live | Status |
-| --- | --- |
-| OTP request | NOT VERIFIED |
-| OTP diterima di inbox | NOT VERIFIED |
-| OTP verification, termasuk kode salah | NOT VERIFIED |
-| Session dan persistence setelah refresh | NOT VERIFIED |
-| Role resolution | NOT VERIFIED |
-| Dashboard redirect | NOT VERIFIED |
-| Protected route sebelum/sesudah login dan logout | NOT VERIFIED |
-| Logout | NOT VERIFIED |
-| Unregistered email blocked / tidak membuat akun | NOT VERIFIED |
+| Pemeriksaan live | Status | Bukti dan batas |
+| --- | --- | --- |
+| OTP request | PASS | Pengulangan live: klik Kirim Kode OTP menghasilkan POST auth OTP HTTP 200; pesan sukses dan langkah Verifikasi OTP tampil |
+| OTP diterima di inbox | PASS dengan input manual pengguna | Pengguna memasukkan kode sendiri; kode diterima endpoint verify; inbox tidak dibuka agent |
+| OTP verification | PASS | POST auth verify HTTP 200; kode tidak dibaca, disalin, atau dicatat |
+| Session creation | PASS | Sesudah verify, SDK existing melaporkan session dengan user tersedia dan tanpa error; hanya boolean dikembalikan |
+| Role resolution | PASS | Sesudah login baru UI menampilkan `super admin`; tetap tampil setelah reload; ini bukti resolusi role client existing, bukan audit RLS |
+| Dashboard redirect | PASS | Setelah klik Verifikasi & Masuk, browser berpindah dari `/login` ke `/dashboard`, heading Dashboard kemudian tampil |
+| Protected route | PASS | Dashboard dapat diakses saat bersesi; sesudah logout navigasi langsung ke `/dashboard` kembali ke `/login` |
+| Session refresh | PASS | Reload penuh mempertahankan session, dashboard dan role; bukan uji expiry/rotasi refresh token |
+| Local logout | PASS | Tombol Logout mengarah ke `/login`; SDK melaporkan tidak ada session dan tanpa error; form login tampil |
+| Server logout revocation | NOT VERIFIED | Satu percobaan observasi ulang tidak memperoleh hasil network yang dapat dilaporkan karena konteks tool dihancurkan oleh navigasi; TOOLING / NETWORK OBSERVATION LIMITATION |
+| Protected route after logout | PASS | Navigasi langsung ke `/dashboard` sesudah logout redirect ke `/login` dan form Kirim Kode OTP tampil |
+| OTP salah ditolak | NOT VERIFIED live | Tidak meminta atau menebak kode pada akun existing |
+| Unregistered email blocked | NOT VERIFIED live | Tidak mengirim permintaan untuk email lain atau membuat akun |
+
+Urutan pengulangan: request OTP (HTTP 200); jeda untuk kode manual; verify
+(HTTP 200); observasi redirect, dashboard, role dan boolean session; reload;
+pastikan session/role/dashboard tetap ada; buka sidebar responsif; klik Logout;
+setelah navigasi stabil periksa session tidak ada; navigasi langsung ke protected
+dashboard; pastikan redirect login dan form login tampil. Browser ditinggal pada
+halaman login tanpa session. Tidak ada CRUD atau mutasi data aplikasi.
+
+Observasi console/network yang tidak diperbaiki:
+
+- Realtime WebSocket timeout dan `CHANNEL_ERROR` tercatat pada sesi browser.
+  Ini bukti gangguan koneksi realtime, bukan bukti kegagalan OTP; penyebab
+  network/backend belum diisolasi (**ENVIRONMENT / TOOLING LIMITATION** sementara).
+- Beberapa request HEAD lookup count `dosen`/`ruangan` dibatalkan (`ERR_ABORTED`)
+  dan chart melaporkan dimensi sementara negatif. Tidak membuktikan regresi
+  tanpa baseline runtime dan diagnosis lanjutan; dashboard tetap tampil.
+- Pada putaran sebelumnya request logout server dibatalkan. Pada pengulangan
+  ini observasi network dipasang sebelum satu klik Logout, tetapi pemeriksaan
+  SDK dalam pemanggilan tool yang sama terhenti dengan `Execution context was
+  destroyed, most likely because of a navigation`. Hasil network tidak sempat
+  dikembalikan dan tidak ditemukan event logout pada snapshot berikutnya.
+  Setelah halaman stabil, pemeriksaan terpisah membuktikan session lokal hilang
+  dan protected route menolak akses. Server logout tetap NOT VERIFIED:
+  **TOOLING / NETWORK OBSERVATION LIMITATION**, bukan REGRESSION. Implementasi
+  logout tidak diubah dan tidak dilakukan percobaan logout tambahan.
+- Percobaan klik awal Logout tidak berhasil karena sidebar di luar viewport;
+  setelah tombol Buka navigasi digunakan, klik normal berhasil. Ini kondisi
+  navigasi responsif, bukan bug logout. Eksekusi pemeriksaan awal juga mendapat
+  `URL is not defined` pada runtime alat; pemeriksaan diperbaiki tanpa mengubah
+  aplikasi dan hasil setelah reload berhasil diperiksa.
 
 Unit test OTP sebelumnya memakai stub; hasilnya tidak membuktikan pengiriman
-email atau login live. Tidak ada OTP, credential, token, atau payload sesi
-yang direkam. **SAFE TO MERGE: NO** sampai critical flow terverifikasi.
+email atau login live. Tidak ada OTP, access token, refresh token, atau payload
+sesi yang sengaja diekstrak atau ditulis dalam laporan. Hasil pemeriksaan SDK
+dibatasi boolean; URL realtime dengan query key tidak disalin ke laporan.
+**CRUD dan E2E staging tetap NOT VERIFIED. SAFE TO MERGE: NO.**
+
+Bagian di bawah adalah catatan historis putaran sebelumnya. Untuk hasil live
+terbaru, gunakan tabel pada bagian ini; status lama tidak menggantikan bukti baru.
 
 ## Pembaruan permintaan pengujian staging
 

@@ -1,4 +1,5 @@
 import { usesPhysicalRoom } from './meetingRoom.js';
+import { normalizeKaryaAkhirAgenda } from './karyaAkhir.js';
 
 const EMPTY_VALUES = new Set(['', '-']);
 
@@ -150,22 +151,213 @@ export function findPendingRoomConflict({
   pendingRows = [],
   roomNameById = {},
 }) {
-  if (!usesPhysicalRoom(record?.jenis_pertemuan) || !record?.ruangan_id) {
+  if (record?.nama_mahasiswa != null) {
+    const conflict = pendingRows.find(
+      (row) =>
+        row.syncRowId !== syncRowId &&
+        findKaryaAkhirScheduleConflict(record, row.record)
+    );
+    if (conflict)
+      return `${findKaryaAkhirScheduleConflict(record, conflict.record)} (baris ${conflict.rowNumber})`;
+  }
+  const roomId = record?.ruangan_id ?? record?.nama_ruangan;
+  if (!usesPhysicalRoom(record?.jenis_pertemuan) || !roomId) {
     return null;
   }
 
-  const roomName = roomNameById[String(record.ruangan_id)];
+  const roomName = roomNameById[String(roomId)];
   if (isRoomConflictExempt(roomName)) return null;
 
   const conflict = pendingRows.find(
     (row) =>
       row.syncRowId !== syncRowId &&
       usesPhysicalRoom(row.record?.jenis_pertemuan) &&
-      importedSchedulesOverlapInSameRoom(record, row.record)
+      importedSchedulesOverlapInSameRoom(
+        { ...record, ruangan_id: roomId },
+        {
+          ...row.record,
+          ruangan_id: row.record.ruangan_id ?? row.record.nama_ruangan,
+        }
+      )
   );
   if (!conflict) return null;
 
-  return `${roomName || `Ruangan ${record.ruangan_id}`} juga dipakai oleh baris ${conflict.rowNumber} pada waktu yang bertabrakan`;
+  return `${roomName || `Ruangan ${roomId}`} juga dipakai oleh baris ${conflict.rowNumber} pada waktu yang bertabrakan`;
+}
+
+export function getScheduleDosenIds(record) {
+  return [
+    ...new Set(
+      [
+        record?.dosen_id,
+        ...parseImportIdList(record?.dosen_ids),
+        ...parseImportIdList(record?.penguji_ids),
+      ]
+        .filter((id) => id != null)
+        .map(String)
+    ),
+  ];
+}
+
+export function buildKaryaAkhirImportKey(record) {
+  // Room, panel order and end time are editable attributes, not event identity.
+  return [
+    'ka-v1',
+    normalizeImportLookup(record.nama_mahasiswa),
+    record.nama_angkatan ?? '',
+    record.agenda_jadwal_karya_akhir ?? '',
+    record.mulai_jadwal || '',
+  ]
+    .map((part) => encodeURIComponent(String(part)))
+    .join('|');
+}
+
+export function validateKaryaAkhirImportRecord(record, rowIssues = []) {
+  const issues = [...rowIssues];
+  if (!normalizeImportLookup(record.nama_mahasiswa))
+    issues.push('nama mahasiswa kosong');
+  if (!record.nama_angkatan) issues.push('angkatan tidak ditemukan');
+  if (
+    !record.agenda_jadwal_karya_akhir &&
+    !issues.some((issue) => /agenda/i.test(issue))
+  )
+    issues.push('agenda tidak ditemukan');
+  if (getScheduleDosenIds(record).length === 0)
+    issues.push('dosen pembimbing/penguji tidak ditemukan');
+  const start = new Date(record.mulai_jadwal || '').getTime();
+  const end = new Date(record.akhir_jadwal || '').getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end)
+    issues.push('waktu mulai/selesai tidak valid');
+  return [...new Set(issues)];
+}
+
+export function normalizeKaryaAkhirSyncRecord(record, batchTag) {
+  const result = Object.fromEntries(
+    [
+      'nama_mahasiswa',
+      'nama_angkatan',
+      'nama_ruangan',
+      'agenda_jadwal_karya_akhir',
+      'mulai_jadwal',
+      'akhir_jadwal',
+      'zoom_id',
+      'zoom_password',
+      'petugas_zoom',
+      'moderator',
+      'pintang_sps',
+      'note',
+    ].map((key) => [key, record[key] ?? null])
+  );
+  return {
+    ...result,
+    jenis_pertemuan: record.jenis_pertemuan || 'luring',
+    dosen_ids: [...new Set(parseImportIdList(record.dosen_ids))],
+    penguji_ids: [...new Set(parseImportIdList(record.penguji_ids))],
+    import_source: 'google_jadwal',
+    import_key: buildKaryaAkhirImportKey(record),
+    import_batch: batchTag,
+    updated_by: batchTag,
+  };
+}
+
+export function buildKaryaAkhirReviewRow({
+  record,
+  batchTag,
+  headers,
+  row,
+  rowNumber,
+  issues = [],
+}) {
+  const normalized = normalizeKaryaAkhirSyncRecord(record, batchTag);
+  const sourceData = Object.fromEntries(
+    headers.map((header, index) => [header, row[index] ?? null])
+  );
+  const sourceId = headers.findIndex(
+    (header) => String(header).trim().toLowerCase() === 'id'
+  );
+  const sheetId = sourceId >= 0 ? String(row[sourceId] ?? '').trim() : '';
+  const nimColumn = headers.findIndex(
+    (header) => String(header).trim().toLowerCase() === 'nim'
+  );
+  const activityColumn = headers.findIndex((header) =>
+    ['kegiatan', 'agenda'].includes(String(header).trim().toLowerCase())
+  );
+  const nim = nimColumn >= 0 ? normalizeImportLookup(row[nimColumn]) : '';
+  const activity =
+    activityColumn >= 0
+      ? normalizeImportLookup(row[activityColumn])
+      : String(record.agenda_jadwal_karya_akhir ?? '');
+  return {
+    ...normalized,
+    source_key:
+      nim && activity
+        ? `google-ka-nim|${encodeURIComponent(nim)}|${encodeURIComponent(activity)}`
+        : sheetId
+          ? `google-ka|${sheetId}`
+          : normalized.import_key,
+    source_data: sourceData,
+    validation_issues: issues,
+    row_number: rowNumber,
+  };
+}
+
+export function findKaryaAkhirScheduleConflict(record, other) {
+  if (
+    other?.nama_mahasiswa != null &&
+    buildKaryaAkhirImportKey(record) === buildKaryaAkhirImportKey(other)
+  ) {
+    return 'Jadwal karya akhir duplikat (mahasiswa, angkatan, agenda, dan waktu mulai sama)';
+  }
+  const start = new Date(record.mulai_jadwal).getTime();
+  const end = new Date(record.akhir_jadwal).getTime();
+  const otherStart = new Date(other.mulai_jadwal).getTime();
+  const otherEnd = new Date(other.akhir_jadwal).getTime();
+  if (
+    ![start, end, otherStart, otherEnd].every(Number.isFinite) ||
+    !(start < otherEnd && end > otherStart)
+  )
+    return null;
+  const otherIds = new Set(getScheduleDosenIds(other));
+  const sharedId = getScheduleDosenIds(record).find((id) => otherIds.has(id));
+  return sharedId
+    ? `Dosen ID ${sharedId} memiliki jadwal pada waktu yang bertabrakan`
+    : null;
+}
+
+export async function findKaryaAkhirDatabaseConflict({
+  client,
+  record,
+  existingId,
+  excludedIds = [],
+}) {
+  const excluded = new Set(excludedIds.map(String));
+  for (const table of ['jadwal_perkuliahan', 'jadwal_karya_akhir']) {
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await client
+        .from(table)
+        .select('*')
+        .lt('mulai_jadwal', record.akhir_jadwal)
+        .gt('akhir_jadwal', record.mulai_jadwal)
+        .order('id', { ascending: true })
+        .range(from, from + 999);
+      if (error)
+        throw new Error(
+          `Pengecekan konflik dosen/duplikasi gagal: ${error.message}`
+        );
+      for (const other of data || []) {
+        if (
+          table === 'jadwal_karya_akhir' &&
+          (excluded.has(String(other.id)) ||
+            (existingId != null && String(other.id) === String(existingId)))
+        )
+          continue;
+        const conflict = findKaryaAkhirScheduleConflict(record, other);
+        if (conflict) return `${conflict} (${table}, ID ${other.id})`;
+      }
+      if ((data || []).length < 1000) break;
+    }
+  }
+  return null;
 }
 
 export function buildPreferredImportLookup(items, keySelector) {
@@ -259,6 +451,13 @@ export function parseImportIdList(value) {
   }
 }
 
+export function buildKaryaAkhirAgendaImportLookup(items = []) {
+  const agendaName = (item) =>
+    normalizeKaryaAkhirAgenda(item.agenda_karya_akhir);
+  // Label agenda setara memakai satu ID kanonis; referensi jadwal lama tetap utuh.
+  return buildCanonicalImportLookup(items, agendaName, items.map(agendaName));
+}
+
 export function buildPerkuliahanImportKey(record) {
   const angkatanIds = parseImportIdList(record.id_angkatans);
   if (angkatanIds.length === 0 && record.id_angkatan != null) {
@@ -334,10 +533,51 @@ export function normalizePerkuliahanSyncRecord(record, batchTag) {
     kelas: record.kelas ?? null,
     kegiatan: record.kegiatan ?? null,
     quota: record.quota ?? null,
+    combined_class_key: String(record.combined_class_key || '').trim() || null,
     import_source: 'google_jadwal',
     import_key: buildPerkuliahanImportKey(record),
     import_batch: batchTag,
     updated_by: batchTag,
+  };
+}
+
+export function buildPerkuliahanReviewRow({
+  record,
+  batchTag,
+  headers,
+  row,
+  rowNumber,
+  issues = [],
+}) {
+  const normalized = normalizePerkuliahanSyncRecord(record, batchTag);
+  const sourceData = Object.fromEntries(
+    headers.map((header, index) => [header, row[index] ?? null])
+  );
+  const idColumn = headers.findIndex((header) =>
+    ['id', 'id jadwal', 'id_jadwal', 'schedule id'].includes(
+      String(header).trim().toLowerCase()
+    )
+  );
+  const sheetId = idColumn >= 0 ? String(row[idColumn] ?? '').trim() : '';
+  const eventParts = [
+    normalized.id_mata_kuliah,
+    [...normalized.id_angkatans].map(String).sort().join(','),
+    normalized.paralel ?? '',
+    normalized.kelas || '',
+    normalized.real_perkuliahan,
+  ];
+  const eventKey =
+    normalized.id_mata_kuliah &&
+    normalized.id_angkatans.length &&
+    normalized.real_perkuliahan != null
+      ? `kuliah-event|${eventParts.map((part) => encodeURIComponent(String(part))).join('|')}`
+      : normalized.import_key;
+  return {
+    ...normalized,
+    source_key: sheetId ? `google-kuliah|${sheetId}` : eventKey,
+    source_data: sourceData,
+    validation_issues: issues,
+    row_number: rowNumber,
   };
 }
 
